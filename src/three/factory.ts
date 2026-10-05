@@ -122,7 +122,12 @@ export function localBox(root: THREE.Object3D): THREE.Box3 {
 
 /** World-space centre and rough size, for camera framing. */
 export function frameOf(model: ModelHandle) {
-  const box = new THREE.Box3().setFromObject(model.root);
+  // Meshes only: idle spark particles are parked far below the floor and would drag the centre away.
+  const box = new THREE.Box3();
+  model.root.updateMatrixWorld(true);
+  model.root.traverse((o) => {
+    if (((o as THREE.Mesh).isMesh || (o as THREE.InstancedMesh).isInstancedMesh) && !o.userData.overlay) box.expandByObject(o);
+  });
   const size = box.getSize(new THREE.Vector3());
   const c = box.getCenter(new THREE.Vector3());
   c.y = Math.min(c.y, 1.2);

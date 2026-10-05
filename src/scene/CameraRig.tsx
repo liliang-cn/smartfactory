@@ -16,6 +16,12 @@ export function CameraRig({ plant }: { plant: PlantRuntime }) {
   const fly = useRef<Fly | null>(null);
   const cam = useUI((s) => s.cam);
 
+  // Scripted camera moves (demo recordings) reach the camera through window.twin.
+  useEffect(() => {
+    const twin = (window as unknown as { twin?: Record<string, unknown> }).twin;
+    if (twin) Object.assign(twin, { camera, controls });
+  }, [camera, controls]);
+
   useEffect(() => {
     if (!cam || !controls) return;
     const target = controls.target;

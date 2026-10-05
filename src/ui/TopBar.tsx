@@ -15,13 +15,13 @@ import { CHIP, STATE_LABEL, hhmm } from './status';
 
 function Brand() {
   return (
-    <div className="flex min-w-[168px] items-center gap-2.5 text-[19px] font-extrabold tracking-tight max-md:hidden">
+    <div className="flex items-center gap-2.5 text-[19px] lg:min-w-[168px] font-extrabold tracking-tight max-md:hidden">
       <svg viewBox="0 0 32 32" className="size-[30px] max-md:size-[26px]" aria-hidden>
         <path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f5bea" />
         <path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8ff5" />
         <path d="M16 16v13L4 22.5v-13z" fill="#1f3fb0" />
       </svg>
-      <span className="max-md:hidden">SmartFactory</span>
+      <span className="max-lg:hidden">SmartFactory</span>
     </div>
   );
 }
@@ -72,9 +72,9 @@ function SiteSwitcher() {
       <span className="text-muted-foreground/50 max-md:hidden">/</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-11 min-w-0 gap-2.5 rounded-xl pl-1.5 pr-3 max-md:h-[38px] max-md:pr-1.5" aria-label="切换工厂">
+          <Button variant="outline" className="h-11 min-w-0 shrink gap-2.5 rounded-xl pl-1.5 pr-3 max-md:h-[38px] max-md:pr-1.5" aria-label="切换工厂">
             <SiteBadge text={L.badge} />
-            <span className="grid min-w-0 text-left leading-tight max-md:hidden">
+            <span className="grid min-w-0 text-left leading-tight max-lg:hidden">
               <b className="truncate text-[13.5px]">{L.name} {L.hall}</b>
               <small className="truncate text-[11.5px] font-normal text-muted-foreground max-xl:hidden">{L.sub}</small>
             </span>
@@ -190,12 +190,12 @@ function LiveClock() {
   const timeScale = useUI((s) => s.timeScale);
   const paused = timeScale === 0;
   return (
-    <div className={cn('flex h-[34px] items-center gap-2 rounded-[10px] px-3 text-[13px] font-bold max-md:hidden', paused ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success')}>
+    <div className={cn('flex h-[34px] items-center gap-2 whitespace-nowrap rounded-[10px] px-3 text-[13px] font-bold max-md:hidden', paused ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success')}>
       <span className="relative flex size-2">
         {!paused && <span className="absolute inline-flex size-full animate-ping-slow rounded-full bg-success opacity-60 motion-reduce:hidden" />}
         <span className={cn('relative inline-flex size-2 rounded-full', paused ? 'bg-warning' : 'bg-success')} />
       </span>
-      <span>{paused ? '已暂停' : timeScale === 1 ? '实时' : `${timeScale} 倍速`}</span>
+      <span className="max-lg:hidden">{paused ? '已暂停' : timeScale === 1 ? '实时' : `${timeScale} 倍速`}</span>
       <time className="tabular-nums text-foreground">{hhmm(sim.clock, true)}</time>
     </div>
   );
