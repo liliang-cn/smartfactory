@@ -1,0 +1,30 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "jinggong",
+  "name": "苏州精工",
+  "short": "精工",
+  "industry": "machining",
+  "plants": [
+    {
+      "id": "sz1",
+      "name": "苏州一厂",
+      "badge": "A1",
+      "hall": "机加工车间",
+      "sub": "机加工与冲焊，2 条产线",
+      "lines": [
+        {
+          "name": "一号线",
+          "note": "机加工",
+          "product": "cover",
+          "route": "machining"
+        },
+        {
+          "name": "二号线",
+          "note": "冲压焊接",
+          "product": "bracket",
+          "route": "stamp-weld"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "ruineng",
+  "name": "锐能电池",
+  "short": "锐能",
+  "industry": "battery",
+  "plants": [
+    {
+      "id": "cell",
+      "name": "电芯工厂",
+      "badge": "电芯",
+      "hall": "装配车间",
+      "warehouse": "极卷与物料库",
+      "finishedGoods": "电芯成品库",
+      "lines": [
+        {
+          "name": "电芯 {n} 线",
+          "note": "方形叠片",
+          "product": "cell",
+          "route": "cell",
+          "repeat": 3
+        }
+      ]
+    },
+    {
+      "id": "pack",
+      "name": "模组工厂",
+      "badge": "模组",
+      "hall": "PACK 车间",
+      "warehouse": "电芯来料库",
+      "finishedGoods": "模组成品库",
+      "lines": [
+        {
+          "name": "模组 {n} 线",
+          "note": "",
+          "product": "module",
+          "route": "module",
+          "repeat": 2
+        }
+      ]
+    }
+  ]
+}

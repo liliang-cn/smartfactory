@@ -1,0 +1,350 @@
+{
+  "$schema": "../schema/industry.json",
+  "id": "machining",
+  "name": "机加工",
+  "unit": "件",
+  "qualityLabel": "良品率",
+  "products": {
+    "cover": {
+      "name": "电机端盖",
+      "stages": {
+        "blank": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.36,
+                0.2,
+                0.3
+              ],
+              "color": "#aab6d3",
+              "metal": 0.5
+            }
+          ]
+        },
+        "machined": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.36,
+                0.24,
+                0.3
+              ],
+              "color": "#e7edff",
+              "metal": 0.35,
+              "round": 0.05
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.08,
+                0.04
+              ],
+              "at": [
+                0,
+                0.24,
+                0
+              ],
+              "color": "#c4cde0",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    },
+    "bracket": {
+      "name": "支架焊合件",
+      "stages": {
+        "blank": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.06,
+                0.3
+              ],
+              "color": "#aab6d3",
+              "metal": 0.5
+            }
+          ]
+        },
+        "stamped": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.06,
+                0.3
+              ],
+              "color": "#c4cde0",
+              "metal": 0.5
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.2,
+                0.3
+              ],
+              "at": [
+                -0.17,
+                0.06,
+                0
+              ],
+              "color": "#c4cde0",
+              "metal": 0.5
+            }
+          ]
+        },
+        "coated": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.06,
+                0.3
+              ],
+              "color": "#2f364d"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.2,
+                0.3
+              ],
+              "at": [
+                -0.17,
+                0.06,
+                0
+              ],
+              "color": "#2f364d"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "machines": {
+    "cnc": {
+      "label": "数控加工中心",
+      "code": "CNC",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "spindle"
+      },
+      "cycle": 9,
+      "makes": "machined",
+      "thermal": {
+        "idle": 6,
+        "run": 40,
+        "warn": 72,
+        "trip": 85
+      },
+      "power": {
+        "idle": 3.2,
+        "run": 18
+      },
+      "vibration": 2.4,
+      "faults": [
+        "主轴过载",
+        "刀具寿命到限",
+        "冷却液压力低"
+      ]
+    },
+    "cnc2": {
+      "label": "数控加工中心",
+      "code": "CNC",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "spindle"
+      },
+      "cycle": 8,
+      "thermal": {
+        "idle": 6,
+        "run": 40,
+        "warn": 72,
+        "trip": 85
+      },
+      "power": {
+        "idle": 3.2,
+        "run": 18
+      },
+      "vibration": 2.4,
+      "faults": [
+        "主轴过载",
+        "刀具寿命到限"
+      ]
+    },
+    "robot": {
+      "label": "装配机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 7,
+      "thermal": {
+        "idle": 4,
+        "run": 30,
+        "warn": 64,
+        "trip": 76
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 6.5
+      },
+      "vibration": 1.2,
+      "faults": [
+        "J3 轴扭矩超限",
+        "夹爪真空丢失"
+      ]
+    },
+    "press": {
+      "label": "液压冲床",
+      "code": "PR",
+      "look": {
+        "archetype": "press"
+      },
+      "cycle": 6,
+      "makes": "stamped",
+      "thermal": {
+        "idle": 8,
+        "run": 36,
+        "warn": 70,
+        "trip": 82
+      },
+      "power": {
+        "idle": 4,
+        "run": 28
+      },
+      "vibration": 4.8,
+      "faults": [
+        "液压压力低",
+        "模具位置偏差"
+      ]
+    },
+    "welder": {
+      "label": "焊接机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "welder"
+      },
+      "cycle": 8.5,
+      "thermal": {
+        "idle": 5,
+        "run": 34,
+        "warn": 66,
+        "trip": 78
+      },
+      "power": {
+        "idle": 1.2,
+        "run": 11
+      },
+      "vibration": 1.4,
+      "faults": [
+        "送丝异常",
+        "保护气流量低"
+      ]
+    },
+    "oven": {
+      "label": "固化炉",
+      "code": "OV",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#ff6a1a",
+        "stacks": 2,
+        "size": [
+          5,
+          1.9,
+          2.0
+        ]
+      },
+      "cycle": 8,
+      "makes": "coated",
+      "thermal": {
+        "idle": 150,
+        "run": 165,
+        "warn": 200,
+        "trip": 214
+      },
+      "power": {
+        "idle": 22,
+        "run": 34
+      },
+      "vibration": 0.6,
+      "faults": [
+        "二区加热器故障",
+        "循环风机停转"
+      ]
+    },
+    "vision": {
+      "label": "视觉检测",
+      "code": "QC",
+      "look": {
+        "archetype": "gantry"
+      },
+      "cycle": 4,
+      "thermal": {
+        "idle": 6,
+        "run": 16,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 0.4,
+        "run": 1.6
+      },
+      "vibration": 0.2,
+      "faults": [
+        "相机帧同步丢失",
+        "标定偏差超限"
+      ],
+      "rejectRate": 0.012
+    },
+    "packer": {
+      "label": "装箱机",
+      "code": "PK",
+      "look": {
+        "archetype": "packer"
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 5,
+        "run": 20,
+        "warn": 55,
+        "trip": 66
+      },
+      "power": {
+        "idle": 1,
+        "run": 5.5
+      },
+      "vibration": 1.6,
+      "faults": [
+        "纸箱仓空",
+        "推杆卡滞"
+      ]
+    }
+  },
+  "routes": {
+    "machining": [
+      "cnc",
+      "cnc2",
+      "robot",
+      "vision",
+      "packer"
+    ],
+    "stamp-weld": [
+      "press",
+      "welder",
+      "oven",
+      "vision",
+      "packer"
+    ]
+  }
+}

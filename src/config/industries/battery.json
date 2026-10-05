@@ -1,0 +1,1139 @@
+{
+  "$schema": "../schema/industry.json",
+  "id": "battery",
+  "name": "动力电池",
+  "unit": "只",
+  "qualityLabel": "一次合格率",
+  "products": {
+    "cell": {
+      "name": "280Ah 方形磷酸铁锂电芯",
+      "stages": {
+        "stack": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.27,
+                0.08
+              ],
+              "color": "#2d3348"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.33,
+                0.25,
+                0.085
+              ],
+              "at": [
+                0,
+                0.01,
+                0
+              ],
+              "color": "#8d96a8",
+              "opacity": 0.6
+            }
+          ]
+        },
+        "core": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.27,
+                0.085
+              ],
+              "color": "#2d3348",
+              "round": 0.03
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.05,
+                0.27,
+                0.09
+              ],
+              "at": [
+                -0.08,
+                0,
+                0
+              ],
+              "color": "yellow"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.05,
+                0.27,
+                0.09
+              ],
+              "at": [
+                0.08,
+                0,
+                0
+              ],
+              "color": "yellow"
+            }
+          ]
+        },
+        "cased": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.3,
+                0.12
+              ],
+              "color": "#c9d1e0",
+              "metal": 0.7,
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.02,
+                0.12
+              ],
+              "at": [
+                0,
+                0.3,
+                0
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.03,
+                0.06
+              ],
+              "at": [
+                -0.12,
+                0.32,
+                0
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.03,
+                0.06
+              ],
+              "at": [
+                0.12,
+                0.32,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.7
+            }
+          ]
+        },
+        "filled": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.3,
+                0.12
+              ],
+              "color": "#c9d1e0",
+              "metal": 0.7,
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.02,
+                0.12
+              ],
+              "at": [
+                0,
+                0.3,
+                0
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.03,
+                0.06
+              ],
+              "at": [
+                -0.12,
+                0.32,
+                0
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.03,
+                0.06
+              ],
+              "at": [
+                0.12,
+                0.32,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.7
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.015,
+                0.02
+              ],
+              "at": [
+                0,
+                0.32,
+                0
+              ],
+              "color": "blue"
+            }
+          ]
+        },
+        "formed": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.3,
+                0.12
+              ],
+              "color": "#c9d1e0",
+              "metal": 0.7,
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.02,
+                0.12
+              ],
+              "at": [
+                0,
+                0.3,
+                0
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.03,
+                0.06
+              ],
+              "at": [
+                -0.12,
+                0.32,
+                0
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.03,
+                0.06
+              ],
+              "at": [
+                0.12,
+                0.32,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.7
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.015,
+                0.02
+              ],
+              "at": [
+                0,
+                0.32,
+                0
+              ],
+              "color": "blue"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.405,
+                0.24,
+                0.125
+              ],
+              "at": [
+                0,
+                0.03,
+                0
+              ],
+              "color": "#2f5bea",
+              "opacity": 0.85,
+              "round": 0.02
+            }
+          ]
+        }
+      }
+    },
+    "module": {
+      "name": "电池模组",
+      "stages": {
+        "frame": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.86,
+                0.06,
+                0.46
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.5
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.04,
+                0.34,
+                0.46
+              ],
+              "at": [
+                -0.41,
+                0.06,
+                0
+              ],
+              "color": "greyDark"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.04,
+                0.34,
+                0.46
+              ],
+              "at": [
+                0.41,
+                0.06,
+                0
+              ],
+              "color": "greyDark"
+            }
+          ]
+        },
+        "stacked": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.86,
+                0.06,
+                0.46
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.5
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.04,
+                0.34,
+                0.46
+              ],
+              "at": [
+                -0.41,
+                0.06,
+                0
+              ],
+              "color": "greyDark"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.04,
+                0.34,
+                0.46
+              ],
+              "at": [
+                0.41,
+                0.06,
+                0
+              ],
+              "color": "greyDark"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                -0.33,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                -0.22,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                -0.11,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0.11,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0.22,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0.33,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            }
+          ]
+        },
+        "welded": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.86,
+                0.06,
+                0.46
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.5
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                -0.33,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                -0.22,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                -0.11,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0.11,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0.22,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.1,
+                0.3,
+                0.42
+              ],
+              "at": [
+                0.33,
+                0.06,
+                0
+              ],
+              "color": "#2f5bea",
+              "round": 0.02
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.8,
+                0.02,
+                0.06
+              ],
+              "at": [
+                0,
+                0.36,
+                -0.12
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.8,
+                0.02,
+                0.06
+              ],
+              "at": [
+                0,
+                0.36,
+                0.12
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            }
+          ]
+        },
+        "module": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.88,
+                0.44,
+                0.48
+              ],
+              "color": "#e9edf5",
+              "round": 0.04
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.6,
+                0.01,
+                0.3
+              ],
+              "at": [
+                0,
+                0.44,
+                0
+              ],
+              "color": "blue"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "machines": {
+    "winder": {
+      "label": "叠片卷绕机",
+      "code": "WD",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "spindle"
+      },
+      "cycle": 6,
+      "makes": "core",
+      "thermal": {
+        "idle": 5,
+        "run": 22,
+        "warn": 55,
+        "trip": 65
+      },
+      "power": {
+        "idle": 3,
+        "run": 12
+      },
+      "vibration": 1.8,
+      "faults": [
+        "隔膜张力异常",
+        "极片纠偏失效"
+      ],
+      "measure": {
+        "label": "极片对齐度",
+        "unit": "mm",
+        "target": 0.8,
+        "lo": 0.5,
+        "hi": 1.1,
+        "sigma": 0.07,
+        "drift": -1,
+        "digits": 2
+      }
+    },
+    "hot-press": {
+      "label": "热压整形机",
+      "code": "HP",
+      "look": {
+        "archetype": "press",
+        "size": [
+          2.2,
+          1.8,
+          3.6
+        ]
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 30,
+        "run": 60,
+        "warn": 95,
+        "trip": 110
+      },
+      "power": {
+        "idle": 4,
+        "run": 18
+      },
+      "vibration": 1.6,
+      "faults": [
+        "热板温度不均"
+      ],
+      "measure": {
+        "label": "电芯厚度",
+        "unit": "mm",
+        "target": 71.0,
+        "lo": 70.7,
+        "hi": 71.3,
+        "sigma": 0.06,
+        "drift": 1,
+        "digits": 2
+      }
+    },
+    "xray": {
+      "label": "X 射线检测",
+      "code": "XR",
+      "look": {
+        "archetype": "chamber",
+        "glow": "#9fe8ff",
+        "fluid": "#9aa3b8",
+        "size": [
+          2.6,
+          1.8,
+          2.1
+        ]
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 4,
+        "run": 12,
+        "warn": 45,
+        "trip": 55
+      },
+      "power": {
+        "idle": 2,
+        "run": 6
+      },
+      "vibration": 0.2,
+      "faults": [
+        "射线源电压异常",
+        "防护门联锁"
+      ],
+      "measure": {
+        "label": "阴阳极 Overhang",
+        "unit": "mm",
+        "target": 1.2,
+        "lo": 0.8,
+        "hi": 1.6,
+        "sigma": 0.08,
+        "drift": -1,
+        "digits": 2
+      }
+    },
+    "case-robot": {
+      "label": "入壳机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 5,
+      "makes": "cased",
+      "thermal": {
+        "idle": 4,
+        "run": 26,
+        "warn": 60,
+        "trip": 72
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 6
+      },
+      "vibration": 1.0,
+      "faults": [
+        "入壳卡滞",
+        "夹爪真空丢失"
+      ]
+    },
+    "laser": {
+      "label": "激光焊接机器人",
+      "code": "LW",
+      "look": {
+        "archetype": "robot",
+        "tool": "welder"
+      },
+      "cycle": 6,
+      "thermal": {
+        "idle": 8,
+        "run": 40,
+        "warn": 70,
+        "trip": 82
+      },
+      "power": {
+        "idle": 3,
+        "run": 22
+      },
+      "vibration": 0.8,
+      "faults": [
+        "激光功率衰减",
+        "保护气流量低"
+      ],
+      "measure": {
+        "label": "焊缝熔深",
+        "unit": "mm",
+        "target": 1.1,
+        "lo": 0.9,
+        "hi": 1.3,
+        "sigma": 0.04,
+        "drift": -1,
+        "digits": 2
+      }
+    },
+    "he-leak": {
+      "label": "氦检机",
+      "code": "LK",
+      "look": {
+        "archetype": "chamber",
+        "size": [
+          2.6,
+          1.8,
+          2.1
+        ]
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 3,
+        "run": 10,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 2,
+        "run": 6
+      },
+      "vibration": 1.4,
+      "faults": [
+        "真空度不足"
+      ],
+      "measure": {
+        "label": "氦漏率",
+        "unit": "Pa·m³/s ×10⁻⁷",
+        "target": 0.5,
+        "hi": 5.0,
+        "sigma": 0.6,
+        "drift": 1,
+        "digits": 2,
+        "abs": true
+      }
+    },
+    "electrolyte": {
+      "label": "注液机",
+      "code": "FL",
+      "look": {
+        "archetype": "filler",
+        "fluid": "#d9f99d"
+      },
+      "cycle": 6,
+      "makes": "filled",
+      "thermal": {
+        "idle": 3,
+        "run": 8,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 1.5,
+        "run": 5
+      },
+      "vibration": 0.8,
+      "faults": [
+        "注液泵压力低",
+        "手套箱露点超标"
+      ],
+      "measure": {
+        "label": "注液量",
+        "unit": "g",
+        "target": 860,
+        "lo": 852,
+        "hi": 868,
+        "sigma": 2.0,
+        "drift": -1,
+        "digits": 1
+      }
+    },
+    "formation": {
+      "label": "化成柜",
+      "code": "FM",
+      "look": {
+        "archetype": "booth",
+        "glow": "#a7f3d0",
+        "size": [
+          4.0,
+          2.2,
+          2.6
+        ]
+      },
+      "cycle": 9,
+      "makes": "formed",
+      "thermal": {
+        "idle": 10,
+        "run": 22,
+        "warn": 55,
+        "trip": 65
+      },
+      "power": {
+        "idle": 8,
+        "run": 40
+      },
+      "vibration": 0.2,
+      "faults": [
+        "通道接触不良",
+        "柜内温度高"
+      ],
+      "measure": {
+        "label": "化成容量",
+        "unit": "Ah",
+        "target": 283,
+        "lo": 280,
+        "sigma": 0.9,
+        "drift": -1,
+        "digits": 1
+      }
+    },
+    "ocv": {
+      "label": "OCV 内阻分选",
+      "code": "OCV",
+      "look": {
+        "archetype": "gantry"
+      },
+      "cycle": 3,
+      "thermal": {
+        "idle": 2,
+        "run": 6,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.4,
+        "run": 1.2
+      },
+      "vibration": 0.1,
+      "faults": [
+        "探针磨损"
+      ],
+      "measure": {
+        "label": "内阻",
+        "unit": "mΩ",
+        "target": 0.18,
+        "hi": 0.24,
+        "sigma": 0.012,
+        "drift": 1,
+        "digits": 3
+      }
+    },
+    "stack-robot": {
+      "label": "电芯堆叠机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 7,
+      "makes": "stacked",
+      "thermal": {
+        "idle": 4,
+        "run": 26,
+        "warn": 60,
+        "trip": 72
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 6
+      },
+      "vibration": 1.0,
+      "faults": [
+        "定位相机失效"
+      ]
+    },
+    "busbar": {
+      "label": "巴片焊接机器人",
+      "code": "LW",
+      "look": {
+        "archetype": "robot",
+        "tool": "welder"
+      },
+      "cycle": 8,
+      "makes": "welded",
+      "thermal": {
+        "idle": 8,
+        "run": 40,
+        "warn": 70,
+        "trip": 82
+      },
+      "power": {
+        "idle": 3,
+        "run": 22
+      },
+      "vibration": 0.8,
+      "faults": [
+        "激光功率衰减"
+      ]
+    },
+    "module-asm": {
+      "label": "模组装配工位",
+      "code": "AS",
+      "look": {
+        "archetype": "manual",
+        "operators": 2
+      },
+      "cycle": 8,
+      "makes": "module",
+      "thermal": {
+        "idle": 2,
+        "run": 7,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.3,
+        "run": 1.2
+      },
+      "vibration": 0.3,
+      "faults": [
+        "拧紧枪扭矩异常",
+        "物料呼叫超时"
+      ]
+    },
+    "hipot": {
+      "label": "绝缘耐压测试",
+      "code": "SF",
+      "look": {
+        "archetype": "safety"
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 2,
+        "run": 6,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.5,
+        "run": 2.2
+      },
+      "vibration": 0.1,
+      "faults": [
+        "耐压仪自检失败"
+      ],
+      "measure": {
+        "label": "绝缘电阻",
+        "unit": "MΩ",
+        "target": 820,
+        "lo": 500,
+        "sigma": 60,
+        "drift": -1,
+        "digits": 0
+      }
+    },
+    "packer": {
+      "label": "装箱机",
+      "code": "PK",
+      "look": {
+        "archetype": "packer"
+      },
+      "cycle": 4,
+      "thermal": {
+        "idle": 4,
+        "run": 20,
+        "warn": 55,
+        "trip": 66
+      },
+      "power": {
+        "idle": 1,
+        "run": 5.5
+      },
+      "vibration": 1.6,
+      "faults": [
+        "纸箱仓空"
+      ]
+    }
+  },
+  "routes": {
+    "cell": [
+      "winder",
+      "hot-press",
+      "xray",
+      "case-robot",
+      "laser",
+      "he-leak",
+      "electrolyte",
+      "formation",
+      "ocv",
+      "packer"
+    ],
+    "module": [
+      "stack-robot",
+      "busbar",
+      "module-asm",
+      "hipot",
+      "packer"
+    ]
+  }
+}

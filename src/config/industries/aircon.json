@@ -1,0 +1,771 @@
+{
+  "$schema": "../schema/industry.json",
+  "id": "aircon",
+  "name": "空调",
+  "unit": "台",
+  "qualityLabel": "一次合格率",
+  "products": {
+    "idu": {
+      "name": "KFR-35GW 挂机内机",
+      "stages": {
+        "chassis": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.95,
+                0.05,
+                0.28
+              ],
+              "color": "#e9edf5"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.95,
+                0.14,
+                0.03
+              ],
+              "at": [
+                0,
+                0,
+                -0.125
+              ],
+              "color": "#e9edf5"
+            }
+          ]
+        },
+        "core": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.95,
+                0.05,
+                0.28
+              ],
+              "color": "#e9edf5"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.95,
+                0.14,
+                0.03
+              ],
+              "at": [
+                0,
+                0,
+                -0.125
+              ],
+              "color": "#e9edf5"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.84,
+                0.17,
+                0.09
+              ],
+              "at": [
+                0,
+                0.05,
+                -0.02
+              ],
+              "color": "#c4cde0",
+              "metal": 0.6
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.012,
+                0.16
+              ],
+              "at": [
+                -0.44,
+                0.05,
+                -0.02
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.012,
+                0.16
+              ],
+              "at": [
+                0.44,
+                0.05,
+                -0.02
+              ],
+              "color": "#c47b3d",
+              "metal": 0.7
+            }
+          ]
+        },
+        "unit": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.95,
+                0.28,
+                0.22
+              ],
+              "color": "#f6f8fc",
+              "round": 0.09
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.8,
+                0.035,
+                0.02
+              ],
+              "at": [
+                0,
+                0.03,
+                0.105
+              ],
+              "color": "#3a4260"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.03,
+                0.03,
+                0.01
+              ],
+              "at": [
+                0.32,
+                0.17,
+                0.112
+              ],
+              "color": "#9fc0ff",
+              "glow": "#4f7cff"
+            }
+          ]
+        }
+      }
+    },
+    "odu": {
+      "name": "KFR-35W 空调外机",
+      "stages": {
+        "base": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.8,
+                0.06,
+                0.34
+              ],
+              "at": [
+                0,
+                0.02,
+                0
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.4
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.02,
+                0.34
+              ],
+              "at": [
+                -0.3,
+                0,
+                0
+              ],
+              "color": "ink"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.02,
+                0.34
+              ],
+              "at": [
+                0.3,
+                0,
+                0
+              ],
+              "color": "ink"
+            }
+          ]
+        },
+        "core": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.8,
+                0.06,
+                0.34
+              ],
+              "at": [
+                0,
+                0.02,
+                0
+              ],
+              "color": "#9aa3b8",
+              "metal": 0.4
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.02,
+                0.34
+              ],
+              "at": [
+                -0.3,
+                0,
+                0
+              ],
+              "color": "ink"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.02,
+                0.34
+              ],
+              "at": [
+                0.3,
+                0,
+                0
+              ],
+              "color": "ink"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.1,
+                0.3
+              ],
+              "at": [
+                0.22,
+                0.08,
+                -0.02
+              ],
+              "color": "#3b4258",
+              "metal": 0.3
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.02,
+                0.36,
+                0.3
+              ],
+              "at": [
+                0.08,
+                0.08,
+                0
+              ],
+              "color": "#9aa3b8"
+            }
+          ]
+        },
+        "unit": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.02,
+                0.34
+              ],
+              "at": [
+                -0.3,
+                0,
+                0
+              ],
+              "color": "ink"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.02,
+                0.34
+              ],
+              "at": [
+                0.3,
+                0,
+                0
+              ],
+              "color": "ink"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.8,
+                0.54,
+                0.34
+              ],
+              "at": [
+                0,
+                0.02,
+                0
+              ],
+              "color": "#f6f8fc"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.2,
+                0.54,
+                0.345
+              ],
+              "at": [
+                0.3,
+                0.02,
+                0
+              ],
+              "color": "#d5dbe8"
+            },
+            {
+              "shape": "torus",
+              "size": [
+                0.19,
+                0.018
+              ],
+              "at": [
+                -0.1,
+                0.1,
+                0.172
+              ],
+              "color": "#2f364d"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.185,
+                0.01
+              ],
+              "at": [
+                -0.1,
+                0.105,
+                0.166
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#2f364d"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.32,
+                0.06,
+                0.008
+              ],
+              "at": [
+                -0.1,
+                0.26,
+                0.18
+              ],
+              "color": "#8a93ad",
+              "anim": {
+                "type": "spin",
+                "axis": "z",
+                "speed": 22
+              }
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.06,
+                0.32,
+                0.008
+              ],
+              "at": [
+                -0.1,
+                0.13,
+                0.18
+              ],
+              "color": "#8a93ad",
+              "anim": {
+                "type": "spin",
+                "axis": "z",
+                "speed": 22
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "machines": {
+    "evap-robot": {
+      "label": "蒸发器装配机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 7,
+      "makes": "core",
+      "thermal": {
+        "idle": 4,
+        "run": 30,
+        "warn": 64,
+        "trip": 76
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 6.5
+      },
+      "vibration": 1.2,
+      "faults": [
+        "J3 轴扭矩超限",
+        "夹爪真空丢失",
+        "安全光栅触发"
+      ]
+    },
+    "comp-robot": {
+      "label": "压缩机装配机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 7.5,
+      "makes": "core",
+      "thermal": {
+        "idle": 4,
+        "run": 30,
+        "warn": 64,
+        "trip": 76
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 6.5
+      },
+      "vibration": 1.2,
+      "faults": [
+        "J3 轴扭矩超限",
+        "夹爪真空丢失"
+      ]
+    },
+    "assembly": {
+      "label": "电控装配工位",
+      "code": "AS",
+      "look": {
+        "archetype": "manual",
+        "operators": 2
+      },
+      "cycle": 8.2,
+      "makes": "unit",
+      "thermal": {
+        "idle": 2,
+        "run": 7,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.3,
+        "run": 1.2
+      },
+      "vibration": 0.3,
+      "faults": [
+        "拧紧枪扭矩异常",
+        "物料呼叫超时",
+        "防错扫码不匹配"
+      ],
+      "measure": {
+        "label": "拧紧扭矩",
+        "unit": "N·m",
+        "target": 2.2,
+        "lo": 1.9,
+        "hi": 2.5,
+        "sigma": 0.06,
+        "drift": -1,
+        "digits": 2
+      }
+    },
+    "brazer": {
+      "label": "钎焊机器人",
+      "code": "BZ",
+      "look": {
+        "archetype": "robot",
+        "tool": "torch"
+      },
+      "cycle": 8.6,
+      "makes": "unit",
+      "thermal": {
+        "idle": 6,
+        "run": 38,
+        "warn": 70,
+        "trip": 82
+      },
+      "power": {
+        "idle": 1.5,
+        "run": 9
+      },
+      "vibration": 1.3,
+      "faults": [
+        "火焰监测丢失",
+        "燃气压力低",
+        "焊环送料异常"
+      ]
+    },
+    "safety": {
+      "label": "电气安规测试",
+      "code": "SF",
+      "look": {
+        "archetype": "safety"
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 2,
+        "run": 6,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.5,
+        "run": 2.2
+      },
+      "vibration": 0.1,
+      "faults": [
+        "耐压仪自检失败",
+        "接地探针接触不良"
+      ],
+      "measure": {
+        "label": "泄漏电流",
+        "unit": "mA",
+        "target": 0.3,
+        "hi": 1.0,
+        "sigma": 0.12,
+        "drift": 1,
+        "digits": 2,
+        "abs": true
+      }
+    },
+    "leak": {
+      "label": "氦检漏箱",
+      "code": "LK",
+      "look": {
+        "archetype": "chamber",
+        "size": [
+          3,
+          1.8,
+          2.1
+        ]
+      },
+      "cycle": 8,
+      "thermal": {
+        "idle": 3,
+        "run": 11,
+        "warn": 45,
+        "trip": 55
+      },
+      "power": {
+        "idle": 2.5,
+        "run": 7.5
+      },
+      "vibration": 1.8,
+      "faults": [
+        "真空泵抽速不足",
+        "箱门密封报警"
+      ],
+      "measure": {
+        "label": "氦漏率",
+        "unit": "g/年",
+        "target": 0.5,
+        "hi": 3.0,
+        "sigma": 0.45,
+        "drift": 1,
+        "digits": 2,
+        "abs": true
+      }
+    },
+    "charge": {
+      "label": "抽真空灌注机",
+      "code": "CH",
+      "look": {
+        "archetype": "filler",
+        "fluid": "#8fb4ff"
+      },
+      "cycle": 7.6,
+      "thermal": {
+        "idle": 4,
+        "run": 12,
+        "warn": 48,
+        "trip": 58
+      },
+      "power": {
+        "idle": 1.2,
+        "run": 4.5
+      },
+      "vibration": 1.4,
+      "faults": [
+        "冷媒瓶压力低",
+        "灌注枪泄漏"
+      ],
+      "measure": {
+        "label": "R32 灌注量",
+        "unit": "g",
+        "target": 1150,
+        "lo": 1135,
+        "hi": 1165,
+        "sigma": 3.2,
+        "drift": 1,
+        "digits": 0,
+        "speedBias": 9
+      }
+    },
+    "runtest": {
+      "label": "运行测试房",
+      "code": "RT",
+      "look": {
+        "archetype": "booth",
+        "size": [
+          3.4,
+          2.0,
+          2.4
+        ]
+      },
+      "cycle": 8.6,
+      "thermal": {
+        "idle": 4,
+        "run": 14,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 2,
+        "run": 6.5
+      },
+      "vibration": 1.1,
+      "faults": [
+        "测试电源跳闸",
+        "风速传感器异常"
+      ],
+      "measure": {
+        "label": "进出风温差",
+        "unit": "°C",
+        "target": 13.5,
+        "lo": 11,
+        "sigma": 0.55,
+        "drift": -1,
+        "digits": 1
+      }
+    },
+    "perftest": {
+      "label": "性能测试房",
+      "code": "RT",
+      "look": {
+        "archetype": "booth",
+        "size": [
+          3.4,
+          2.0,
+          2.4
+        ]
+      },
+      "cycle": 9,
+      "thermal": {
+        "idle": 4,
+        "run": 14,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 2,
+        "run": 6.5
+      },
+      "vibration": 1.1,
+      "faults": [
+        "测试电源跳闸",
+        "温湿度工况失控"
+      ],
+      "measure": {
+        "label": "运行电流",
+        "unit": "A",
+        "target": 6.4,
+        "lo": 5.8,
+        "hi": 7.0,
+        "sigma": 0.12,
+        "drift": 1,
+        "digits": 2
+      }
+    },
+    "vision": {
+      "label": "外观视觉检测",
+      "code": "QC",
+      "look": {
+        "archetype": "gantry"
+      },
+      "cycle": 4,
+      "thermal": {
+        "idle": 2,
+        "run": 8,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.4,
+        "run": 1.6
+      },
+      "vibration": 0.2,
+      "faults": [
+        "相机帧同步丢失",
+        "光源亮度衰减"
+      ],
+      "rejectRate": 0.012
+    },
+    "packer": {
+      "label": "自动包装机",
+      "code": "PK",
+      "look": {
+        "archetype": "packer"
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 4,
+        "run": 20,
+        "warn": 55,
+        "trip": 66
+      },
+      "power": {
+        "idle": 1,
+        "run": 5.5
+      },
+      "vibration": 1.6,
+      "faults": [
+        "纸箱仓空",
+        "封箱胶带断"
+      ]
+    }
+  },
+  "routes": {
+    "indoor": [
+      "evap-robot",
+      "assembly",
+      "safety",
+      "runtest",
+      "vision",
+      "packer"
+    ],
+    "outdoor": [
+      "comp-robot",
+      "brazer",
+      "leak",
+      "charge",
+      "perftest",
+      "packer"
+    ]
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "huaduan",
+  "name": "华锻集团",
+  "short": "华锻",
+  "industry": "forging",
+  "plants": [
+    {
+      "id": "p1",
+      "name": "一厂",
+      "badge": "一厂",
+      "hall": "热模锻车间",
+      "sub": "汽车曲轴与连杆，6 条热模锻线",
+      "lines": [
+        {
+          "name": "曲轴 {n} 线",
+          "note": "热模锻",
+          "product": "crankshaft",
+          "route": "hot-die",
+          "repeat": 4
+        },
+        {
+          "name": "连杆 {n} 线",
+          "note": "热模锻",
+          "product": "conrod",
+          "route": "hot-die",
+          "repeat": 2
+        }
+      ]
+    },
+    {
+      "id": "p2",
+      "name": "二厂",
+      "badge": "二厂",
+      "hall": "环锻车间",
+      "sub": "风电法兰与轴承套圈，5 条辗环线",
+      "lines": [
+        {
+          "name": "法兰 {n} 线",
+          "note": "辗环",
+          "product": "flange",
+          "route": "ring-flange",
+          "repeat": 3
+        },
+        {
+          "name": "套圈 {n} 线",
+          "note": "辗环",
+          "product": "bearing-ring",
+          "route": "ring-bearing",
+          "repeat": 2
+        }
+      ]
+    },
+    {
+      "id": "p3",
+      "name": "三厂",
+      "badge": "三厂",
+      "hall": "自由锻车间",
+      "sub": "大型轴类与模块，4 条自由锻线",
+      "warehouse": "钢锭库",
+      "finishedGoods": "大件成品库",
+      "lines": [
+        {
+          "name": "主轴 {n} 线",
+          "note": "自由锻",
+          "product": "shaft",
+          "route": "open-die",
+          "repeat": 2
+        },
+        {
+          "name": "模块 {n} 线",
+          "note": "自由锻",
+          "product": "block",
+          "route": "open-die",
+          "repeat": 2
+        }
+      ]
+    }
+  ]
+}

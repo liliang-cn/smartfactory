@@ -1,0 +1,30 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "nanfang",
+  "name": "南方空调",
+  "short": "南空",
+  "industry": "aircon",
+  "plants": [
+    {
+      "id": "foshan",
+      "name": "佛山基地",
+      "badge": "B2",
+      "hall": "总装二车间",
+      "sub": "分体空调内外机总装",
+      "lines": [
+        {
+          "name": "内机线",
+          "note": "挂机内机",
+          "product": "idu",
+          "route": "indoor"
+        },
+        {
+          "name": "外机线",
+          "note": "空调外机",
+          "product": "odu",
+          "route": "outdoor"
+        }
+      ]
+    }
+  ]
+}

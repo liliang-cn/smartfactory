@@ -1,0 +1,43 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "hetian",
+  "name": "禾田食品",
+  "short": "禾田",
+  "industry": "food",
+  "plants": [
+    {
+      "id": "bakery",
+      "name": "烘焙工厂",
+      "badge": "烘焙",
+      "hall": "面包车间",
+      "warehouse": "原辅料库",
+      "finishedGoods": "冷链发货区",
+      "lines": [
+        {
+          "name": "吐司 {n} 线",
+          "note": "全自动",
+          "product": "bread",
+          "route": "bread",
+          "repeat": 2
+        }
+      ]
+    },
+    {
+      "id": "beverage",
+      "name": "饮料工厂",
+      "badge": "饮料",
+      "hall": "灌装车间",
+      "warehouse": "瓶坯与原料库",
+      "finishedGoods": "成品发货区",
+      "lines": [
+        {
+          "name": "灌装 {n} 线",
+          "note": "PET 瓶",
+          "product": "juice",
+          "route": "juice",
+          "repeat": 3
+        }
+      ]
+    }
+  ]
+}

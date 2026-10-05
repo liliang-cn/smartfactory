@@ -1,0 +1,895 @@
+{
+  "$schema": "../schema/industry.json",
+  "id": "food",
+  "name": "食品饮料",
+  "unit": "件",
+  "qualityLabel": "一次合格率",
+  "products": {
+    "bread": {
+      "name": "吐司面包",
+      "stages": {
+        "tin": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.16,
+                0.22
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        },
+        "filled": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.16,
+                0.22
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.12,
+                0.18
+              ],
+              "at": [
+                0,
+                0.06,
+                0
+              ],
+              "color": "#f3e6c8",
+              "round": 0.08
+            }
+          ]
+        },
+        "proofed": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.16,
+                0.22
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.2,
+                0.18
+              ],
+              "at": [
+                0,
+                0.06,
+                0
+              ],
+              "color": "#f0dcb4",
+              "round": 0.08
+            }
+          ]
+        },
+        "baked": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.16,
+                0.22
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.22,
+                0.18
+              ],
+              "at": [
+                0,
+                0.06,
+                0
+              ],
+              "color": "#c98a4b",
+              "round": 0.08
+            }
+          ]
+        },
+        "loaf": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.22,
+                0.18
+              ],
+              "color": "#c98a4b",
+              "round": 0.08
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.32,
+                0.06,
+                0.16
+              ],
+              "at": [
+                0,
+                0.17,
+                0
+              ],
+              "color": "#a8682f",
+              "round": 0.03
+            }
+          ]
+        },
+        "sliced": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.22,
+                0.18
+              ],
+              "color": "#c98a4b",
+              "round": 0.08
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.004,
+                0.2,
+                0.185
+              ],
+              "at": [
+                -0.1,
+                0.01,
+                0
+              ],
+              "color": "#f3e6c8"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.004,
+                0.2,
+                0.185
+              ],
+              "at": [
+                -0.03,
+                0.01,
+                0
+              ],
+              "color": "#f3e6c8"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.004,
+                0.2,
+                0.185
+              ],
+              "at": [
+                0.04,
+                0.01,
+                0
+              ],
+              "color": "#f3e6c8"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.004,
+                0.2,
+                0.185
+              ],
+              "at": [
+                0.11,
+                0.01,
+                0
+              ],
+              "color": "#f3e6c8"
+            }
+          ]
+        },
+        "bagged": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.34,
+                0.22,
+                0.18
+              ],
+              "color": "#c98a4b",
+              "round": 0.08
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.4,
+                0.25,
+                0.21
+              ],
+              "color": "#eef4ff",
+              "opacity": 0.55,
+              "round": 0.06
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.05,
+                0.03,
+                0.21
+              ],
+              "at": [
+                0.19,
+                0.11,
+                0
+              ],
+              "color": "blue"
+            }
+          ]
+        }
+      }
+    },
+    "juice": {
+      "name": "500 ml 橙汁饮料",
+      "stages": {
+        "preform": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.03,
+                0.12
+              ],
+              "color": "#9fd8ff",
+              "opacity": 0.7
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.04,
+                0.012
+              ],
+              "at": [
+                0,
+                0.11,
+                0
+              ],
+              "color": "#9fd8ff"
+            }
+          ]
+        },
+        "bottle": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.26
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.025,
+                0.06
+              ],
+              "at": [
+                0,
+                0.26,
+                0
+              ],
+              "color": "glass"
+            }
+          ]
+        },
+        "filled": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.26
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.025,
+                0.06
+              ],
+              "at": [
+                0,
+                0.26,
+                0
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.064,
+                0.2
+              ],
+              "at": [
+                0,
+                0.01,
+                0
+              ],
+              "color": "#ff9a3c",
+              "opacity": 0.85
+            }
+          ]
+        },
+        "capped": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.26
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.025,
+                0.06
+              ],
+              "at": [
+                0,
+                0.26,
+                0
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.064,
+                0.2
+              ],
+              "at": [
+                0,
+                0.01,
+                0
+              ],
+              "color": "#ff9a3c",
+              "opacity": 0.85
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.03,
+                0.03
+              ],
+              "at": [
+                0,
+                0.32,
+                0
+              ],
+              "color": "red"
+            }
+          ]
+        },
+        "labeled": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.26
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.025,
+                0.06
+              ],
+              "at": [
+                0,
+                0.26,
+                0
+              ],
+              "color": "glass"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.064,
+                0.2
+              ],
+              "at": [
+                0,
+                0.01,
+                0
+              ],
+              "color": "#ff9a3c",
+              "opacity": 0.85
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.03,
+                0.03
+              ],
+              "at": [
+                0,
+                0.32,
+                0
+              ],
+              "color": "red"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.072,
+                0.09
+              ],
+              "at": [
+                0,
+                0.07,
+                0
+              ],
+              "color": "blue"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "machines": {
+    "depositor": {
+      "label": "面团分割注模机",
+      "code": "DP",
+      "look": {
+        "archetype": "tank",
+        "fluid": "#f3e6c8"
+      },
+      "cycle": 6,
+      "makes": "filled",
+      "thermal": {
+        "idle": 3,
+        "run": 10,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 1.5,
+        "run": 7
+      },
+      "vibration": 1.0,
+      "faults": [
+        "面团料斗缺料",
+        "分割刀卡滞"
+      ],
+      "measure": {
+        "label": "面团重量",
+        "unit": "g",
+        "target": 450,
+        "lo": 440,
+        "hi": 460,
+        "sigma": 2.6,
+        "drift": -1,
+        "digits": 1
+      }
+    },
+    "proofer": {
+      "label": "醒发隧道",
+      "code": "PF",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#ffe6b0",
+        "stacks": 0,
+        "size": [
+          5,
+          1.9,
+          2.0
+        ]
+      },
+      "cycle": 8,
+      "makes": "proofed",
+      "thermal": {
+        "idle": 14,
+        "run": 18,
+        "warn": 50,
+        "trip": 58
+      },
+      "power": {
+        "idle": 6,
+        "run": 12
+      },
+      "vibration": 0.3,
+      "faults": [
+        "湿度失控",
+        "链网跑偏"
+      ],
+      "measure": {
+        "label": "醒发温度",
+        "unit": "°C",
+        "target": 36,
+        "lo": 34,
+        "hi": 38,
+        "sigma": 0.4,
+        "drift": 1,
+        "digits": 1
+      }
+    },
+    "oven": {
+      "label": "隧道烤炉",
+      "code": "OV",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#ff8a3d",
+        "stacks": 2,
+        "size": [
+          6,
+          2.0,
+          2.0
+        ]
+      },
+      "cycle": 8,
+      "makes": "baked",
+      "thermal": {
+        "idle": 160,
+        "run": 185,
+        "warn": 215,
+        "trip": 228
+      },
+      "power": {
+        "idle": 40,
+        "run": 85
+      },
+      "vibration": 0.6,
+      "faults": [
+        "燃烧器熄火",
+        "排烟风机故障"
+      ],
+      "measure": {
+        "label": "中心温度",
+        "unit": "°C",
+        "target": 96,
+        "lo": 93,
+        "sigma": 0.8,
+        "drift": -1,
+        "digits": 1
+      }
+    },
+    "cooler": {
+      "label": "螺旋冷却塔",
+      "code": "CO",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#bfe9ff",
+        "stacks": 0,
+        "size": [
+          4.5,
+          1.9,
+          2.4
+        ]
+      },
+      "cycle": 7,
+      "thermal": {
+        "idle": 2,
+        "run": 6,
+        "warn": 40,
+        "trip": 48
+      },
+      "power": {
+        "idle": 4,
+        "run": 15
+      },
+      "vibration": 0.8,
+      "faults": [
+        "冷风机结霜",
+        "链网卡滞"
+      ]
+    },
+    "depanner": {
+      "label": "脱模机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 6,
+      "makes": "loaf",
+      "thermal": {
+        "idle": 4,
+        "run": 26,
+        "warn": 60,
+        "trip": 72
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 5
+      },
+      "vibration": 1.0,
+      "faults": [
+        "吸盘真空不足"
+      ]
+    },
+    "slicer": {
+      "label": "切片机",
+      "code": "SL",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "pusher"
+      },
+      "cycle": 5,
+      "makes": "sliced",
+      "thermal": {
+        "idle": 4,
+        "run": 16,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 1.2,
+        "run": 6
+      },
+      "vibration": 2.0,
+      "faults": [
+        "刀片钝化",
+        "面包屑堵塞"
+      ]
+    },
+    "bagger": {
+      "label": "自动装袋机",
+      "code": "BG",
+      "look": {
+        "archetype": "packer"
+      },
+      "cycle": 5,
+      "makes": "bagged",
+      "thermal": {
+        "idle": 4,
+        "run": 18,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 1,
+        "run": 4.5
+      },
+      "vibration": 1.4,
+      "faults": [
+        "袋卷用完",
+        "封口温度低"
+      ]
+    },
+    "metal-detector": {
+      "label": "金属检测机",
+      "code": "MD",
+      "look": {
+        "archetype": "gantry"
+      },
+      "cycle": 3,
+      "thermal": {
+        "idle": 2,
+        "run": 5,
+        "warn": 35,
+        "trip": 45
+      },
+      "power": {
+        "idle": 0.3,
+        "run": 0.8
+      },
+      "vibration": 0.1,
+      "faults": [
+        "检测头灵敏度漂移"
+      ],
+      "rejectRate": 0.004
+    },
+    "blow-molder": {
+      "label": "吹瓶机",
+      "code": "BM",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "pusher"
+      },
+      "cycle": 4,
+      "makes": "bottle",
+      "thermal": {
+        "idle": 20,
+        "run": 60,
+        "warn": 95,
+        "trip": 110
+      },
+      "power": {
+        "idle": 30,
+        "run": 75
+      },
+      "vibration": 2.2,
+      "faults": [
+        "加热灯管损坏",
+        "高压气不足"
+      ]
+    },
+    "filler": {
+      "label": "无菌灌装机",
+      "code": "FL",
+      "look": {
+        "archetype": "filler",
+        "fluid": "#ff9a3c"
+      },
+      "cycle": 4,
+      "makes": "filled",
+      "thermal": {
+        "idle": 3,
+        "run": 8,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 2,
+        "run": 8
+      },
+      "vibration": 1.2,
+      "faults": [
+        "灌装阀泄漏",
+        "CIP 未完成"
+      ],
+      "measure": {
+        "label": "灌装量",
+        "unit": "ml",
+        "target": 502,
+        "lo": 497,
+        "hi": 508,
+        "sigma": 1.1,
+        "drift": -1,
+        "digits": 1,
+        "speedBias": -3
+      }
+    },
+    "capper": {
+      "label": "旋盖机",
+      "code": "CP",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "spindle"
+      },
+      "cycle": 3.5,
+      "makes": "capped",
+      "thermal": {
+        "idle": 4,
+        "run": 16,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 1,
+        "run": 4
+      },
+      "vibration": 1.6,
+      "faults": [
+        "瓶盖理盖器卡盖"
+      ],
+      "measure": {
+        "label": "开启扭矩",
+        "unit": "N·m",
+        "target": 1.6,
+        "lo": 1.2,
+        "hi": 2.0,
+        "sigma": 0.08,
+        "drift": 1,
+        "digits": 2
+      }
+    },
+    "labeler": {
+      "label": "贴标机",
+      "code": "LB",
+      "look": {
+        "archetype": "roller"
+      },
+      "cycle": 3.5,
+      "makes": "labeled",
+      "thermal": {
+        "idle": 3,
+        "run": 10,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 3
+      },
+      "vibration": 0.8,
+      "faults": [
+        "标签断带",
+        "热熔胶温度低"
+      ]
+    },
+    "inspector": {
+      "label": "液位与外观检测",
+      "code": "QC",
+      "look": {
+        "archetype": "gantry"
+      },
+      "cycle": 3,
+      "thermal": {
+        "idle": 2,
+        "run": 6,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.3,
+        "run": 1.2
+      },
+      "vibration": 0.1,
+      "faults": [
+        "相机曝光异常"
+      ],
+      "rejectRate": 0.008
+    },
+    "case-packer": {
+      "label": "装箱机",
+      "code": "PK",
+      "look": {
+        "archetype": "packer"
+      },
+      "cycle": 4,
+      "thermal": {
+        "idle": 4,
+        "run": 20,
+        "warn": 55,
+        "trip": 66
+      },
+      "power": {
+        "idle": 1,
+        "run": 5.5
+      },
+      "vibration": 1.6,
+      "faults": [
+        "纸箱仓空",
+        "封箱胶带断"
+      ]
+    }
+  },
+  "routes": {
+    "bread": [
+      "depositor",
+      "proofer",
+      "oven",
+      "cooler",
+      "depanner",
+      "slicer",
+      "bagger",
+      "metal-detector",
+      "case-packer"
+    ],
+    "juice": [
+      "blow-molder",
+      "filler",
+      "capper",
+      "labeler",
+      "inspector",
+      "case-packer"
+    ]
+  }
+}

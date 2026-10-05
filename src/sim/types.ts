@@ -1,0 +1,170 @@
+// Live objects the simulation mutates. Static plant structure comes from core/layout.
+import type { MachineCfg, MeasureCfg } from '@/config/schema';
+import type { LineLayout, Waypoint } from '@/core/layout';
+
+export type AssetType = 'station' | 'conveyor' | 'buffer' | 'outfeed' | 'warehouse' | 'fgzone' | 'agv' | 'truck';
+
+export type AssetState =
+  | 'running' | 'idle' | 'blocked' | 'stopped' | 'fault' | 'maint'
+  | 'moving' | 'waiting' | 'handling' | 'away'
+  | 'ok' | 'empty' | 'low' | 'full';
+
+/** A product stage key from the industry pack, e.g. billet, forged, packed. */
+export type ProductKind = string;
+export type GroupId = string;
+export type { Waypoint };
+
+export interface TypeSpec {
+  label: string;
+  idleRise?: number;
+  runRise?: number;
+  warn?: number;
+  trip?: number;
+  pIdle?: number;
+  pRun?: number;
+  vib?: number;
+  tau?: number;
+  faults?: string[];
+}
+
+/** Spec of a machine that has thermal/power telemetry. */
+export type MachineSpec = Required<Omit<TypeSpec, 'tau'>> & { tau?: number };
+export type Measure = MeasureCfg;
+
+// ---------- live state ----------
+
+export interface Product {
+  id: string;
+  s: number;
+  done: number;
+  proc: number;
+  t: number;
+  kind: ProductKind;
+  stall: number;
+}
+
+export interface Cargo { kind: 'raw' | 'fg'; n: number }
+
+export interface AgvState {
+  asset: Asset;
+  route: Waypoint[];
+  idx: number;
+  x: number;
+  z: number;
+  heading: number;
+  cargo: Cargo | null;
+  mode: 'move' | 'dwell';
+  dwell: number;
+  waiting: boolean;
+  waitedT: number;
+  task: string;
+}
+
+export interface TruckState {
+  asset: Asset;
+  route: Waypoint[];
+  kind: 'in' | 'out';
+  idx: number;
+  x: number;
+  z: number;
+  heading: number;
+  phase: 'away' | 'drive' | 'dock' | 'leave';
+  wait: number;
+  dock: number;
+  load: number;
+}
+
+export interface Asset {
+  id: string;
+  name: string;
+  type: AssetType;
+  group: GroupId;
+  spec?: TypeSpec;
+  enabled: boolean;
+  speed: number;
+  fault: { text: string; at: number } | null;
+  maint: number;
+  state: AssetState;
+  temp: number;
+  vib: number;
+  power: number;
+  health: number;
+  util: number;
+  avail: number;
+  cycles: number;
+  progress: number;
+  busy: Product | null;
+  hist: { temp: number[]; power: number[]; vib: number[]; level: number[]; meas: number[] };
+  // line stations
+  line?: Line;
+  machine?: MachineCfg;
+  /** archetype of the machine's look, or the asset type for everything else */
+  arch: string;
+  s: number;
+  cycle: number;
+  makes?: ProductKind;
+  measure?: Measure;
+  reading?: { v: number; ok: boolean; at: number };
+  rejects: number;
+  verdict?: { ok: boolean; at: number };
+  // stores
+  stock: number;
+  cap: number;
+  count: number;
+  // vehicles
+  battery: number;
+  vel: number;
+  task: string;
+  carrier?: string;
+  kind?: 'in' | 'out';
+  agv?: AgvState;
+  truck?: TruckState;
+}
+
+export interface Line {
+  id: string;
+  name: string;
+  note: string;
+  layout: LineLayout;
+  z: number;
+  x0: number;
+  x1: number;
+  len: number;
+  speed: number;
+  gap: number;
+  spawn: number;
+  products: Product[];
+  spawnT: number;
+  pid: number;
+  good: number;
+  scrap: number;
+  doneTimes: number[];
+  conveyor: Asset;
+  infeed: Asset;
+  outfeed: Asset;
+  stations: Asset[];
+}
+
+export interface Alarm {
+  id: number;
+  asset: string;
+  code: string;
+  prio: 1 | 2 | 3;
+  text: string;
+  at: number;
+  active: boolean;
+  acked: boolean;
+  clearedAt?: number;
+}
+
+export interface LogEntry { at: number; asset: string; text: string; kind: 'info' | 'op' | 'alarm'; prio: number }
+
+export type SimEvent =
+  | { type: 'reject'; line: string; asset: string; x: number; z: number; kind: ProductKind }
+  | { type: 'fault'; asset: string };
+
+export type Command = 'start' | 'stop' | 'speed' | 'reset' | 'maint' | 'fault' | 'restock' | 'ship';
+export interface CommandResult { ok: boolean; msg: string }
+
+export interface LineKpi { tp: number; perf: number; avail: number; quality: number; oee: number; good: number; scrap: number }
+export interface Kpis extends Omit<LineKpi, 'oee'> { oee: number; lines: LineKpi[]; power: number; energy: number }

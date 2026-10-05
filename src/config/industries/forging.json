@@ -1,0 +1,1735 @@
+{
+  "$schema": "../schema/industry.json",
+  "id": "forging",
+  "name": "锻造",
+  "unit": "件",
+  "qualityLabel": "一次合格率",
+  "products": {
+    "crankshaft": {
+      "name": "发动机曲轴",
+      "stages": {
+        "billet": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.1,
+                0.75
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#8d96a8",
+              "metal": 0.6
+            }
+          ]
+        },
+        "hot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.1,
+                0.75
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#ff8a3d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "forged": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.8
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                -0.22,
+                0,
+                0.03
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0,
+                0,
+                -0.03
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0.22,
+                0,
+                0.03
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "trimmed": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.8
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                -0.22,
+                0,
+                0.03
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0,
+                0,
+                -0.03
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0.22,
+                0,
+                0.03
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            }
+          ]
+        },
+        "cooled": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.8
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                -0.22,
+                0,
+                0.03
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0,
+                0,
+                -0.03
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0.22,
+                0,
+                0.03
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            }
+          ]
+        },
+        "finished": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.8
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                -0.22,
+                0,
+                0.03
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0,
+                0,
+                -0.03
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.24,
+                0.1
+              ],
+              "at": [
+                0.22,
+                0,
+                0.03
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    },
+    "conrod": {
+      "name": "连杆",
+      "stages": {
+        "billet": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.06,
+                0.45
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#8d96a8",
+              "metal": 0.6
+            }
+          ]
+        },
+        "hot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.06,
+                0.45
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#ff8a3d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "forged": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.09,
+                0.035
+              ],
+              "at": [
+                -0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            },
+            {
+              "shape": "torus",
+              "size": [
+                0.055,
+                0.03
+              ],
+              "at": [
+                0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.3,
+                0.05,
+                0.06
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "trimmed": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.09,
+                0.035
+              ],
+              "at": [
+                -0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            },
+            {
+              "shape": "torus",
+              "size": [
+                0.055,
+                0.03
+              ],
+              "at": [
+                0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.3,
+                0.05,
+                0.06
+              ],
+              "color": "#9a6a5c",
+              "glow": "#6a2410"
+            }
+          ]
+        },
+        "cooled": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.09,
+                0.035
+              ],
+              "at": [
+                -0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            },
+            {
+              "shape": "torus",
+              "size": [
+                0.055,
+                0.03
+              ],
+              "at": [
+                0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.3,
+                0.05,
+                0.06
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            }
+          ]
+        },
+        "finished": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.09,
+                0.035
+              ],
+              "at": [
+                -0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "torus",
+              "size": [
+                0.055,
+                0.03
+              ],
+              "at": [
+                0.2,
+                0,
+                0
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.3,
+                0.05,
+                0.06
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    },
+    "flange": {
+      "name": "风电法兰",
+      "stages": {
+        "billet": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.28,
+                0.32
+              ],
+              "color": "#8d96a8",
+              "metal": 0.6
+            }
+          ]
+        },
+        "hot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.28,
+                0.32
+              ],
+              "color": "#ff8a3d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "preform": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.27,
+                0.11
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "rolled": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.44,
+                0.07
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "treated": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.44,
+                0.07
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            }
+          ]
+        },
+        "finished": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.44,
+                0.07
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    },
+    "bearing-ring": {
+      "name": "轴承套圈",
+      "stages": {
+        "billet": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.08,
+                0.2
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#8d96a8",
+              "metal": 0.6
+            }
+          ]
+        },
+        "hot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.08,
+                0.2
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#ff8a3d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "preform": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.1,
+                0.05
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "rolled": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.16,
+                0.035
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "cooled": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.16,
+                0.035
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            }
+          ]
+        },
+        "finished": {
+          "parts": [
+            {
+              "shape": "torus",
+              "size": [
+                0.16,
+                0.035
+              ],
+              "rotate": [
+                90,
+                0,
+                0
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    },
+    "shaft": {
+      "name": "风电主轴",
+      "stages": {
+        "ingot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.26,
+                1.0
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#6b7388",
+              "metal": 0.4
+            }
+          ]
+        },
+        "hot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.26,
+                1.0
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#ff8a3d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "forged": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.17,
+                1.5
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.24,
+                0.35
+              ],
+              "at": [
+                -0.55,
+                0,
+                0
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "treated": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.17,
+                1.5
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.24,
+                0.35
+              ],
+              "at": [
+                -0.55,
+                0,
+                0
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            }
+          ]
+        },
+        "finished": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.16,
+                1.5
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.23,
+                0.35
+              ],
+              "at": [
+                -0.55,
+                0,
+                0
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    },
+    "block": {
+      "name": "模具模块",
+      "stages": {
+        "ingot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.26,
+                0.9
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#6b7388",
+              "metal": 0.4
+            }
+          ]
+        },
+        "hot": {
+          "parts": [
+            {
+              "shape": "cylinder",
+              "size": [
+                0.26,
+                0.9
+              ],
+              "rotate": [
+                0,
+                0,
+                90
+              ],
+              "color": "#ff8a3d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "forged": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.9,
+                0.42,
+                0.55
+              ],
+              "color": "#d9733d",
+              "glow": "#ff5a14"
+            }
+          ]
+        },
+        "treated": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.9,
+                0.42,
+                0.55
+              ],
+              "color": "#5b6478",
+              "metal": 0.4
+            }
+          ]
+        },
+        "finished": {
+          "parts": [
+            {
+              "shape": "box",
+              "size": [
+                0.88,
+                0.4,
+                0.53
+              ],
+              "color": "#b7c1d8",
+              "metal": 0.6
+            }
+          ]
+        }
+      }
+    }
+  },
+  "machines": {
+    "saw": {
+      "label": "带锯下料机",
+      "code": "SAW",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "none",
+        "parts": [
+          {
+            "shape": "cylinder",
+            "size": [
+              0.38,
+              0.06
+            ],
+            "at": [
+              -0.55,
+              2.2,
+              0.2
+            ],
+            "rotate": [
+              90,
+              0,
+              0
+            ],
+            "color": "metal",
+            "anim": {
+              "type": "spin",
+              "axis": "y",
+              "speed": 12
+            }
+          }
+        ],
+        "size": [
+          2.2,
+          2.0,
+          2.2
+        ]
+      },
+      "cycle": 6,
+      "thermal": {
+        "idle": 4,
+        "run": 14,
+        "warn": 50,
+        "trip": 60
+      },
+      "power": {
+        "idle": 2,
+        "run": 11
+      },
+      "vibration": 2.2,
+      "faults": [
+        "锯带断裂",
+        "冷却液不足",
+        "夹钳压力低"
+      ]
+    },
+    "induction": {
+      "label": "中频感应加热炉",
+      "code": "IH",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#ff6a1a",
+        "stacks": 0,
+        "size": [
+          3.2,
+          1.6,
+          1.6
+        ]
+      },
+      "cycle": 7,
+      "makes": "hot",
+      "thermal": {
+        "idle": 60,
+        "run": 120,
+        "warn": 165,
+        "trip": 180
+      },
+      "power": {
+        "idle": 40,
+        "run": 320
+      },
+      "vibration": 0.4,
+      "faults": [
+        "感应线圈过热",
+        "冷却水流量低",
+        "中频电源跳闸"
+      ],
+      "measure": {
+        "label": "出炉温度",
+        "unit": "°C",
+        "target": 1180,
+        "lo": 1130,
+        "hi": 1230,
+        "sigma": 9,
+        "drift": -1,
+        "digits": 0
+      }
+    },
+    "gas-furnace": {
+      "label": "燃气加热炉",
+      "code": "GF",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#ff6a1a",
+        "stacks": 2,
+        "size": [
+          5.0,
+          2.6,
+          2.6
+        ]
+      },
+      "cycle": 9,
+      "makes": "hot",
+      "thermal": {
+        "idle": 90,
+        "run": 140,
+        "warn": 180,
+        "trip": 195
+      },
+      "power": {
+        "idle": 25,
+        "run": 60
+      },
+      "vibration": 0.5,
+      "faults": [
+        "烧嘴熄火",
+        "炉压异常",
+        "助燃风机故障"
+      ],
+      "measure": {
+        "label": "出炉温度",
+        "unit": "°C",
+        "target": 1200,
+        "lo": 1150,
+        "hi": 1250,
+        "sigma": 8,
+        "drift": -1,
+        "digits": 0
+      }
+    },
+    "roll-forging": {
+      "label": "辊锻机",
+      "code": "RF",
+      "look": {
+        "archetype": "roller",
+        "size": [
+          2.4,
+          2.2,
+          2.6
+        ]
+      },
+      "cycle": 6,
+      "thermal": {
+        "idle": 6,
+        "run": 30,
+        "warn": 62,
+        "trip": 74
+      },
+      "power": {
+        "idle": 8,
+        "run": 90
+      },
+      "vibration": 3.0,
+      "faults": [
+        "辊锻模具磨损",
+        "主电机过载"
+      ]
+    },
+    "die-press": {
+      "label": "热模锻压力机",
+      "code": "HP",
+      "look": {
+        "archetype": "press",
+        "size": [
+          3.2,
+          2.6,
+          5.6
+        ]
+      },
+      "cycle": 8,
+      "makes": "forged",
+      "thermal": {
+        "idle": 10,
+        "run": 40,
+        "warn": 72,
+        "trip": 84
+      },
+      "power": {
+        "idle": 30,
+        "run": 420
+      },
+      "vibration": 6.0,
+      "faults": [
+        "滑块平衡缸压力低",
+        "模具温度过低",
+        "离合器制动异常"
+      ],
+      "measure": {
+        "label": "锻造力",
+        "unit": "MN",
+        "target": 62,
+        "lo": 55,
+        "hi": 70,
+        "sigma": 1.4,
+        "drift": 1,
+        "digits": 1,
+        "speedBias": 4
+      }
+    },
+    "trim-press": {
+      "label": "切边冲孔压力机",
+      "code": "TP",
+      "look": {
+        "archetype": "press",
+        "size": [
+          2.4,
+          2.0,
+          4.4
+        ]
+      },
+      "cycle": 6,
+      "makes": "trimmed",
+      "thermal": {
+        "idle": 8,
+        "run": 30,
+        "warn": 66,
+        "trip": 78
+      },
+      "power": {
+        "idle": 10,
+        "run": 110
+      },
+      "vibration": 4.5,
+      "faults": [
+        "切边模崩刃",
+        "废料卡滞"
+      ]
+    },
+    "pierce-press": {
+      "label": "冲孔压力机",
+      "code": "PP",
+      "look": {
+        "archetype": "press",
+        "size": [
+          2.6,
+          2.2,
+          4.6
+        ]
+      },
+      "cycle": 7,
+      "makes": "preform",
+      "thermal": {
+        "idle": 8,
+        "run": 32,
+        "warn": 66,
+        "trip": 78
+      },
+      "power": {
+        "idle": 12,
+        "run": 160
+      },
+      "vibration": 4.8,
+      "faults": [
+        "冲头断裂",
+        "定位偏差"
+      ]
+    },
+    "ring-roller": {
+      "label": "数控辗环机",
+      "code": "RR",
+      "look": {
+        "archetype": "roller",
+        "size": [
+          2.8,
+          2.6,
+          2.8
+        ]
+      },
+      "cycle": 9,
+      "makes": "rolled",
+      "thermal": {
+        "idle": 8,
+        "run": 36,
+        "warn": 70,
+        "trip": 82
+      },
+      "power": {
+        "idle": 20,
+        "run": 260
+      },
+      "vibration": 3.4,
+      "faults": [
+        "芯辊轴承温度高",
+        "测量辊信号丢失",
+        "液压系统泄漏"
+      ],
+      "measure": {
+        "label": "外径",
+        "unit": "mm",
+        "target": 1200,
+        "lo": 1196,
+        "hi": 1204,
+        "sigma": 0.8,
+        "drift": 1,
+        "digits": 1
+      }
+    },
+    "open-press": {
+      "label": "自由锻液压机",
+      "code": "OP",
+      "look": {
+        "archetype": "press",
+        "size": [
+          4.2,
+          3.2,
+          6.6
+        ]
+      },
+      "cycle": 11,
+      "makes": "forged",
+      "thermal": {
+        "idle": 12,
+        "run": 38,
+        "warn": 70,
+        "trip": 82
+      },
+      "power": {
+        "idle": 60,
+        "run": 900
+      },
+      "vibration": 5.2,
+      "faults": [
+        "主缸压力波动",
+        "活动横梁偏载",
+        "操作机通讯中断"
+      ],
+      "measure": {
+        "label": "锻造比",
+        "unit": "",
+        "target": 4.2,
+        "lo": 3.5,
+        "sigma": 0.12,
+        "drift": -1,
+        "digits": 2
+      }
+    },
+    "manipulator": {
+      "label": "锻造操作机",
+      "code": "MP",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper",
+        "fence": false,
+        "color": "orange"
+      },
+      "cycle": 6,
+      "thermal": {
+        "idle": 4,
+        "run": 22,
+        "warn": 60,
+        "trip": 72
+      },
+      "power": {
+        "idle": 6,
+        "run": 40
+      },
+      "vibration": 1.6,
+      "faults": [
+        "夹钳液压泄漏",
+        "回转编码器故障"
+      ]
+    },
+    "cooling": {
+      "label": "控冷线",
+      "code": "CL",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#9fd8ff",
+        "stacks": 0,
+        "size": [
+          4.5,
+          1.9,
+          2.0
+        ]
+      },
+      "cycle": 6,
+      "makes": "cooled",
+      "thermal": {
+        "idle": 4,
+        "run": 10,
+        "warn": 45,
+        "trip": 55
+      },
+      "power": {
+        "idle": 4,
+        "run": 22
+      },
+      "vibration": 1.2,
+      "faults": [
+        "风机停转",
+        "链条跳齿"
+      ]
+    },
+    "quench-temper": {
+      "label": "调质热处理炉",
+      "code": "QT",
+      "look": {
+        "archetype": "tunnel",
+        "glow": "#ff8a3d",
+        "stacks": 1,
+        "size": [
+          6.0,
+          2.4,
+          2.6
+        ]
+      },
+      "cycle": 10,
+      "makes": "treated",
+      "thermal": {
+        "idle": 80,
+        "run": 130,
+        "warn": 170,
+        "trip": 185
+      },
+      "power": {
+        "idle": 30,
+        "run": 180
+      },
+      "vibration": 0.6,
+      "faults": [
+        "淬火槽温度高",
+        "炉膛气氛异常",
+        "传动辊卡死"
+      ],
+      "measure": {
+        "label": "调质硬度",
+        "unit": "HB",
+        "target": 260,
+        "lo": 240,
+        "hi": 285,
+        "sigma": 5,
+        "drift": -1,
+        "digits": 0
+      }
+    },
+    "shot-blast": {
+      "label": "通过式抛丸机",
+      "code": "SB",
+      "look": {
+        "archetype": "chamber",
+        "glow": "#c9d3e6",
+        "fluid": "#7d8698",
+        "size": [
+          3.2,
+          2.2,
+          2.4
+        ]
+      },
+      "cycle": 6,
+      "makes": "finished",
+      "thermal": {
+        "idle": 4,
+        "run": 16,
+        "warn": 52,
+        "trip": 62
+      },
+      "power": {
+        "idle": 8,
+        "run": 55
+      },
+      "vibration": 3.6,
+      "faults": [
+        "抛丸器叶片磨损",
+        "除尘器压差高"
+      ]
+    },
+    "mpi": {
+      "label": "荧光磁粉探伤",
+      "code": "MT",
+      "look": {
+        "archetype": "gantry",
+        "size": [
+          1.8,
+          1.8,
+          2.4
+        ]
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 2,
+        "run": 6,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.6,
+        "run": 2.4
+      },
+      "vibration": 0.2,
+      "faults": [
+        "紫外灯强度不足",
+        "磁化电流异常"
+      ],
+      "measure": {
+        "label": "缺陷显示长度",
+        "unit": "mm",
+        "target": 0.05,
+        "hi": 0.8,
+        "sigma": 0.12,
+        "drift": 1,
+        "digits": 2,
+        "abs": true
+      }
+    },
+    "ut": {
+      "label": "超声波探伤",
+      "code": "UT",
+      "look": {
+        "archetype": "chamber",
+        "glow": "#9fe8ff",
+        "fluid": "#bfe3ff",
+        "size": [
+          3.4,
+          2.4,
+          2.4
+        ]
+      },
+      "cycle": 8,
+      "thermal": {
+        "idle": 2,
+        "run": 8,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 1,
+        "run": 4
+      },
+      "vibration": 0.3,
+      "faults": [
+        "耦合水压力低",
+        "探头信号衰减"
+      ],
+      "measure": {
+        "label": "缺陷当量",
+        "unit": "mm",
+        "target": 0.3,
+        "hi": 2.0,
+        "sigma": 0.35,
+        "drift": 1,
+        "digits": 2,
+        "abs": true
+      }
+    },
+    "cnc-turn": {
+      "label": "数控车床",
+      "code": "CNC",
+      "look": {
+        "archetype": "enclosure",
+        "tool": "spindle",
+        "size": [
+          2.8,
+          2.4,
+          2.5
+        ]
+      },
+      "cycle": 8,
+      "makes": "finished",
+      "thermal": {
+        "idle": 6,
+        "run": 40,
+        "warn": 72,
+        "trip": 85
+      },
+      "power": {
+        "idle": 3.5,
+        "run": 22
+      },
+      "vibration": 2.4,
+      "faults": [
+        "主轴过载",
+        "刀具寿命到限"
+      ],
+      "measure": {
+        "label": "关键直径",
+        "unit": "mm",
+        "target": 180.0,
+        "lo": 179.95,
+        "hi": 180.05,
+        "sigma": 0.01,
+        "drift": 1,
+        "digits": 3
+      }
+    },
+    "vision": {
+      "label": "尺寸视觉检测",
+      "code": "VI",
+      "look": {
+        "archetype": "gantry"
+      },
+      "cycle": 4,
+      "thermal": {
+        "idle": 2,
+        "run": 8,
+        "warn": 40,
+        "trip": 50
+      },
+      "power": {
+        "idle": 0.4,
+        "run": 1.6
+      },
+      "vibration": 0.2,
+      "faults": [
+        "相机帧同步丢失",
+        "光源亮度衰减"
+      ],
+      "rejectRate": 0.012
+    },
+    "robot": {
+      "label": "上下料机器人",
+      "code": "RB",
+      "look": {
+        "archetype": "robot",
+        "tool": "gripper"
+      },
+      "cycle": 6,
+      "thermal": {
+        "idle": 4,
+        "run": 28,
+        "warn": 64,
+        "trip": 76
+      },
+      "power": {
+        "idle": 0.8,
+        "run": 6.5
+      },
+      "vibration": 1.2,
+      "faults": [
+        "夹爪气压低",
+        "J3 轴扭矩超限"
+      ]
+    },
+    "packer": {
+      "label": "自动装箱机",
+      "code": "PK",
+      "look": {
+        "archetype": "packer"
+      },
+      "cycle": 5,
+      "thermal": {
+        "idle": 4,
+        "run": 20,
+        "warn": 55,
+        "trip": 66
+      },
+      "power": {
+        "idle": 1,
+        "run": 5.5
+      },
+      "vibration": 1.6,
+      "faults": [
+        "纸箱仓空",
+        "封箱胶带断"
+      ]
+    }
+  },
+  "routes": {
+    "hot-die": [
+      "saw",
+      "induction",
+      "roll-forging",
+      "die-press",
+      "trim-press",
+      "cooling",
+      "shot-blast",
+      "mpi",
+      "packer"
+    ],
+    "ring-flange": [
+      "saw",
+      "gas-furnace",
+      "pierce-press",
+      "ring-roller",
+      "quench-temper",
+      "ut",
+      {
+        "machine": "cnc-turn",
+        "name": "数控立车",
+        "cycle": 9,
+        "measure": {
+          "label": "端面平面度",
+          "unit": "mm",
+          "target": 0.05,
+          "hi": 0.15,
+          "sigma": 0.02,
+          "drift": 1,
+          "digits": 3,
+          "abs": true
+        }
+      }
+    ],
+    "ring-bearing": [
+      "saw",
+      "induction",
+      "pierce-press",
+      {
+        "machine": "ring-roller",
+        "name": "轴承环辗环机",
+        "cycle": 6,
+        "measure": {
+          "label": "外径",
+          "unit": "mm",
+          "target": 320,
+          "lo": 319.8,
+          "hi": 320.2,
+          "sigma": 0.05,
+          "drift": 1,
+          "digits": 2
+        }
+      },
+      "cooling",
+      "vision",
+      "packer"
+    ],
+    "open-die": [
+      "gas-furnace",
+      "manipulator",
+      "open-press",
+      "quench-temper",
+      "ut",
+      "cnc-turn"
+    ]
+  }
+}

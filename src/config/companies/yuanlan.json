@@ -1,0 +1,61 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "yuanlan",
+  "name": "远岚汽车",
+  "short": "远岚",
+  "industry": "automotive",
+  "plants": [
+    {
+      "id": "body",
+      "name": "焊装车间",
+      "badge": "焊装",
+      "hall": "车身线",
+      "warehouse": "冲压件库",
+      "finishedGoods": "白车身缓存区",
+      "lines": [
+        {
+          "name": "车身 {n} 线",
+          "note": "主焊线",
+          "product": "suv",
+          "route": "body",
+          "repeat": 2
+        }
+      ]
+    },
+    {
+      "id": "paint",
+      "name": "涂装车间",
+      "badge": "涂装",
+      "hall": "涂装线",
+      "warehouse": "白车身缓存区",
+      "finishedGoods": "彩车身缓存区",
+      "lines": [
+        {
+          "name": "涂装线",
+          "note": "3C2B",
+          "product": "suv",
+          "route": "paint",
+          "input": "biw"
+        }
+      ]
+    },
+    {
+      "id": "final",
+      "name": "总装车间",
+      "badge": "总装",
+      "hall": "总装线",
+      "warehouse": "零部件超市",
+      "finishedGoods": "整车停车场",
+      "lines": [
+        {
+          "name": "总装 {n} 线",
+          "note": "",
+          "product": "suv",
+          "route": "assembly",
+          "repeat": 2,
+          "input": "painted"
+        }
+      ]
+    }
+  ]
+}

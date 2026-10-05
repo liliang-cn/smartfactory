@@ -2,107 +2,13 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SmartFactory 数字孪生</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>SmartFactory</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M16 3 28 9.5v13L16 29 4 22.5v-13z%27 fill=%27%232f5bea%27/%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="app">
-      <div id="stage"></div>
-
-      <header class="topbar">
-        <div class="brand">
-          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f5bea"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8ff5"/><path d="M16 16v13L4 22.5v-13z" fill="#1f3fb0"/></svg>
-          <span>SmartFactory</span>
-        </div>
-        <div class="search">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m13.5 13.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input id="search" type="search" placeholder="搜索设备、AGV、货车、报警" autocomplete="off" aria-label="搜索" />
-          <kbd>/</kbd>
-          <div class="search-results" id="search-results" role="listbox"></div>
-        </div>
-        <button class="site" type="button" id="site-btn">
-          <span class="site-badge">A1</span>
-          <span class="site-text"><b>苏州一厂 总装车间</b><small id="site-sub">2 条产线，4 台 AGV</small></span>
-        </button>
-        <div class="spacer"></div>
-        <div class="seg" id="speed" role="group" aria-label="仿真速度">
-          <button type="button" data-speed="0" title="暂停 (空格)">
-            <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2" width="2.4" height="8" rx="0.8"/><rect x="7.1" y="2" width="2.4" height="8" rx="0.8"/></svg>
-          </button>
-          <button type="button" data-speed="1" class="on">1×</button>
-          <button type="button" data-speed="5">5×</button>
-          <button type="button" data-speed="20">20×</button>
-        </div>
-        <div class="live" id="live"><i></i><span id="live-text">实时</span><time id="clock">06:12</time></div>
-        <button class="bell" type="button" id="bell" aria-label="报警">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a5 5 0 0 0-5 5v3.2L3.6 13.5h12.8L15 10.7V7.5a5 5 0 0 0-5-5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 16a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-          <b id="bell-count" hidden>0</b>
-        </button>
-        <div class="user">
-          <span class="avatar">早</span>
-          <span class="user-text"><b>早班值班长</b><small>生产运营</small></span>
-        </div>
-      </header>
-
-      <section class="kpis" id="kpis"></section>
-
-      <div class="view-switch">
-        <div class="seg" id="modes" role="group" aria-label="视图">
-          <button type="button" data-mode="live" class="on">实况</button>
-          <button type="button" data-mode="heat">温度</button>
-          <button type="button" data-mode="util">稼动率</button>
-        </div>
-        <span class="div"></span>
-        <button type="button" class="toggle" id="labels-btn" aria-pressed="false" title="L">全部标签</button>
-      </div>
-      <div class="legend" id="legend" hidden>
-        <span id="legend-lo">22°C</span><i></i><span id="legend-hi">停机温度</span>
-      </div>
-
-      <div class="mapctl" role="group" aria-label="视角">
-        <button type="button" data-cam="in" title="放大">
-          <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-        </button>
-        <button type="button" data-cam="out" title="缩小">
-          <svg viewBox="0 0 16 16"><path d="M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-        </button>
-        <button type="button" data-cam="left" title="向左旋转">
-          <svg viewBox="0 0 16 16"><path d="M4.5 6.5A5 5 0 1 1 3.4 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2.5 3.5v3.5H6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button type="button" data-cam="right" title="向右旋转">
-          <svg viewBox="0 0 16 16"><path d="M11.5 6.5A5 5 0 1 0 12.6 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.5 3.5v3.5H10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button type="button" data-cam="home" title="全景 (H)">
-          <svg viewBox="0 0 16 16"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H9.5V10h-3v3.5H3a.5.5 0 0 1-.5-.5Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
-
-      <aside class="card inspector" id="inspector" hidden></aside>
-
-      <section class="card tracker" id="tracker"></section>
-
-      <section class="card fleet" id="fleet">
-        <div class="fleet-head">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="2.5" fill="#2f5bea"/><path d="M2.5 8h15" stroke="#fff" stroke-width="1.5"/></svg>
-          <div class="tabs" role="tablist" id="fleet-tabs">
-            <button type="button" role="tab" data-tab="machines" class="on">设备 <b id="t-machines"></b></button>
-            <button type="button" role="tab" data-tab="vehicles">车辆 <b id="t-vehicles"></b></button>
-            <button type="button" role="tab" data-tab="alarms">报警 <b id="t-alarms"></b></button>
-            <button type="button" role="tab" data-tab="log">事件</button>
-          </div>
-          <button type="button" class="link" id="ack-all" hidden>全部确认</button>
-        </div>
-        <div class="fleet-body" id="fleet-body"></div>
-      </section>
-
-      <div class="tip" id="tip" hidden></div>
-      <div class="toasts" id="toasts" aria-live="polite"></div>
-      <div class="loading" id="loading"><span>正在加载车间模型</span></div>
-    </div>
-    <script type="module" src="/src/main.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
