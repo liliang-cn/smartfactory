@@ -1,0 +1,360 @@
+# Semantic model of a SmartFactory history database, for DataIntelligence.
+# Every fact table joins the calendar on its local hour, so metrics from different facts
+# (energy per tonne, MTBF) can be sliced by the same day / week / shift.
+
+entities:
+  - {name: calendar,     table: calendar,      primary_key: hour}
+  - {name: plant,        table: plants,        primary_key: plant_id}
+  - {name: line,         table: lines,         primary_key: line_id}
+  - {name: machine,      table: machines,      primary_key: machine_id}
+  - {name: part,         table: parts,         primary_key: part_id}
+  - {name: line_hour,    table: line_hours,    primary_key: [line_id, hour]}
+  - {name: machine_hour, table: machine_hours, primary_key: [machine_id, hour]}
+  - {name: quality_hour, table: quality_hours, primary_key: [machine_id, hour, feature]}
+  - {name: stock_hour,   table: stock_hours,   primary_key: [plant_id, item, hour]}
+  - {name: downtime,     table: downtime,      primary_key: id}
+  - {name: tool_change,  table: tool_changes,  primary_key: id}
+  - {name: defect,       table: defects,       primary_key: id}
+  - {name: work_order,   table: work_orders,   primary_key: order_no}
+
+joins:
+  - {from: line,         to: plant,    from_key: plant_id,   to_key: plant_id,   cardinality: many_to_one}
+  - {from: line,         to: part,     from_key: part_id,    to_key: part_id,    cardinality: many_to_one}
+  - {from: machine,      to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: line_hour,    to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: line_hour,    to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: machine_hour, to: machine,  from_key: machine_id, to_key: machine_id, cardinality: many_to_one}
+  - {from: machine_hour, to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: quality_hour, to: machine,  from_key: machine_id, to_key: machine_id, cardinality: many_to_one}
+  - {from: quality_hour, to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: stock_hour,   to: plant,    from_key: plant_id,   to_key: plant_id,   cardinality: many_to_one}
+  - {from: stock_hour,   to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: downtime,     to: machine,  from_key: machine_id, to_key: machine_id, cardinality: many_to_one}
+  - {from: downtime,     to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: tool_change,  to: machine,  from_key: machine_id, to_key: machine_id, cardinality: many_to_one}
+  - {from: tool_change,  to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: defect,       to: machine,  from_key: machine_id, to_key: machine_id, cardinality: many_to_one}
+  - {from: defect,       to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: work_order,   to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: work_order,   to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+
+dimensions:
+  - {name: time,          entity: calendar,    column: hour,        type: time,        synonyms: [时间, 日期, 每天, 每周, 每月, 小时]}
+  - {name: shift,         entity: calendar,    column: shift,       type: categorical, synonyms: [班次, 早班, 中班, 夜班]}
+  - {name: plant_name,    entity: plant,       column: name,        type: categorical, synonyms: [工厂, 厂, 分厂]}
+  - {name: line_name,     entity: line,        column: name,        type: categorical, synonyms: [产线, 生产线, 线]}
+  - {name: process,       entity: line,        column: process,     type: categorical, synonyms: [工艺, 锻造工艺]}
+  - {name: part_name,     entity: part,        column: name,        type: categorical, synonyms: [产品, 零件, 锻件]}
+  - {name: part_no,       entity: part,        column: part_no,     type: categorical, synonyms: [图号, 零件号]}
+  - {name: material,      entity: part,        column: material,    type: categorical, synonyms: [材质, 钢号, 材料牌号]}
+  - {name: customer,      entity: part,        column: customer,    type: categorical, synonyms: [客户, 主机厂]}
+  - {name: machine,       entity: machine,     column: label,       type: categorical, synonyms: [设备, 机台, 设备编号]}
+  - {name: machine_name,  entity: machine,     column: name,        type: categorical, synonyms: [工序, 工位]}
+  - {name: machine_kind,  entity: machine,     column: kind,        type: categorical, synonyms: [设备类型, 设备种类]}
+  - {name: feature,       entity: quality_hour, column: feature,    type: categorical, synonyms: [检测项目, 质量特性, 测量项]}
+  - {name: spare_item,    entity: stock_hour,  column: label,       type: categorical, synonyms: [备件, 备品, 备用模具]}
+  - {name: downtime_category, entity: downtime, column: category,   type: categorical, synonyms: [停机类别, 停机类型, 损失类别]}
+  - {name: downtime_reason,   entity: downtime, column: reason,     type: categorical, synonyms: [停机原因, 故障原因, 故障现象]}
+  - {name: tool,          entity: tool_change, column: tool,        type: categorical, synonyms: [工装, 模具, 模具类型]}
+  - {name: change_trigger, entity: tool_change, column: trigger,    type: categorical, synonyms: [换模原因, 换模方式]}
+  - {name: defect_type,   entity: defect,      column: defect_type, type: categorical, synonyms: [缺陷类型, 不良类型, 不良项]}
+  - {name: disposition,   entity: defect,      column: disposition, type: categorical, synonyms: [处置, 处置方式, 报废还是返修]}
+  - {name: order_status,  entity: work_order,  column: status,      type: categorical, synonyms: [工单状态]}
+
+metrics:
+  # ---- output and quality (line grain) ----
+  - name: produced_units
+    description: "完成加工的件数（合格、返修与报废都算）。"
+    synonyms: [产量, 产出, 生产件数, 总产量]
+    entity: line_hour
+    agg: sum
+    expr: "produced"
+  - name: good_units
+    description: "一次交检合格的件数（未经返修）。"
+    synonyms: [合格品, 合格数, 良品数]
+    entity: line_hour
+    agg: sum
+    expr: "good"
+  - name: scrap_units
+    description: "报废件数。"
+    synonyms: [废品数, 报废数, 报废件数]
+    entity: line_hour
+    agg: sum
+    expr: "scrap"
+  - name: rework_units
+    description: "返修件数（例如调质硬度不合重新热处理）。"
+    synonyms: [返修数, 返工数]
+    entity: line_hour
+    agg: sum
+    expr: "rework"
+  - name: first_pass_yield
+    description: "一次合格率 = 一次合格件数 / 完成件数。"
+    synonyms: [一次合格率, 合格率, 良率, FPY]
+    formula: "1.0 * good_units / nullif(produced_units, 0)"
+    additivity: non_additive
+  - name: scrap_rate
+    description: "废品率 = 报废件数 / 完成件数。"
+    synonyms: [废品率, 报废率]
+    formula: "1.0 * scrap_units / nullif(produced_units, 0)"
+    additivity: non_additive
+  - name: good_tonnes
+    description: "合格锻件重量（吨）。"
+    synonyms: [产量吨位, 锻件吨位, 吨位, 合格吨位]
+    entity: line_hour
+    agg: sum
+    expr: "good_kg / 1000.0"
+  - name: input_tonnes
+    description: "投料重量（吨，坯料或钢锭）。"
+    synonyms: [投料吨位, 投料量]
+    entity: line_hour
+    agg: sum
+    expr: "input_kg / 1000.0"
+  - name: material_yield
+    description: "材料利用率 = 合格锻件重量 / 投料重量。"
+    synonyms: [材料利用率, 钢材利用率, 成材率]
+    formula: "good_tonnes / nullif(input_tonnes, 0)"
+    additivity: non_additive
+
+  # ---- OEE (line grain, bottleneck machine) ----
+  - name: planned_hours
+    description: "计划生产时间（小时，连续生产按日历时间）。"
+    synonyms: [计划时间, 负荷时间]
+    entity: line_hour
+    agg: sum
+    expr: "planned_s / 3600.0"
+  - name: line_run_hours
+    description: "瓶颈工序的实际加工时间（小时）。"
+    synonyms: [开动时间, 运行时间]
+    entity: line_hour
+    agg: sum
+    expr: "run_s / 3600.0"
+  - name: ideal_output_hours
+    description: "完成件数按理论节拍折算的时间（小时）。"
+    entity: line_hour
+    agg: sum
+    expr: "produced * ideal_cycle_s / 3600.0"
+  - name: good_ideal_hours
+    description: "合格件数按理论节拍折算的时间（小时）。"
+    entity: line_hour
+    agg: sum
+    expr: "good * ideal_cycle_s / 3600.0"
+  - name: availability
+    description: "时间开动率 = 瓶颈工序加工时间 / 计划时间。"
+    synonyms: [时间开动率, 可用率, 设备可用率]
+    formula: "line_run_hours / nullif(planned_hours, 0)"
+    additivity: non_additive
+  - name: performance
+    description: "性能开动率 = 理论节拍折算时间 / 加工时间。"
+    synonyms: [性能开动率, 速度开动率]
+    formula: "ideal_output_hours / nullif(line_run_hours, 0)"
+    additivity: non_additive
+  - name: oee
+    description: "设备综合效率 OEE = 合格件按理论节拍折算时间 / 计划时间（= 时间开动率 × 性能开动率 × 一次合格率）。"
+    synonyms: [OEE, 设备综合效率, 综合效率]
+    formula: "good_ideal_hours / nullif(planned_hours, 0)"
+    additivity: non_additive
+
+  # ---- machine time (machine grain) ----
+  - name: machine_run_hours
+    description: "设备加工时间（小时）。"
+    synonyms: [设备运行时间, 加工时间]
+    entity: machine_hour
+    agg: sum
+    expr: "run_s / 3600.0"
+  - name: starved_hours
+    description: "设备空等时间（小时）：在线但没有工件（待料）。"
+    synonyms: [待料时间, 空等时间]
+    entity: machine_hour
+    agg: sum
+    expr: "idle_s / 3600.0"
+  - name: blocked_hours
+    description: "设备被堵时间（小时）：下游不接料或等备件。"
+    synonyms: [堵料时间, 阻塞时间]
+    entity: machine_hour
+    agg: sum
+    expr: "blocked_s / 3600.0"
+  - name: fault_hours
+    description: "设备故障与短停时间（小时）。"
+    synonyms: [故障时间, 故障停机时间]
+    entity: machine_hour
+    agg: sum
+    expr: "fault_s / 3600.0"
+  - name: changeover_hours
+    description: "换模换型时间（小时，含模具预热与首件）。"
+    synonyms: [换模时间, 换型时间]
+    entity: machine_hour
+    agg: sum
+    expr: "changeover_s / 3600.0"
+  - name: maintenance_hours
+    description: "保养维护时间（小时）。"
+    synonyms: [保养时间, 维护时间, 计划维护时间]
+    entity: machine_hour
+    agg: sum
+    expr: "maint_s / 3600.0"
+  - name: strokes
+    description: "设备加工次数（锻压机即打击/锻造次数）。"
+    synonyms: [加工次数, 打击次数, 锻造次数]
+    entity: machine_hour
+    agg: sum
+    expr: "cycles"
+
+  # ---- energy ----
+  - name: energy_kwh
+    description: "耗电量（kWh）。"
+    synonyms: [耗电量, 用电量, 电耗]
+    entity: machine_hour
+    agg: sum
+    expr: "energy_kwh"
+  - name: gas_nm3
+    description: "天然气消耗（Nm³，加热炉与热处理炉）。"
+    synonyms: [天然气, 燃气消耗, 气耗]
+    entity: machine_hour
+    agg: sum
+    expr: "fuel"
+  - name: kwh_per_tonne
+    description: "吨锻件电耗 = 耗电量 / 合格锻件吨位。"
+    synonyms: [吨锻件电耗, 单位电耗, 吨耗电]
+    formula: "energy_kwh / nullif(good_tonnes, 0)"
+    additivity: non_additive
+  - name: gas_per_tonne
+    description: "吨锻件气耗 = 天然气 / 合格锻件吨位。"
+    synonyms: [吨锻件气耗, 单位气耗]
+    formula: "gas_nm3 / nullif(good_tonnes, 0)"
+    additivity: non_additive
+
+  # ---- downtime and reliability ----
+  - name: downtime_minutes
+    description: "停机时长（分钟），按停机类别与原因细分。"
+    synonyms: [停机时长, 停机时间, 停机分钟]
+    entity: downtime
+    agg: sum
+    expr: "minutes"
+  - name: downtime_events
+    description: "停机次数。"
+    synonyms: [停机次数]
+    entity: downtime
+    agg: count
+    expr: "id"
+  - name: breakdowns
+    description: "设备故障次数（不含短停）。"
+    synonyms: [故障次数, 故障数]
+    entity: downtime
+    agg: sum
+    expr: "CASE WHEN category = '设备故障' THEN 1 ELSE 0 END"
+  - name: breakdown_minutes
+    description: "设备故障停机时长（分钟，不含短停）。"
+    synonyms: [故障时长, 故障停机时长]
+    entity: downtime
+    agg: sum
+    expr: "CASE WHEN category = '设备故障' THEN minutes ELSE 0 END"
+  - name: short_stops
+    description: "短停机次数（粘模、卡料等操作工自行处理的停机）。"
+    synonyms: [短停次数, 小停机次数]
+    entity: downtime
+    agg: sum
+    expr: "CASE WHEN category = '短停机' THEN 1 ELSE 0 END"
+  - name: mttr_minutes
+    description: "平均修复时间 MTTR = 故障停机时长 / 故障次数（分钟）。"
+    synonyms: [MTTR, 平均修复时间, 平均维修时间]
+    formula: "breakdown_minutes / nullif(breakdowns, 0)"
+    additivity: non_additive
+  - name: mtbf_hours
+    description: "平均故障间隔 MTBF = 设备加工时间 / 故障次数（小时）。"
+    synonyms: [MTBF, 平均故障间隔, 平均无故障时间]
+    formula: "machine_run_hours / nullif(breakdowns, 0)"
+    additivity: non_additive
+
+  # ---- tooling (dies, rolls, punches, inserts) ----
+  - name: tool_changes
+    description: "换模（换工装）次数。"
+    synonyms: [换模次数, 换工装次数]
+    entity: tool_change
+    agg: count
+    expr: "id"
+  - name: avg_tool_hits
+    description: "换下时的平均使用次数（模具实际寿命）。"
+    synonyms: [模具平均寿命, 平均模具寿命, 换模时打击次数, 模具寿命]
+    entity: tool_change
+    agg: avg
+    expr: "hits"
+  - name: avg_tool_life_used
+    description: "换下时已用寿命的平均比例。"
+    synonyms: [寿命使用率, 模具寿命利用率]
+    entity: tool_change
+    agg: avg
+    expr: "hits::numeric / nullif(life, 0)"
+  - name: avg_changeover_minutes
+    description: "平均每次换模时间（分钟，含预热与首件）。"
+    synonyms: [平均换模时间]
+    entity: tool_change
+    agg: avg
+    expr: "minutes"
+
+  # ---- defects and SPC ----
+  - name: defects
+    description: "缺陷件数（报废与返修），按缺陷类型细分。"
+    synonyms: [缺陷数, 不良数, 不良件数]
+    entity: defect
+    agg: count
+    expr: "id"
+  - name: measured_units
+    description: "检测件数。"
+    synonyms: [检测数, 测量件数]
+    entity: quality_hour
+    agg: sum
+    expr: "n"
+  - name: out_of_spec_units
+    description: "检测超差件数。"
+    synonyms: [超差数, 超差件数]
+    entity: quality_hour
+    agg: sum
+    expr: "out_of_spec"
+  - name: out_of_spec_rate
+    description: "检测超差率。"
+    synonyms: [超差率]
+    formula: "1.0 * out_of_spec_units / nullif(measured_units, 0)"
+    additivity: non_additive
+  - name: measure_sum
+    description: "检测值之和（用于求均值）。"
+    entity: quality_hour
+    agg: sum
+    expr: "mean * n"
+  - name: measure_mean
+    description: "检测值均值（按检测项目分组看才有意义）。"
+    synonyms: [平均值, 检测均值, 测量均值]
+    formula: "measure_sum / nullif(measured_units, 0)"
+    additivity: non_additive
+
+  # ---- spares ----
+  - name: spare_min_stock
+    description: "备件最低可用数量。"
+    synonyms: [备件最低库存, 最低库存]
+    entity: stock_hour
+    agg: min
+    expr: "min_avail"
+    additivity: non_additive
+  - name: spare_stockout_hours
+    description: "备件可用数量为零的小时数。"
+    synonyms: [缺备件小时数, 断供小时, 备件断供]
+    entity: stock_hour
+    agg: sum
+    expr: "CASE WHEN min_avail = 0 THEN 1 ELSE 0 END"
+
+  # ---- work orders and delivery ----
+  - name: orders_completed
+    description: "完工工单数。"
+    synonyms: [完工工单, 完成工单数]
+    entity: work_order
+    agg: sum
+    expr: "completed"
+  - name: orders_on_time
+    description: "按期完工的工单数。"
+    synonyms: [按期完工工单]
+    entity: work_order
+    agg: sum
+    expr: "on_time"
+  - name: on_time_rate
+    description: "工单准时完工率 = 按期完工 / 完工。"
+    synonyms: [准时完工率, 准时交付率, 交付达成率, OTD]
+    formula: "1.0 * orders_on_time / nullif(orders_completed, 0)"
+    additivity: non_additive

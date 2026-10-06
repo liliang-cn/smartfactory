@@ -2,6 +2,7 @@
 // The 3D view and UI only read this state and send commands through `command()`,
 // so swapping it for a live MQTT/OPC UA feed means implementing the same surface.
 
+import type { History } from './history';
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
@@ -66,6 +67,8 @@ export interface SavedPlant {
   done: number[][];
   meas: [string, number[]][];
   repair: [string, number][];
+  /** tools out for reconditioning: [inventory key, elapsed when back] */
+  recond?: [string, number, number?][];
 }
 
 /** A plant's replicated state, as sent from the server to browsers. */
@@ -77,6 +80,7 @@ export interface PlantState {
   alarmSeq: number;
   assets: (Pick<Asset, 'id' | 'enabled' | 'speed' | 'fault' | 'maint' | 'state' | 'temp' | 'vib' | 'power' | 'health' | 'util' | 'avail' | 'cycles' | 'progress' | 'rejects' | 'stock' | 'count' | 'battery' | 'vel' | 'task'> & {
     toolUsed?: number;
+    toolLimit?: number;
     changing?: number;
     busy: string | null;
     reading: Asset['reading'] | null;
@@ -121,6 +125,14 @@ export class PlantSim {
   inventory: InventoryState[] = [];
   /** false until a follower has received its first state from the server */
   synced = true;
+  /** hour-by-hour record for the history database (server only) */
+  history?: History;
+  /** nobody will look at sparklines (history backfill, what-if runs): skip keeping them */
+  headless = false;
+  /** `${asset} ${code}` of every active alarm, so clearing a condition that is not raised is cheap */
+  private raised = new Set<string>();
+  /** reconditioned tools coming back to stock: [inventory key, elapsed when back] */
+  private repairs: [string, number, number?][] = [];
 
   constructor(layout: PlantLayout) {
     this.layout = layout;
@@ -229,10 +241,37 @@ export class PlantSim {
     this.powerKW = p;
     this.energyKWh += (p * dt) / 3600;
 
+    if (this.repairs.length) this.stepRepairs();
+    this.history?.step(dt);
+
     this.histAcc += dt;
     if (this.histAcc >= 1) {
       this.histAcc -= 1;
-      for (const a of this.assets.values()) this.pushHist(a);
+      if (!this.headless) for (const a of this.assets.values()) this.pushHist(a);
+      this.checkInventory();
+    }
+  }
+
+  /**
+   * Steps only some lines, with logistics assumed to keep up (infeed full, outfeed collected) and
+   * nothing else of the plant moving: a what-if run of a line costs a fraction of the plant.
+   */
+  stepLines(ids: Set<string>, dt: number) {
+    this.clock += dt;
+    this.elapsed += dt;
+    for (const line of this.lines) {
+      if (!ids.has(line.id)) continue;
+      line.infeed.stock = line.infeed.cap;
+      line.outfeed.count = 0;
+      this.stepLine(line, dt);
+      for (const a of line.stations) this.stepTelemetry(a, dt);
+      this.stepTelemetry(line.conveyor, dt);
+    }
+    if (this.repairs.length) this.stepRepairs();
+    this.history?.step(dt);
+    this.histAcc += dt;
+    if (this.histAcc >= 1) {
+      this.histAcc -= 1;
       this.checkInventory();
     }
   }
@@ -249,7 +288,8 @@ export class PlantSim {
     const gauss = Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
     // a worn tool pushes readings towards the limit over the last 40 % of its life
     const toolWear = a.tool ? Math.max(0, (a.tool.used / a.tool.life - 0.6) / 0.4) : 0;
-    let dev = gauss * m.sigma * (1 + wear * 2.5) + m.drift * wear * m.sigma * 4 + m.drift * toolWear * toolWear * m.sigma * (a.tool?.drift ?? 0) + (a.speed - 1) * (m.speedBias ?? 0);
+    const mw = m.wear ?? { shift: 4, spread: 2.5 };
+    let dev = gauss * m.sigma * (1 + wear * mw.spread) + m.drift * wear * m.sigma * mw.shift + m.drift * toolWear * toolWear * m.sigma * (a.tool?.drift ?? 0) + (a.speed - 1) * (m.speedBias ?? 0);
     if (m.abs) dev = Math.abs(dev);
     return this.record(a, m.target + dev, quiet);
   }
@@ -268,6 +308,7 @@ export class PlantSim {
     a.reading = { v, ok, at: this.elapsed };
     if (quiet) return ok;
     if (!ok) a.rejects++;
+    this.history?.measure(a, v, ok);
 
     if (h.length >= 5) {
       const mean = h.slice(-5).reduce((x, y) => x + y, 0) / 5;
@@ -321,6 +362,7 @@ export class PlantSim {
       P.push({ id: `${line.id}-${++line.pid}`, s: 0, done: -1, proc: -1, t: 0, kind: line.layout.input, stall: 0 });
       line.infeed.stock--;
       line.spawnT = line.spawn;
+      this.history?.released(line);
     }
 
     // Front-most part first so each part can see the one ahead of it.
@@ -357,8 +399,18 @@ export class PlantSim {
         a.busy = null;
         a.progress = 0;
         a.cycles++;
+        this.history?.cycle(a);
         if (a.makes) p.kind = a.makes;
         if (a.measure && !this.measure(a)) {
+          const m = a.measure;
+          const v = a.reading?.v ?? null;
+          const low = v !== null && m.lo !== undefined && v < m.lo;
+          const type = (low ? m.defects?.lo : m.defects?.hi) ?? `${m.label}超差`;
+          this.history?.defect(line, a, type, m.label, v, m.rework);
+          if (m.rework) {
+            p.rework = true;
+            continue;
+          }
           this.reject(line, a, i--);
           continue;
         }
@@ -368,7 +420,10 @@ export class PlantSim {
           const h = upstream.reduce((sum, u) => sum + u.health, 0) / Math.max(1, upstream.length);
           const ok = Math.random() > rejectRate + (1 - h) * 0.1;
           a.verdict = { ok, at: this.elapsed };
-          if (!ok) this.reject(line, a, i--);
+          if (!ok) {
+            this.history?.defect(line, a, a.machine?.defect ?? '外观不良', '外观', null, false);
+            this.reject(line, a, i--);
+          }
         }
         continue;
       }
@@ -393,6 +448,7 @@ export class PlantSim {
         line.outfeed.count++;
         line.good++;
         line.doneTimes.push(this.elapsed);
+        this.history?.output(line, p);
         this.giveInv(p);
         P.splice(i--, 1);
       }
@@ -570,6 +626,15 @@ export class PlantSim {
     const diff = Math.atan2(Math.sin(want - t.heading), Math.cos(want - t.heading));
     t.heading += clamp(diff, -1, 1) * Math.min(1, dt * 2.2);
     const v = Math.min(9 * a.speed, dist * 0.9 + 1.5) * (Math.abs(diff) > 0.6 ? 0.4 : 1);
+    // Within one step of the waypoint: arrive. With coarse steps (an unwatched plant, a backfill)
+    // the heading lag would otherwise keep the truck circling a waypoint it never quite reaches.
+    if (dist <= v * dt) {
+      t.x = wp.x;
+      t.z = wp.z;
+      t.heading = want;
+      a.vel = v;
+      return;
+    }
     const d = Math.min(dist, v * dt);
     t.x += Math.cos(t.heading) * d;
     t.z += Math.sin(t.heading) * d;
@@ -678,9 +743,12 @@ export class PlantSim {
     a.util += ((running ? 1 : 0) - a.util) * ema(dt, 300);
     a.avail += ((on ? 1 : 0) - a.avail) * ema(dt, 600);
 
+    const up = a.machine?.upkeep;
     if (running) {
       const over = Math.max(0, a.temp - s.warn) / 10;
-      a.health = Math.max(0.05, a.health - dt * 5e-5 * a.speed * a.speed * (1 + over));
+      // health falls from 100 % to the 45 % that calls for maintenance over `pm` running hours
+      const wear = up ? 0.55 / (up.pm * 3600) : 5e-5;
+      a.health = Math.max(0.05, a.health - dt * wear * a.speed * a.speed * (1 + over));
     }
 
     if (on && a.temp > s.warn) this.raise(a, 'temp', 2, `温度高 ${a.temp.toFixed(0)}°C，报警值 ${s.warn}°C`);
@@ -691,8 +759,13 @@ export class PlantSim {
     else if (a.health > 0.4) this.clear(a, 'health');
 
     if (running && !a.fault && !lv) {
-      const rate = (1 / 12000) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
+      const rate = (1 / ((up?.mtbf ?? 3.33) * 3600)) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
       if (Math.random() < rate * dt) this.trip(a, pick(s.faults));
+      else if (up?.stops && Math.random() < (up.stops.perHour / 3600) * dt) {
+        // a short stop: the operator clears it, no crew needed
+        this.trip(a, `短停：${pick(up.stops.reasons)}`);
+        a.repairAt = this.elapsed + rand(up.stops.secs[0], up.stops.secs[1]);
+      }
     }
   }
 
@@ -738,7 +811,7 @@ export class PlantSim {
   private refill(truck: Asset) {
     const got: string[] = [];
     for (const it of this.inventory) {
-      if (it.kind !== 'consume' || it.avail >= it.cap) continue;
+      if (it.kind !== 'consume' || it.avail >= it.cap || it.lead) continue;
       const n = Math.min(it.refill, it.cap - it.avail);
       it.avail += n;
       got.push(`${it.label} +${n} ${it.unit}`);
@@ -748,6 +821,11 @@ export class PlantSim {
 
   private checkInventory() {
     for (const it of this.inventory) {
+      // bought to order: at the reorder point, `refill` more arrive after the lead time
+      if (it.lead && it.avail <= Math.floor(it.cap * it.low) && !this.repairs.some(([k, , n]) => k === it.key && n)) {
+        this.repairs.push([it.key, this.elapsed + it.lead * 3600, it.refill]);
+        this.note(this.wh, `${it.label}低于订货点，采购 ${it.refill} ${it.unit}，约 ${Math.round(it.lead / 24)} 天到货`, 'info');
+      }
       const code = `inv-${it.key}`;
       if (it.avail <= Math.floor(it.cap * it.low)) this.raise(this.wh, code, 3, `${it.label}可用只剩 ${it.avail} ${it.unit}（共 ${it.cap}）`);
       else this.clear(this.wh, code);
@@ -762,6 +840,8 @@ export class PlantSim {
       a.changing -= dt;
       if (a.changing <= 0) {
         a.changing = 0;
+        // the removed tool goes for reconditioning (a die is re-sunk) and comes back as a spare
+        if (t.spare && t.repair && Math.random() < t.repair.rate) this.repairs.push([t.spare, this.elapsed + t.repair.hours * 3600]);
         t.used = 0;
         a.health = Math.min(1, a.health + 0.05);
         this.clear(a, 'tool');
@@ -772,9 +852,28 @@ export class PlantSim {
     // equipment that reports its tool counter decides when to change it
     if (this.follower || liveFields(a)?.toolUsed !== undefined) return;
     const share = t.used / t.life;
-    if (share >= 0.9) this.raise(a, 'tool', 3, `${t.label}寿命 ${Math.round(share * 100)}%，准备更换（${t.used}/${t.life} 次）`);
-    // a worn-out tool is changed as soon as the machine is free, with a spare from stock
-    if (t.used >= t.life && !a.busy && !a.fault) this.startChange(a);
+    const limit = t.limit ?? 1;
+    if (share >= limit * 0.9) this.raise(a, 'tool', 3, `${t.label}寿命 ${Math.round(share * 100)}%，准备更换（${t.used}/${t.life} 次）`);
+    // at the planned change point the tool is changed as soon as the machine is free, with a spare
+    // from stock; without a spare it keeps going until the end of its life
+    if (share >= limit && !a.busy && !a.fault && (t.used >= t.life || !this.lacksSpare(t))) this.startChange(a);
+  }
+
+  private lacksSpare(t: NonNullable<Asset['tool']>) {
+    const it = t.spare ? this.inv(t.spare) : undefined;
+    return !!it && it.avail < 1;
+  }
+
+  private stepRepairs() {
+    this.repairs = this.repairs.filter(([key, at, bought]) => {
+      if (this.elapsed < at) return true;
+      const it = this.inv(key);
+      if (it) {
+        it.avail = Math.min(it.cap, it.avail + (bought ?? 1));
+        if (bought) this.note(this.wh, `${it.label}采购到货 ${bought} ${it.unit}`, 'info');
+      }
+      return false;
+    });
   }
 
   private startChange(a: Asset): boolean {
@@ -810,20 +909,23 @@ export class PlantSim {
     // equipment that reports its own state has its own crew
     if (this.follower || !a.spec?.faults || liveFields(a)) return;
     if (a.fault) {
-      a.repairAt ??= this.elapsed + rand(60, 180);
+      const rt = a.machine?.upkeep.repair ?? [1, 3];
+      a.repairAt ??= this.elapsed + rand(rt[0] * 60, rt[1] * 60);
       const hot = a.spec.trip !== undefined && a.temp > a.spec.trip - 4;
       if (this.elapsed >= a.repairAt && !hot) {
+        const short = a.fault.text.startsWith('短停：');
         a.fault = null;
         a.repairAt = undefined;
-        a.health = Math.min(1, a.health + 0.15);
+        if (!short) a.health = Math.min(1, a.health + 0.15);
         this.clear(a, 'fault');
-        this.note(a, '维修班组到场处理，故障已排除', 'op');
+        this.note(a, short ? '操作工处理完毕，恢复生产' : '维修班组到场处理，故障已排除', 'op');
       }
       return;
     }
     a.repairAt = undefined;
     if (a.health < 0.45 && a.maint <= 0 && a.type === 'station') {
-      a.maint = rand(40, 90);
+      const pt = a.machine?.upkeep.pmTime ?? [0.67, 1.5];
+      a.maint = rand(pt[0] * 60, pt[1] * 60);
       this.note(a, `健康度 ${(a.health * 100).toFixed(0)}%，班组安排计划维护`, 'op');
     }
   }
@@ -839,7 +941,9 @@ export class PlantSim {
 
   private raise(a: Asset, code: string, prio: Alarm['prio'], text: string) {
     if (this.follower) return;
-    if (this.alarms.some((x) => x.asset === a.id && x.code === code && x.active)) return;
+    const key = `${a.id} ${code}`;
+    if (this.raised.has(key)) return;
+    this.raised.add(key);
     const al: Alarm = { id: this.alarmSeq++, asset: a.id, code, prio, text, at: this.clock, active: true, acked: false };
     this.alarms.unshift(al);
     this.note(a, text, 'alarm', prio);
@@ -852,6 +956,7 @@ export class PlantSim {
 
   private clear(a: Asset, code: string) {
     if (this.follower) return;
+    if (!this.raised.delete(`${a.id} ${code}`)) return;
     for (const al of this.alarms) {
       if (al.asset === a.id && al.code === code && al.active) {
         al.active = false;
@@ -931,6 +1036,13 @@ export class PlantSim {
         if (a.changing > 0) return { ok: false, msg: `${id} 正在更换${a.tool.label}` };
         if (a.busy) return { ok: false, msg: `${id} 正在加工，等这一件完成再换` };
         return this.startChange(a) ? { ok: true, msg: `${id} 开始更换${a.tool.label}` } : { ok: false, msg: `${id} 缺备件，无法更换${a.tool.label}` };
+      case 'toollimit': {
+        if (!a.tool) return { ok: false, msg: `${id} 没有工装` };
+        const v = clamp(arg ?? 1, 0.3, 1);
+        a.tool.limit = v;
+        this.note(a, `${a.tool.label}计划更换点设为寿命的 ${Math.round(v * 100)}%（${Math.round(a.tool.life * v)} 次）`, 'op');
+        return { ok: true, msg: `${id} ${a.tool.label}在 ${Math.round(v * 100)}% 寿命时更换` };
+      }
       case 'restock':
         a.stock = Math.min(a.cap, a.stock + 400);
         this.note(a, '原料入库 400 件', 'op');
@@ -1138,7 +1250,7 @@ export class PlantSim {
         temp: p3(a.temp), vib: p3(a.vib), power: p3(a.power), health: p3(a.health), util: p3(a.util), avail: p3(a.avail),
         cycles: a.cycles, progress: p3(a.progress), busy: a.busy?.id ?? null, reading: a.reading ?? null, rejects: a.rejects,
         verdict: a.verdict ?? null, stock: a.stock, count: a.count, battery: p3(a.battery), vel: p3(a.vel), task: a.task, live: a.live ?? null,
-        toolUsed: a.tool?.used, changing: a.changing ? p3(a.changing) : undefined,
+        toolUsed: a.tool?.used, toolLimit: a.tool?.limit, changing: a.changing ? p3(a.changing) : undefined,
       })),
       lines: this.lines.map((l) => ({
         id: l.id, spawnT: p3(l.spawnT), pid: l.pid, good: l.good, scrap: l.scrap, tp: l.doneTimes.length,
@@ -1179,6 +1291,7 @@ export class PlantSim {
       done: this.lines.map((l) => l.doneTimes.map(r)),
       meas: assets.filter((a) => a.hist.meas.length).map((a) => [a.id, a.hist.meas.map(r)]),
       repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
+      recond: this.repairs,
     };
   }
 
@@ -1195,6 +1308,7 @@ export class PlantSim {
       const a = this.assets.get(id);
       if (a) a.repairAt = t;
     }
+    this.repairs = saved.recond ?? [];
     return true;
   }
 
@@ -1220,6 +1334,7 @@ export class PlantSim {
         live: x.live ?? undefined, busy: null, changing: x.changing ?? 0,
       });
       if (a.tool && x.toolUsed !== undefined) a.tool.used = x.toolUsed;
+      if (a.tool && x.toolLimit !== undefined) a.tool.limit = x.toolLimit;
       if (x.busy) busy.push([a, x.busy]);
     }
     const byId = new Map<string, Product>();
@@ -1248,6 +1363,7 @@ export class PlantSim {
       if (t) Object.assign(t, { idx: x.idx, x: x.x, z: x.z, heading: x.heading, phase: x.phase, wait: x.wait, dock: x.dock, load: x.load });
     }
     this.alarms = s.alarms;
+    this.raised = new Set(s.alarms.filter((x) => x.active).map((x) => `${x.asset} ${x.code}`));
     this.log = s.log;
     for (const [k, avail, cap] of s.inventory ?? []) {
       const it = this.inv(k);

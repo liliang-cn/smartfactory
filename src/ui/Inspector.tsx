@@ -78,7 +78,7 @@ function Tiles({ a }: { a: Asset }) {
             <Tile label={`${t.label}寿命`} wide bar={a.changing > 0 ? 0 : 1 - used} tone={used >= 0.9 ? 'bad' : used >= 0.75 ? 'warn' : 'ok'}>
               {a.changing > 0
                 ? <>更换中<Unit>约 {Math.ceil(a.changing / 60)} 分钟</Unit></>
-                : <>{Math.max(0, Math.round((1 - used) * 100))}<Unit>% 剩余，{t.used.toLocaleString()} / {t.life.toLocaleString()} 次</Unit></>}
+                : <>{Math.max(0, Math.round((1 - used) * 100))}<Unit>% 剩余，{t.used.toLocaleString()} / {t.life.toLocaleString()} 次{(t.limit ?? 1) < 1 ? `，计划在 ${Math.round(t.limit * 100)}% 更换` : ''}</Unit></>}
             </Tile>
           );
         })()}

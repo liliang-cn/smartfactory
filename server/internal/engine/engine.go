@@ -46,12 +46,23 @@ type Engine struct {
 	savedAt time.Time
 	// Done is closed once Run has returned and the final save is on disk.
 	Done chan struct{}
+	// offline engines have no Run loop: calls go straight to the JS (history backfill, what-if runs)
+	offline bool
 }
 
 // Result is what a command returns.
 type Result struct {
 	OK  bool   `json:"ok"`
 	Msg string `json:"msg"`
+}
+
+// NewOffline is an engine that is never Run: the caller drives it with Advance from one goroutine.
+func NewOffline(log *slog.Logger) (*Engine, error) {
+	e, err := New(log)
+	if err == nil {
+		e.offline = true
+	}
+	return e, err
 }
 
 func New(log *slog.Logger) (*Engine, error) {
@@ -89,7 +100,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{})}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -114,8 +125,12 @@ func (e *Engine) call(name string, args ...any) (goja.Value, error) {
 	return e.fn[name](goja.Undefined(), vals...)
 }
 
-// do runs fn on the loop goroutine and waits for it.
+// do runs fn on the loop goroutine and waits for it (directly, for an offline engine).
 func (e *Engine) do(fn func()) {
+	if e.offline {
+		fn()
+		return
+	}
 	done := make(chan struct{})
 	e.calls <- func() { fn(); close(done) }
 	<-done
@@ -686,3 +701,45 @@ func (e *Engine) RuntimeDirectory() []map[string]string {
 func (e *Engine) IndustryList() string      { return e.str("industryList") }
 func (e *Engine) Industry(id string) string { return e.str("industry", id) }
 func (e *Engine) Schema(kind string) string { return e.str("schema", kind) }
+
+// HistoryOn starts the hour-by-hour record of a company's plants; now is the wall-clock time
+// the plants' current moment corresponds to.
+func (e *Engine) HistoryOn(company string, now time.Time) bool {
+	var ok bool
+	e.do(func() {
+		v, err := e.call("historyOn", company, now.UnixMilli())
+		ok = err == nil && v.ToBoolean()
+	})
+	return ok
+}
+
+// History is the JSON of every plant's closed hours and finished events since the last call;
+// flush also closes the hour in progress (shutting down).
+func (e *Engine) History(company string, flush bool) string { return e.str("history", company, flush) }
+
+// HistoryDims is the JSON of what the history refers to: plants, lines, machines, parts.
+func (e *Engine) HistoryDims(company string) string { return e.str("historyDims", company) }
+
+// Advance runs one company ahead by seconds of simulated time in steps of dt, nobody watching.
+func (e *Engine) Advance(company string, seconds, dt float64) bool {
+	var ok bool
+	e.do(func() {
+		v, err := e.call("advance", company, seconds, dt)
+		ok = err == nil && v.ToBoolean()
+	})
+	return ok
+}
+
+// SaveJSON is a company's full state, as persisted.
+func (e *Engine) SaveJSON(company string) string { return e.str("save", company) }
+
+// RestoreJSON carries a company on from a saved state (an offline copy of the live plant).
+func (e *Engine) RestoreJSON(company, state string) string { return e.str("restore", company, state) }
+
+// WhatIf runs lines of a plant hours ahead from their current state twice, as they are and with
+// the changes ({match, command, arg}) applied, and returns both summaries as JSON.
+func (e *Engine) WhatIf(company, plant string, lines []string, hours, dt float64, changes any, seed int) string {
+	l, _ := json.Marshal(lines)
+	c, _ := json.Marshal(changes)
+	return e.str("whatIf", company, plant, string(l), hours, dt, string(c), seed)
+}

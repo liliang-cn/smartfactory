@@ -7,6 +7,11 @@
   "products": {
     "crankshaft": {
       "name": "发动机曲轴",
+      "partNo": "QZ-B20-4",
+      "material": "42CrMo",
+      "weight": 21.6,
+      "input": 27.4,
+      "customer": "远岳动力",
       "stages": {
         "billet": {
           "parts": [
@@ -300,6 +305,11 @@
     },
     "conrod": {
       "name": "连杆",
+      "partNo": "LG-B20",
+      "material": "C70S6",
+      "weight": 0.62,
+      "input": 0.74,
+      "customer": "远岳动力",
       "stages": {
         "billet": {
           "parts": [
@@ -549,6 +559,11 @@
     },
     "flange": {
       "name": "风电法兰",
+      "partNo": "FL-1200-Q355",
+      "material": "Q355NE",
+      "weight": 312,
+      "input": 356,
+      "customer": "北辰风电",
       "stages": {
         "billet": {
           "parts": [
@@ -652,6 +667,11 @@
     },
     "bearing-ring": {
       "name": "轴承套圈",
+      "partNo": "TQ-320-W",
+      "material": "GCr15",
+      "weight": 12.8,
+      "input": 14.1,
+      "customer": "凯沃轴承",
       "stages": {
         "billet": {
           "parts": [
@@ -765,6 +785,11 @@
     },
     "shaft": {
       "name": "风电主轴",
+      "partNo": "ZZ-3.6MW",
+      "material": "42CrMo4",
+      "weight": 12600,
+      "input": 18500,
+      "customer": "北辰风电",
       "stages": {
         "ingot": {
           "parts": [
@@ -917,6 +942,11 @@
     },
     "block": {
       "name": "模具模块",
+      "partNo": "MK-5CrNiMo",
+      "material": "5CrNiMo",
+      "weight": 3200,
+      "input": 4300,
+      "customer": "中力模具",
       "stages": {
         "ingot": {
           "parts": [
@@ -1053,7 +1083,19 @@
         "锯带断裂",
         "冷却液不足",
         "夹钳压力低"
-      ]
+      ],
+      "upkeep": {
+        "mtbf": 120,
+        "repair": [
+          20,
+          60
+        ],
+        "pm": 160,
+        "pmTime": [
+          60,
+          120
+        ]
+      }
     },
     "induction": {
       "label": "中频感应加热炉",
@@ -1094,7 +1136,38 @@
         "hi": 1230,
         "sigma": 9,
         "drift": -1,
-        "digits": 0
+        "digits": 0,
+        "defects": {
+          "lo": "加热温度不足",
+          "hi": "过热"
+        },
+        "wear": {
+          "shift": 1.5,
+          "spread": 0.8
+        }
+      },
+      "upkeep": {
+        "mtbf": 120,
+        "repair": [
+          30,
+          90
+        ],
+        "pm": 300,
+        "pmTime": [
+          120,
+          240
+        ],
+        "stops": {
+          "perHour": 0.2,
+          "secs": [
+            60,
+            240
+          ],
+          "reasons": [
+            "坯料卡料",
+            "推料缸到位信号丢失"
+          ]
+        }
       }
     },
     "gas-furnace": {
@@ -1136,7 +1209,33 @@
         "hi": 1250,
         "sigma": 8,
         "drift": -1,
-        "digits": 0
+        "digits": 0,
+        "defects": {
+          "lo": "加热温度不足",
+          "hi": "过热"
+        },
+        "wear": {
+          "shift": 1,
+          "spread": 0.5
+        }
+      },
+      "upkeep": {
+        "mtbf": 400,
+        "repair": [
+          60,
+          240
+        ],
+        "pm": 720,
+        "pmTime": [
+          240,
+          480
+        ]
+      },
+      "fuel": {
+        "label": "天然气",
+        "unit": "Nm³",
+        "idle": 40,
+        "run": 220
       }
     },
     "roll-forging": {
@@ -1158,8 +1257,8 @@
         "trip": 74
       },
       "power": {
-        "idle": 8,
-        "run": 90
+        "idle": 6,
+        "run": 60
       },
       "vibration": 3.0,
       "faults": [
@@ -1168,9 +1267,35 @@
       ],
       "tooling": {
         "label": "辊锻模",
-        "life": 8000,
-        "change": 600,
-        "spare": "rollDie"
+        "life": 12000,
+        "change": 1800,
+        "spare": "rollDie",
+        "repair": {
+          "hours": 48,
+          "rate": 0.7
+        }
+      },
+      "upkeep": {
+        "mtbf": 100,
+        "repair": [
+          30,
+          120
+        ],
+        "pm": 200,
+        "pmTime": [
+          120,
+          240
+        ],
+        "stops": {
+          "perHour": 0.3,
+          "secs": [
+            60,
+            180
+          ],
+          "reasons": [
+            "坯料夹持不稳"
+          ]
+        }
       }
     },
     "die-press": {
@@ -1193,8 +1318,8 @@
         "trip": 84
       },
       "power": {
-        "idle": 30,
-        "run": 420
+        "idle": 40,
+        "run": 260
       },
       "vibration": 6.0,
       "faults": [
@@ -1203,21 +1328,58 @@
         "离合器制动异常"
       ],
       "measure": {
-        "label": "锻造力",
-        "unit": "MN",
-        "target": 62,
-        "lo": 55,
-        "hi": 70,
-        "sigma": 1.4,
+        "label": "锻件厚度（热态）",
+        "unit": "mm",
+        "target": 64.0,
+        "lo": 63.2,
+        "hi": 64.8,
+        "sigma": 0.16,
         "drift": 1,
-        "digits": 1,
-        "speedBias": 4
+        "digits": 2,
+        "speedBias": 0.3,
+        "defects": {
+          "lo": "充不满",
+          "hi": "尺寸超差（模膛磨损）"
+        },
+        "wear": {
+          "shift": 1,
+          "spread": 0.5
+        }
       },
       "tooling": {
         "label": "锻模",
-        "life": 5000,
-        "change": 900,
-        "spare": "forgeDie"
+        "life": 6000,
+        "change": 5400,
+        "spare": "forgeDie",
+        "drift": 3.5,
+        "repair": {
+          "hours": 72,
+          "rate": 0.75
+        }
+      },
+      "upkeep": {
+        "mtbf": 30,
+        "repair": [
+          30,
+          180
+        ],
+        "pm": 168,
+        "pmTime": [
+          180,
+          360
+        ],
+        "stops": {
+          "perHour": 0.6,
+          "secs": [
+            60,
+            300
+          ],
+          "reasons": [
+            "工件粘模",
+            "顶料不畅",
+            "送料机械手定位偏差"
+          ]
+        }
       }
     },
     "trim-press": {
@@ -1240,8 +1402,8 @@
         "trip": 78
       },
       "power": {
-        "idle": 10,
-        "run": 110
+        "idle": 8,
+        "run": 60
       },
       "vibration": 4.5,
       "faults": [
@@ -1250,9 +1412,36 @@
       ],
       "tooling": {
         "label": "切边模",
-        "life": 12000,
-        "change": 480,
-        "spare": "trimDie"
+        "life": 20000,
+        "change": 1500,
+        "spare": "trimDie",
+        "repair": {
+          "hours": 48,
+          "rate": 0.8
+        }
+      },
+      "upkeep": {
+        "mtbf": 120,
+        "repair": [
+          20,
+          90
+        ],
+        "pm": 240,
+        "pmTime": [
+          120,
+          240
+        ],
+        "stops": {
+          "perHour": 0.4,
+          "secs": [
+            30,
+            180
+          ],
+          "reasons": [
+            "废料卡滞",
+            "锻件粘切边模"
+          ]
+        }
       }
     },
     "pierce-press": {
@@ -1286,8 +1475,24 @@
       "tooling": {
         "label": "冲孔冲头",
         "life": 9000,
-        "change": 300,
-        "spare": "punch"
+        "change": 600,
+        "spare": "punch",
+        "repair": {
+          "hours": 24,
+          "rate": 0.5
+        }
+      },
+      "upkeep": {
+        "mtbf": 160,
+        "repair": [
+          20,
+          90
+        ],
+        "pm": 240,
+        "pmTime": [
+          120,
+          240
+        ]
       }
     },
     "ring-roller": {
@@ -1325,15 +1530,39 @@
         "target": 1200,
         "lo": 1196,
         "hi": 1204,
-        "sigma": 0.8,
+        "sigma": 0.6,
         "drift": 1,
-        "digits": 1
+        "digits": 1,
+        "defects": {
+          "lo": "外径超差",
+          "hi": "外径超差"
+        },
+        "wear": {
+          "shift": 1,
+          "spread": 0.5
+        }
       },
       "tooling": {
         "label": "轧辊",
         "life": 20000,
-        "change": 1200,
-        "spare": "roll"
+        "change": 3600,
+        "spare": "roll",
+        "repair": {
+          "hours": 120,
+          "rate": 0.6
+        }
+      },
+      "upkeep": {
+        "mtbf": 120,
+        "repair": [
+          30,
+          180
+        ],
+        "pm": 200,
+        "pmTime": [
+          180,
+          360
+        ]
       }
     },
     "open-press": {
@@ -1356,7 +1585,7 @@
         "trip": 82
       },
       "power": {
-        "idle": 60,
+        "idle": 200,
         "run": 900
       },
       "vibration": 5.2,
@@ -1372,7 +1601,26 @@
         "lo": 3.5,
         "sigma": 0.12,
         "drift": -1,
-        "digits": 2
+        "digits": 2,
+        "defects": {
+          "lo": "锻造比不足"
+        },
+        "wear": {
+          "shift": 1,
+          "spread": 0.5
+        }
+      },
+      "upkeep": {
+        "mtbf": 300,
+        "repair": [
+          120,
+          480
+        ],
+        "pm": 500,
+        "pmTime": [
+          480,
+          960
+        ]
       }
     },
     "manipulator": {
@@ -1399,7 +1647,19 @@
       "faults": [
         "夹钳液压泄漏",
         "回转编码器故障"
-      ]
+      ],
+      "upkeep": {
+        "mtbf": 250,
+        "repair": [
+          60,
+          240
+        ],
+        "pm": 500,
+        "pmTime": [
+          240,
+          480
+        ]
+      }
     },
     "cooling": {
       "label": "控冷线",
@@ -1430,7 +1690,19 @@
       "faults": [
         "风机停转",
         "链条跳齿"
-      ]
+      ],
+      "upkeep": {
+        "mtbf": 500,
+        "repair": [
+          15,
+          60
+        ],
+        "pm": 720,
+        "pmTime": [
+          60,
+          120
+        ]
+      }
     },
     "quench-temper": {
       "label": "调质热处理炉",
@@ -1469,9 +1741,36 @@
         "target": 260,
         "lo": 240,
         "hi": 285,
-        "sigma": 5,
+        "sigma": 8,
         "drift": -1,
-        "digits": 0
+        "digits": 0,
+        "rework": true,
+        "defects": {
+          "lo": "硬度偏低",
+          "hi": "硬度偏高"
+        },
+        "wear": {
+          "shift": 1,
+          "spread": 0.5
+        }
+      },
+      "upkeep": {
+        "mtbf": 600,
+        "repair": [
+          60,
+          240
+        ],
+        "pm": 720,
+        "pmTime": [
+          240,
+          480
+        ]
+      },
+      "fuel": {
+        "label": "天然气",
+        "unit": "Nm³",
+        "idle": 30,
+        "run": 120
       }
     },
     "shot-blast": {
@@ -1497,13 +1796,25 @@
       },
       "power": {
         "idle": 8,
-        "run": 55
+        "run": 45
       },
       "vibration": 3.6,
       "faults": [
         "抛丸器叶片磨损",
         "除尘器压差高"
-      ]
+      ],
+      "upkeep": {
+        "mtbf": 200,
+        "repair": [
+          20,
+          60
+        ],
+        "pm": 168,
+        "pmTime": [
+          60,
+          120
+        ]
+      }
     },
     "mpi": {
       "label": "荧光磁粉探伤",
@@ -1537,10 +1848,29 @@
         "unit": "mm",
         "target": 0.05,
         "hi": 0.8,
-        "sigma": 0.12,
+        "sigma": 0.26,
         "drift": 1,
         "digits": 2,
-        "abs": true
+        "abs": true,
+        "defects": {
+          "hi": "表面裂纹/折叠"
+        },
+        "wear": {
+          "shift": 0.5,
+          "spread": 0.3
+        }
+      },
+      "upkeep": {
+        "mtbf": 400,
+        "repair": [
+          15,
+          45
+        ],
+        "pm": 500,
+        "pmTime": [
+          60,
+          120
+        ]
       }
     },
     "ut": {
@@ -1577,10 +1907,29 @@
         "unit": "mm",
         "target": 0.3,
         "hi": 2.0,
-        "sigma": 0.35,
+        "sigma": 0.6,
         "drift": 1,
         "digits": 2,
-        "abs": true
+        "abs": true,
+        "defects": {
+          "hi": "内部缺陷"
+        },
+        "wear": {
+          "shift": 0.5,
+          "spread": 0.3
+        }
+      },
+      "upkeep": {
+        "mtbf": 500,
+        "repair": [
+          20,
+          60
+        ],
+        "pm": 720,
+        "pmTime": [
+          60,
+          120
+        ]
       }
     },
     "cnc-turn": {
@@ -1620,13 +1969,45 @@
         "hi": 180.05,
         "sigma": 0.01,
         "drift": 1,
-        "digits": 3
+        "digits": 3,
+        "defects": {
+          "lo": "尺寸超差",
+          "hi": "尺寸超差"
+        },
+        "wear": {
+          "shift": 1.5,
+          "spread": 0.8
+        }
       },
       "tooling": {
         "label": "车刀片",
         "life": 800,
         "change": 90,
         "spare": "insert"
+      },
+      "upkeep": {
+        "mtbf": 120,
+        "repair": [
+          20,
+          90
+        ],
+        "pm": 300,
+        "pmTime": [
+          60,
+          180
+        ],
+        "stops": {
+          "perHour": 0.5,
+          "secs": [
+            120,
+            600
+          ],
+          "reasons": [
+            "排屑不畅",
+            "工件找正",
+            "刀尖崩刃换刀"
+          ]
+        }
       }
     },
     "vision": {
@@ -1651,7 +2032,20 @@
         "相机帧同步丢失",
         "光源亮度衰减"
       ],
-      "rejectRate": 0.012
+      "rejectRate": 0.004,
+      "upkeep": {
+        "mtbf": 800,
+        "repair": [
+          10,
+          30
+        ],
+        "pm": 1000,
+        "pmTime": [
+          30,
+          60
+        ]
+      },
+      "defect": "外观缺陷"
     },
     "robot": {
       "label": "上下料机器人",
@@ -1675,7 +2069,19 @@
       "faults": [
         "夹爪气压低",
         "J3 轴扭矩超限"
-      ]
+      ],
+      "upkeep": {
+        "mtbf": 600,
+        "repair": [
+          15,
+          60
+        ],
+        "pm": 1000,
+        "pmTime": [
+          60,
+          120
+        ]
+      }
     },
     "packer": {
       "label": "自动装箱机",
@@ -1698,32 +2104,215 @@
       "faults": [
         "纸箱仓空",
         "封箱胶带断"
-      ]
+      ],
+      "upkeep": {
+        "mtbf": 300,
+        "repair": [
+          10,
+          30
+        ],
+        "pm": 500,
+        "pmTime": [
+          30,
+          60
+        ]
+      }
     }
   },
   "routes": {
-    "hot-die": [
-      "saw",
-      "induction",
-      "roll-forging",
-      "die-press",
-      "trim-press",
-      "cooling",
-      "shot-blast",
-      "mpi",
-      "packer"
+    "hot-die-crank": [
+      {
+        "machine": "saw",
+        "name": "高速圆锯下料",
+        "cycle": 42,
+        "power": {
+          "idle": 8,
+          "run": 30
+        }
+      },
+      {
+        "machine": "induction",
+        "cycle": 48,
+        "power": {
+          "idle": 50,
+          "run": 820
+        }
+      },
+      {
+        "machine": "roll-forging",
+        "name": "辊锻制坯",
+        "cycle": 45
+      },
+      {
+        "machine": "die-press",
+        "name": "热模锻（预锻+终锻）",
+        "cycle": 50
+      },
+      {
+        "machine": "trim-press",
+        "name": "切边冲孔",
+        "cycle": 45
+      },
+      {
+        "machine": "cooling",
+        "name": "控冷线",
+        "cycle": 50
+      },
+      {
+        "machine": "shot-blast",
+        "cycle": 50
+      },
+      {
+        "machine": "mpi",
+        "cycle": 55
+      },
+      {
+        "machine": "packer",
+        "cycle": 40
+      }
+    ],
+    "hot-die-conrod": [
+      {
+        "machine": "saw",
+        "name": "高速圆锯下料",
+        "cycle": 9,
+        "power": {
+          "idle": 6,
+          "run": 30
+        }
+      },
+      {
+        "machine": "induction",
+        "cycle": 11,
+        "power": {
+          "idle": 15,
+          "run": 100
+        }
+      },
+      {
+        "machine": "roll-forging",
+        "name": "辊锻制坯",
+        "cycle": 11,
+        "power": {
+          "idle": 5,
+          "run": 30
+        }
+      },
+      {
+        "machine": "die-press",
+        "name": "热模锻",
+        "cycle": 12,
+        "power": {
+          "idle": 20,
+          "run": 110
+        },
+        "tooling": {
+          "life": 14000,
+          "change": 3600
+        },
+        "measure": {
+          "label": "大头厚度（热态）",
+          "unit": "mm",
+          "target": 22.0,
+          "lo": 21.6,
+          "hi": 22.4,
+          "sigma": 0.08,
+          "drift": 1,
+          "digits": 2,
+          "speedBias": 0.15,
+          "defects": {
+            "lo": "充不满",
+            "hi": "尺寸超差（模膛磨损）"
+          }
+        }
+      },
+      {
+        "machine": "trim-press",
+        "name": "切边冲孔",
+        "cycle": 11,
+        "tooling": {
+          "life": 30000
+        }
+      },
+      {
+        "machine": "cooling",
+        "name": "控冷线",
+        "cycle": 12
+      },
+      {
+        "machine": "shot-blast",
+        "cycle": 10
+      },
+      {
+        "machine": "mpi",
+        "cycle": 13
+      },
+      {
+        "machine": "packer",
+        "cycle": 8
+      }
     ],
     "ring-flange": [
-      "saw",
-      "gas-furnace",
-      "pierce-press",
-      "ring-roller",
-      "quench-temper",
-      "ut",
+      {
+        "machine": "saw",
+        "cycle": 480
+      },
+      {
+        "machine": "gas-furnace",
+        "cycle": 300
+      },
+      {
+        "machine": "pierce-press",
+        "name": "镦粗冲孔",
+        "cycle": 240,
+        "power": {
+          "idle": 40,
+          "run": 380
+        }
+      },
+      {
+        "machine": "ring-roller",
+        "cycle": 300,
+        "power": {
+          "idle": 60,
+          "run": 900
+        }
+      },
+      {
+        "machine": "quench-temper",
+        "name": "正火炉",
+        "cycle": 360,
+        "measure": {
+          "label": "正火硬度",
+          "unit": "HB",
+          "target": 170,
+          "lo": 150,
+          "hi": 190,
+          "sigma": 7,
+          "drift": -1,
+          "digits": 0,
+          "rework": true,
+          "defects": {
+            "lo": "硬度偏低",
+            "hi": "硬度偏高"
+          },
+          "wear": {
+            "shift": 1,
+            "spread": 0.5
+          }
+        }
+      },
+      {
+        "machine": "ut",
+        "cycle": 420
+      },
       {
         "machine": "cnc-turn",
         "name": "数控立车",
-        "cycle": 9,
+        "cycle": 720,
+        "tooling": {
+          "life": 40
+        },
         "measure": {
           "label": "端面平面度",
           "unit": "mm",
@@ -1732,40 +2321,197 @@
           "sigma": 0.02,
           "drift": 1,
           "digits": 3,
-          "abs": true
+          "abs": true,
+          "defects": {
+            "hi": "平面度超差"
+          },
+          "wear": {
+            "shift": 1.5,
+            "spread": 0.8
+          }
         }
       }
     ],
     "ring-bearing": [
-      "saw",
-      "induction",
-      "pierce-press",
+      {
+        "machine": "saw",
+        "cycle": 26
+      },
+      {
+        "machine": "induction",
+        "cycle": 24,
+        "power": {
+          "idle": 40,
+          "run": 820
+        }
+      },
+      {
+        "machine": "pierce-press",
+        "name": "镦粗冲孔",
+        "cycle": 24
+      },
       {
         "machine": "ring-roller",
         "name": "轴承环辗环机",
-        "cycle": 6,
+        "cycle": 22,
         "measure": {
           "label": "外径",
           "unit": "mm",
           "target": 320,
           "lo": 319.8,
           "hi": 320.2,
-          "sigma": 0.05,
+          "sigma": 0.035,
           "drift": 1,
-          "digits": 2
+          "digits": 2,
+          "defects": {
+            "lo": "外径超差",
+            "hi": "外径超差"
+          },
+          "wear": {
+            "shift": 1,
+            "spread": 0.5
+          }
         }
       },
-      "cooling",
-      "vision",
-      "packer"
+      {
+        "machine": "cooling",
+        "cycle": 26
+      },
+      {
+        "machine": "vision",
+        "cycle": 20
+      },
+      {
+        "machine": "packer",
+        "cycle": 18
+      }
     ],
-    "open-die": [
-      "gas-furnace",
-      "manipulator",
-      "open-press",
-      "quench-temper",
-      "ut",
-      "cnc-turn"
+    "open-die-shaft": [
+      {
+        "machine": "gas-furnace",
+        "name": "室式加热炉",
+        "cycle": 28800,
+        "power": {
+          "idle": 40,
+          "run": 90
+        }
+      },
+      {
+        "machine": "manipulator",
+        "cycle": 21600
+      },
+      {
+        "machine": "open-press",
+        "name": "60MN 自由锻液压机",
+        "cycle": 25200
+      },
+      {
+        "machine": "quench-temper",
+        "name": "台车式调质炉",
+        "cycle": 36000,
+        "power": {
+          "idle": 40,
+          "run": 260
+        }
+      },
+      {
+        "machine": "ut",
+        "cycle": 7200
+      },
+      {
+        "machine": "cnc-turn",
+        "name": "重型卧车粗车",
+        "cycle": 30000,
+        "power": {
+          "idle": 20,
+          "run": 160
+        },
+        "tooling": {
+          "life": 3,
+          "change": 600
+        },
+        "measure": {
+          "label": "外圆直径",
+          "unit": "mm",
+          "target": 1856,
+          "lo": 1850,
+          "hi": 1862,
+          "sigma": 1.2,
+          "drift": 1,
+          "digits": 1,
+          "defects": {
+            "lo": "尺寸超差",
+            "hi": "尺寸超差"
+          },
+          "wear": {
+            "shift": 1.5,
+            "spread": 0.8
+          }
+        }
+      }
+    ],
+    "open-die-block": [
+      {
+        "machine": "gas-furnace",
+        "name": "室式加热炉",
+        "cycle": 21600,
+        "power": {
+          "idle": 40,
+          "run": 90
+        }
+      },
+      {
+        "machine": "manipulator",
+        "cycle": 14400
+      },
+      {
+        "machine": "open-press",
+        "name": "60MN 自由锻液压机",
+        "cycle": 14400
+      },
+      {
+        "machine": "quench-temper",
+        "name": "台车式调质炉",
+        "cycle": 30000,
+        "power": {
+          "idle": 40,
+          "run": 260
+        }
+      },
+      {
+        "machine": "ut",
+        "cycle": 5400
+      },
+      {
+        "machine": "cnc-turn",
+        "name": "数控龙门铣",
+        "cycle": 21600,
+        "power": {
+          "idle": 20,
+          "run": 120
+        },
+        "tooling": {
+          "life": 2,
+          "change": 600
+        },
+        "measure": {
+          "label": "平面度",
+          "unit": "mm",
+          "target": 0.05,
+          "hi": 0.2,
+          "sigma": 0.03,
+          "drift": 1,
+          "digits": 2,
+          "abs": true,
+          "defects": {
+            "hi": "平面度超差"
+          },
+          "wear": {
+            "shift": 1.5,
+            "spread": 0.8
+          }
+        }
+      }
     ]
   },
   "inventory": {
@@ -1775,7 +2521,8 @@
       "kind": "consume",
       "capacity": 12,
       "refill": 6,
-      "low": 0.2
+      "low": 0.34,
+      "lead": 336
     },
     "rollDie": {
       "label": "备用辊锻模",
@@ -1783,15 +2530,17 @@
       "kind": "consume",
       "capacity": 8,
       "refill": 4,
-      "low": 0.2
+      "low": 0.25,
+      "lead": 336
     },
     "trimDie": {
       "label": "备用切边模",
       "unit": "副",
       "kind": "consume",
       "capacity": 10,
-      "refill": 5,
-      "low": 0.2
+      "refill": 4,
+      "low": 0.3,
+      "lead": 240
     },
     "punch": {
       "label": "备用冲头",
@@ -1799,15 +2548,17 @@
       "kind": "consume",
       "capacity": 30,
       "refill": 15,
-      "low": 0.2
+      "low": 0.2,
+      "lead": 120
     },
     "roll": {
       "label": "备用轧辊",
       "unit": "对",
       "kind": "consume",
       "capacity": 6,
-      "refill": 3,
-      "low": 0.2
+      "refill": 2,
+      "low": 0.34,
+      "lead": 720
     },
     "insert": {
       "label": "车刀片",
@@ -1815,7 +2566,8 @@
       "kind": "consume",
       "capacity": 400,
       "refill": 200,
-      "low": 0.15
+      "low": 0.25,
+      "lead": 72
     }
   }
 }

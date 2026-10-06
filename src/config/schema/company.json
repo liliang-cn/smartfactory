@@ -145,6 +145,42 @@
                               "speedBias": {
                                 "default": 0,
                                 "type": "number"
+                              },
+                              "wear": {
+                                "default": {
+                                  "shift": 4,
+                                  "spread": 2.5
+                                },
+                                "type": "object",
+                                "properties": {
+                                  "shift": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "spread": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "shift",
+                                  "spread"
+                                ]
+                              },
+                              "defects": {
+                                "type": "object",
+                                "properties": {
+                                  "lo": {
+                                    "type": "string"
+                                  },
+                                  "hi": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "rework": {
+                                "default": false,
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -153,6 +189,50 @@
                               "target",
                               "sigma"
                             ]
+                          },
+                          "power": {
+                            "type": "object",
+                            "properties": {
+                              "idle": {
+                                "type": "number"
+                              },
+                              "run": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "idle",
+                              "run"
+                            ]
+                          },
+                          "tooling": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "life": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "change": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "spare": {
+                                "type": "string"
+                              },
+                              "drift": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "limit": {
+                                "type": "number",
+                                "minimum": 0.3,
+                                "maximum": 1
+                              }
+                            }
                           },
                           "take": {
                             "type": "object",

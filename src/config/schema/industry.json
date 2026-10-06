@@ -81,6 +81,23 @@
           "name": {
             "type": "string"
           },
+          "partNo": {
+            "type": "string"
+          },
+          "material": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "input": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "customer": {
+            "type": "string"
+          },
           "stages": {
             "type": "object",
             "propertyNames": {
@@ -652,6 +669,42 @@
               "speedBias": {
                 "default": 0,
                 "type": "number"
+              },
+              "wear": {
+                "default": {
+                  "shift": 4,
+                  "spread": 2.5
+                },
+                "type": "object",
+                "properties": {
+                  "shift": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "spread": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "shift",
+                  "spread"
+                ]
+              },
+              "defects": {
+                "type": "object",
+                "properties": {
+                  "lo": {
+                    "type": "string"
+                  },
+                  "hi": {
+                    "type": "string"
+                  }
+                }
+              },
+              "rework": {
+                "default": false,
+                "type": "boolean"
               }
             },
             "required": [
@@ -689,12 +742,168 @@
                 "default": 3,
                 "type": "number",
                 "minimum": 0
+              },
+              "limit": {
+                "default": 1,
+                "type": "number",
+                "minimum": 0.3,
+                "maximum": 1
+              },
+              "repair": {
+                "type": "object",
+                "properties": {
+                  "hours": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "hours",
+                  "rate"
+                ]
               }
             },
             "required": [
               "label",
               "life"
             ]
+          },
+          "fuel": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "idle": {
+                "type": "number",
+                "minimum": 0
+              },
+              "run": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "label",
+              "unit",
+              "idle",
+              "run"
+            ]
+          },
+          "upkeep": {
+            "default": {
+              "mtbf": 3.33,
+              "repair": [
+                1,
+                3
+              ],
+              "pm": 3.06,
+              "pmTime": [
+                0.67,
+                1.5
+              ]
+            },
+            "type": "object",
+            "properties": {
+              "mtbf": {
+                "default": 3.33,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "repair": {
+                "default": [
+                  1,
+                  3
+                ],
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "pm": {
+                "default": 3.06,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "pmTime": {
+                "default": [
+                  0.67,
+                  1.5
+                ],
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "stops": {
+                "type": "object",
+                "properties": {
+                  "perHour": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "secs": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "reasons": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "perHour",
+                  "secs",
+                  "reasons"
+                ]
+              }
+            }
+          },
+          "defect": {
+            "type": "string"
           },
           "take": {
             "type": "object",
@@ -760,6 +969,10 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
+          },
+          "lead": {
+            "type": "number",
+            "exclusiveMinimum": 0
           }
         },
         "required": [
@@ -846,6 +1059,42 @@
                     "speedBias": {
                       "default": 0,
                       "type": "number"
+                    },
+                    "wear": {
+                      "default": {
+                        "shift": 4,
+                        "spread": 2.5
+                      },
+                      "type": "object",
+                      "properties": {
+                        "shift": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "spread": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "shift",
+                        "spread"
+                      ]
+                    },
+                    "defects": {
+                      "type": "object",
+                      "properties": {
+                        "lo": {
+                          "type": "string"
+                        },
+                        "hi": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "rework": {
+                      "default": false,
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -854,6 +1103,50 @@
                     "target",
                     "sigma"
                   ]
+                },
+                "power": {
+                  "type": "object",
+                  "properties": {
+                    "idle": {
+                      "type": "number"
+                    },
+                    "run": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "idle",
+                    "run"
+                  ]
+                },
+                "tooling": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "life": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "change": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "spare": {
+                      "type": "string"
+                    },
+                    "drift": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "limit": {
+                      "type": "number",
+                      "minimum": 0.3,
+                      "maximum": 1
+                    }
+                  }
                 },
                 "take": {
                   "type": "object",

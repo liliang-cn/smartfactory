@@ -27,6 +27,17 @@ type Config struct {
 	Data string `json:"data"`
 	// Sources are protocol adapters that read from devices.
 	Sources []Source `json:"sources"`
+	// History keeps companies' production history in Postgres, for the advisor.
+	History []History `json:"history"`
+}
+
+// History is one company's history database.
+type History struct {
+	Company string `json:"company"`
+	// postgres://user:pass@host/db; ${VAR} is taken from the environment
+	DSN string `json:"dsn"`
+	// Advisor is the URL of the advisor console that reads this history (shown in the app)
+	Advisor string `json:"advisor,omitempty"`
 }
 
 // Broker is the embedded MQTT broker.
@@ -152,6 +163,9 @@ func Load(path string) (Config, error) {
 	}
 	if t := os.Getenv("SF_TOKEN"); t != "" {
 		c.Token = t
+	}
+	for i := range c.History {
+		c.History[i].DSN = os.ExpandEnv(c.History[i].DSN)
 	}
 	if c.MQTT.Prefix == "" {
 		c.MQTT.Prefix = "sf"

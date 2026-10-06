@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
+import { History } from '@/sim/history';
 import { PlantSim, type SavedPlant } from '@/sim/plant';
 import type { Command } from '@/sim/types';
 
@@ -28,6 +29,7 @@ function register(bundle: CompanyBundle) {
   const plants = bundle.plants.map((l) => new PlantSim(l));
   companies.set(bundle.company.id, { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])), timeScale: 1 });
   pending.delete(bundle.company.id);
+  if (recording.has(bundle.company.id)) attach(bundle.company.id, Date.now());
 }
 
 function init(): string {
@@ -251,6 +253,169 @@ function telemetry(c: string, plant: string): string {
   return p ? JSON.stringify(p.telemetry()) : 'null';
 }
 
+// ---------- history (the advisor's database) ----------
+
+/** companies whose plants keep an hour-by-hour record */
+const recording = new Set<string>();
+
+function attach(c: string, now: number) {
+  const co = get(c);
+  if (!co) return;
+  co.plants.forEach((p, i) => { p.history = new History(p, p.layout.id, i + 1, now - p.elapsed * 1000); });
+}
+
+/** Starts recording a company; `now` is the wall-clock ms the plants' current moment maps to. */
+function historyOn(c: string, now: number): boolean {
+  if (!get(c)) return false;
+  recording.add(c);
+  attach(c, now);
+  return true;
+}
+
+/** Closed hours and finished events of every plant since the last call. */
+function history(c: string, flush = false): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify(Object.fromEntries(co.plants.map((p) => [p.layout.id, p.history?.drain(flush) ?? History.empty()])));
+}
+
+/** What the history refers to: plants, lines, machines and parts. */
+function historyDims(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  const parts = new Map<string, object>();
+  const plants = co.plants.map((p) => {
+    const L = p.layout;
+    for (const l of L.lines) {
+      const pr = l.product;
+      parts.set(pr.key, { id: pr.key, name: pr.name, partNo: pr.partNo ?? '', material: pr.material ?? '', weight: pr.weight ?? null, input: pr.input ?? null, customer: pr.customer ?? '' });
+    }
+    return {
+      id: L.id, name: L.name, hall: L.hall,
+      lines: p.lines.map((l) => ({
+        id: `${L.id}-${l.id}`, name: l.name, process: l.layout.note, product: l.layout.product.key,
+        idealCycle: Math.max(...l.stations.map((a) => a.cycle)), orderQty: l.layout.order.qty,
+        machines: l.stations.map((a, i) => ({
+          id: `${L.id}-${a.id}`, code: a.id, name: a.name, kind: a.machine!.label, seq: i + 1, cycle: a.cycle,
+          tool: a.tool?.label ?? null, toolLife: a.tool?.life ?? null, feature: a.measure?.label ?? null, unit: a.measure?.unit ?? null,
+        })),
+      })),
+      inventory: p.inventory.map((i) => ({ key: i.key, label: i.label, unit: i.unit, cap: i.cap })),
+    };
+  });
+  return JSON.stringify({ company: { id: c, name: co.bundle.company.name }, plants, parts: [...parts.values()] });
+}
+
+/** Runs one company `seconds` ahead in steps of `dt`, nobody watching (history backfill, what-if runs). */
+function advance(c: string, seconds: number, dt: number): boolean {
+  const co = get(c);
+  if (!co) return false;
+  for (const p of co.plants) p.headless = true;
+  for (let t = 0; t < seconds - 1e-9; t += dt) for (const p of co.plants) p.step(dt);
+  for (const p of co.plants) p.events.length = 0;
+  return true;
+}
+
+// ---------- what-if (the advisor tries a plan on a copy of the plant) ----------
+
+interface Change { match: string; command: Command; arg?: number }
+
+/** A small seeded generator, so a plan and its baseline see the same luck. */
+function seeded(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Runs some lines of a plant `hours` ahead twice from the same state — as they are, and with the
+ * changes applied — and sums up both. Meant for an offline engine restored from the live state.
+ * A change `match`es an asset id (HP-201), an id prefix (HP: every die press) or a line name.
+ */
+function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt: number, changesJson: string, seed: number): string {
+  return result(() => {
+    const p = get(c)?.byId[plantId];
+    if (!p) throw new Error(`找不到 ${c}/${plantId}`);
+    const names = JSON.parse(linesJson || '[]') as string[];
+    const lines = names.length ? p.lines.filter((l) => names.includes(l.name) || names.includes(l.id)) : p.lines;
+    if (!lines.length) throw new Error(`${plantId} 没有这些产线：${names.join('、')}；有 ${p.lines.map((l) => l.name).join('、')}`);
+    const ids = new Set(lines.map((l) => l.id));
+    const changes = JSON.parse(changesJson || '[]') as Change[];
+    const saved = p.saveState();
+    const random = Math.random;
+    const run = (apply: boolean) => {
+      p.restoreState(saved);
+      for (const a of p.assets.values()) a.live = undefined;
+      Math.random = seeded(seed);
+      const applied: string[] = [];
+      if (apply) {
+        for (const ch of changes) {
+          const hit = lines.filter((l) => l.name === ch.match).flatMap((l) => l.stations);
+          const targets = hit.length ? hit : lines.flatMap((l) => l.stations).filter((a) => a.id === ch.match || a.id.startsWith(`${ch.match}-`));
+          if (!targets.length) throw new Error(`没有匹配 ${ch.match} 的设备`);
+          for (const a of targets) {
+            const r = p.command(a.id, ch.command, ch.arg);
+            applied.push(r.msg);
+          }
+        }
+      }
+      p.headless = true;
+      p.history = new History(p, plantId, 1, 0);
+      p.history.only = ids;
+      for (let t = 0; t < hours * 3600 - 1e-9; t += dt) p.stepLines(ids, dt);
+      const b = p.history.drain(true);
+      p.history = undefined;
+      return { applied, ...sum(b, lines.map((l) => [`${plantId}-${l.id}`, l.name] as [string, string])) };
+    };
+    try {
+      const baseline = run(false);
+      const scenario = run(true);
+      return { company: c, plant: plantId, hours, dt, seed, lines: lines.map((l) => l.name), changes: scenario.applied, baseline: { ...baseline, applied: undefined }, scenario: { ...scenario, applied: undefined } };
+    } finally {
+      Math.random = random;
+      p.restoreState(saved);
+    }
+  });
+}
+
+/** What a what-if run comes to, per line and for the spares. */
+function sum(b: ReturnType<History['drain']>, lines: [string, string][]) {
+  const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+  const per = lines.map(([id, name]) => {
+    const lh = b.lineHours.filter((x) => x.line === id);
+    const add = (k: keyof (typeof lh)[number]) => lh.reduce((s, x) => s + (x[k] as number), 0);
+    const produced = add('produced'), good = add('good'), scrap = add('scrap'), planned = add('planned'), run = add('run');
+    const goodIdeal = lh.reduce((s, x) => s + x.good * x.idealCycle, 0);
+    const changes = b.toolChanges.filter((x) => x.line === id);
+    const down = b.downtime.filter((x) => x.line === id);
+    const mins = (x: { start: string; end: string }) => (Date.parse(x.end.replace(' ', 'T')) - Date.parse(x.start.replace(' ', 'T'))) / 60000;
+    const defects: Record<string, number> = {};
+    for (const d of b.defects.filter((x) => x.line === id)) defects[d.type] = (defects[d.type] ?? 0) + 1;
+    const downtime: Record<string, number> = {};
+    for (const d of down) downtime[d.category] = Math.round((downtime[d.category] ?? 0) + mins(d));
+    return {
+      line: name, produced, good, scrap, rework: add('rework'), goodTonnes: r4(add('goodKg') / 1000),
+      firstPassYield: produced ? r4(good / produced) : null, scrapRate: produced ? r4(scrap / produced) : null,
+      availability: planned ? r4(run / planned) : null, oee: planned ? r4(goodIdeal / planned) : null,
+      toolChanges: changes.length, avgToolHits: changes.length ? Math.round(changes.reduce((s, x) => s + x.hits, 0) / changes.length) : null,
+      downtimeMinutes: downtime, defects,
+    };
+  });
+  const spares: Record<string, { label: string; min: number; end: number; stockoutHours: number }> = {};
+  for (const s of b.stock) {
+    const o = (spares[s.item] ??= { label: s.label, min: s.min, end: s.end, stockoutHours: 0 });
+    o.min = Math.min(o.min, s.min);
+    o.end = s.end;
+    if (s.min === 0) o.stockoutHours++;
+  }
+  return { lines: per, spares: Object.values(spares) };
+}
+
 function list(): string {
   return JSON.stringify([...companies.values()].map((c) => ({
     id: c.bundle.company.id, name: c.bundle.company.name,
@@ -261,4 +426,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, removeCompany, industryList, industry, schema,
+  historyOn, history, historyDims, advance, whatIf,
 };

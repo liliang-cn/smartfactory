@@ -8,10 +8,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,6 +29,7 @@ import (
 	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/history"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
@@ -42,7 +46,7 @@ func main() {
 
 	args := os.Args[1:]
 	cmd := "serve"
-	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "version") {
+	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "version") {
 		cmd, args = args[0], args[1:]
 	}
 	var err error
@@ -53,6 +57,8 @@ func main() {
 		err = runEdge(ctx, args, log)
 	case "devices":
 		err = runDevices(ctx, args, log)
+	case "history":
+		err = runHistory(ctx, args, log)
 	default:
 		err = serve(ctx, args, log)
 	}
@@ -85,6 +91,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	eng.LoadConfigs()
 	eng.Restore()
 	go eng.Run(ctx)
+	for _, h := range cfg.History {
+		go history.Record(ctx, eng, h.Company, h.DSN, log)
+	}
 	// Values read from equipment feed the server-side simulation.
 	go func() {
 		sub := hub.Subscribe()
@@ -126,9 +135,15 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		}
 	}
 
+	advisors := map[string]string{}
+	for _, h := range cfg.History {
+		if h.Advisor != "" {
+			advisors[h.Company] = h.Advisor
+		}
+	}
 	ms := mcptools.New(hub, eng, version)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log,
+		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log, Advisors: advisors,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
@@ -185,4 +200,117 @@ func runDevices(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	log.Info("smartfactory devices starting", "version", version, "plants", len(cfg.Plants))
 	return devices.Run(ctx, cfg, eng, log)
+}
+
+// runHistory: `history model` prints the advisor's semantic model of the history database;
+// `history backfill` fills a company's database with what its plants would have done over the
+// past days, simulated offline, ending where live recording takes over.
+func runHistory(ctx context.Context, args []string, log *slog.Logger) error {
+	if len(args) == 0 || (args[0] != "model" && args[0] != "backfill" && args[0] != "load") {
+		return errors.New("usage: smartfactory history model | history backfill|load -config file -company id [-days 30] [-warmup 3] [-reset]")
+	}
+	if args[0] == "model" {
+		_, err := os.Stdout.Write(history.Model)
+		return err
+	}
+	fs := flag.NewFlagSet("history "+args[0], flag.ExitOnError)
+	path := fs.String("config", "", "server config with the company's history database")
+	company := fs.String("company", "", "company id")
+	days := fs.Int("days", 30, "days of history to simulate")
+	warmup := fs.Float64("warmup", 3, "days simulated first and not recorded, so the plants are in a steady state")
+	reset := fs.Bool("reset", false, "empty the database first")
+	dt := fs.Float64("dt", 1, "simulation step, seconds")
+	fs.Parse(args[1:])
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+	dsn := ""
+	for _, h := range cfg.History {
+		if h.Company == *company {
+			dsn = h.DSN
+		}
+	}
+	if dsn == "" {
+		return fmt.Errorf("no history database for company %q in %s", *company, *path)
+	}
+	st, err := history.Open(ctx, dsn)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if *reset {
+		if err := st.Reset(ctx); err != nil {
+			return err
+		}
+	}
+	if args[0] == "load" {
+		return loadHistory(ctx, st, log)
+	}
+	eng, err := engine.NewOffline(log)
+	if err != nil {
+		return err
+	}
+	eng.Dir = cfg.Data
+	eng.LoadConfigs()
+	if err := st.WriteDims(ctx, eng.HistoryDims(*company)); err != nil {
+		return err
+	}
+	end := time.Now().Truncate(time.Hour)
+	start := end.Add(-time.Duration(*days) * 24 * time.Hour)
+	log.Info("history backfill", "company", *company, "from", start.Format("2006-01-02 15:04"), "to", end.Format("2006-01-02 15:04"), "warmup days", *warmup)
+	if !eng.Advance(*company, *warmup*86400, *dt) {
+		return fmt.Errorf("no company %q", *company)
+	}
+	eng.HistoryOn(*company, start)
+	t0 := time.Now()
+	for h := 0; h < *days*24; h++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		eng.Advance(*company, 3600, *dt)
+		if _, err := st.Write(ctx, eng.History(*company, false), start.Add(time.Duration(h+1)*time.Hour)); err != nil {
+			return err
+		}
+		if (h+1)%24 == 0 {
+			log.Info("history backfill", "day", (h+1)/24, "of", *days, "elapsed", time.Since(t0).Round(time.Second))
+		}
+	}
+	log.Info("history backfill done", "db", st.Summary(ctx))
+	return nil
+}
+
+// loadHistory stores what scripts/backfill.mjs prints: the dims, then one line per simulated hour.
+func loadHistory(ctx context.Context, st *history.Store, log *slog.Logger) error {
+	in := bufio.NewReader(os.Stdin)
+	n := 0
+	for {
+		line, err := in.ReadBytes('\n')
+		if len(line) > 0 {
+			var rec struct {
+				Dims    json.RawMessage `json:"dims"`
+				At      int64           `json:"at"`
+				History json.RawMessage `json:"history"`
+			}
+			if err := json.Unmarshal(line, &rec); err != nil {
+				return fmt.Errorf("line %d: %w", n+1, err)
+			}
+			if rec.Dims != nil {
+				if err := st.WriteDims(ctx, string(rec.Dims)); err != nil {
+					return err
+				}
+			} else if _, err := st.Write(ctx, string(rec.History), time.UnixMilli(rec.At)); err != nil {
+				return err
+			}
+			n++
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+	}
+	log.Info("history loaded", "lines", n, "db", st.Summary(ctx))
+	return nil
 }

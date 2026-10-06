@@ -18,6 +18,12 @@ export interface ProductInfo {
   order: string[];
   dims: Record<string, Dims>;
   max: Dims;
+  partNo?: string;
+  material?: string;
+  /** kg per finished unit / kg of material per unit */
+  weight?: number;
+  input?: number;
+  customer?: string;
 }
 
 export interface StationLayout {
@@ -36,7 +42,7 @@ export interface StationLayout {
   give?: string[];
 }
 
-export interface InventoryLayout { key: string; label: string; unit: string; kind: 'lend' | 'consume'; cap: number; low: number; refill: number }
+export interface InventoryLayout { key: string; label: string; unit: string; kind: 'lend' | 'consume'; cap: number; low: number; refill: number; lead?: number }
 
 export interface Waypoint { x: number; z: number; act?: 'load' | 'drop' | 'pick' | 'deliver' | 'dock'; line?: string }
 export interface Zone { id: string; name: string; x0: number; x1: number; z0: number; z1: number; cap: number }
@@ -152,7 +158,7 @@ function productInfo(industry: IndustryCfg, key: string, needsPacked: boolean): 
     dims.packed = stageDims(stages.packed);
     max = { l: Math.max(max.l, dims.packed.l), h: Math.max(max.h, dims.packed.h), d: Math.max(max.d, dims.packed.d) };
   }
-  return { key, name: p.name, stages, order, dims, max };
+  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer };
 }
 
 // ---------- plant ----------
@@ -229,11 +235,17 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
         if (!industry.inventory[k]) throw new Error(`${name}：${st.name ?? machine.label} 用到的库存 ${k} 没有在行业包 inventory 里定义`);
       }
       if (makes && !product.stages[makes]) throw new Error(`${name}：产品 ${product.name} 没有工序状态 ${makes}`);
+      // per-step overrides make this station's own machine (a heavier billet needs a bigger heater …)
+      const power = 'power' in st ? st.power : undefined;
+      const tooling = 'tooling' in st ? st.tooling : undefined;
+      const own: MachineCfg = power || tooling
+        ? { ...machine, power: power ?? machine.power, tooling: tooling && machine.tooling ? { ...machine.tooling, ...tooling } : machine.tooling }
+        : machine;
       return {
         id: `${machine.code}-${n}${pad2(seq[machine.code])}`,
         key: st.machine,
         name: st.name ?? machine.label,
-        machine,
+        machine: own,
         x: r1(x),
         len,
         size,
@@ -250,7 +262,9 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     const z = zCursor + back;
     zCursor = z + front;
     const bottleneck = Math.max(...stations.map((s) => s.cycle));
-    const qty = Math.max(50, Math.round(((3600 / bottleneck) * 8 * 0.85) / 50) * 50);
+    // a work order is about a day's output at 85 % (two wind-turbine shafts, 1 450 crankshafts)
+    const day = (3600 / bottleneck) * 24 * 0.85;
+    const qty = day >= 100 ? Math.round(day / 50) * 50 : Math.max(1, Math.round(day));
     lines.push({
       id: `L${n}`, no: n, name, note: cfg.note, z, x0, x1, beltY, beltW, speed, gap,
       spawn: r1(bottleneck * 0.96),
@@ -336,7 +350,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     // a plant that lists its inventory keeps only those items (a BBQ site has no tents)
     inventory: Object.entries(industry.inventory).filter(([key]) => !plant.inventory || key in plant.inventory).map(([key, it]) => {
       const cap = plant.inventory?.[key] ?? it.capacity;
-      return { key, label: it.label, unit: it.unit, kind: it.kind, cap, low: it.low, refill: it.refill ?? Math.ceil(cap / 2) };
+      return { key, label: it.label, unit: it.unit, kind: it.kind, cap, low: it.low, refill: it.refill ?? Math.ceil(cap / 2), lead: it.lead };
     }),
     lines,
     box,

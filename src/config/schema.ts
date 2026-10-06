@@ -66,12 +66,30 @@ export const Measure = z.object({
   digits: z.number().int().min(0).default(1),
   /** reading shift per +100 % speed */
   speedBias: z.number().default(0),
+  /**
+   * what a worn machine (low health) does to readings: mean shift in sigmas and extra spread, at
+   * fully worn. Where the tool, not the machine, sets the quality (a forging die), keep these small.
+   */
+  wear: z.object({ shift: z.number().min(0), spread: z.number().min(0) }).default({ shift: 4, spread: 2.5 }),
+  /** what an out-of-spec unit is recorded as: below `lo` / above `hi` (e.g. 充不满, 尺寸超差) */
+  defects: z.object({ lo: z.string().optional(), hi: z.string().optional() }).optional(),
+  /** out-of-spec units are reworked (re-heat-treated, re-machined) and stay on the line instead of being scrapped */
+  rework: z.boolean().default(false),
 });
 export type MeasureCfg = z.infer<typeof Measure>;
 
 /** A product family: its look at each stage. The first stage is what enters the line. */
 export const Product = z.object({
   name: z.string(),
+  /** drawing / part number */
+  partNo: z.string().optional(),
+  /** material grade, e.g. 42CrMo */
+  material: z.string().optional(),
+  /** kg per finished unit */
+  weight: z.number().positive().optional(),
+  /** kg of material that goes in per unit (billet, ingot); weight / input is the material yield */
+  input: z.number().positive().optional(),
+  customer: z.string().optional(),
   stages: z.record(z.string(), z.object({ parts: z.array(Part).min(1) })),
 });
 export type ProductCfg = z.infer<typeof Product>;
@@ -122,8 +140,44 @@ export const InventoryItem = z.object({
   low: z.number().min(0).max(1).default(0.1),
   /** consume: amount each supply delivery brings (default half the capacity) */
   refill: z.number().int().positive().optional(),
+  /**
+   * consume: bought to order instead of arriving with every supply truck — when the stock falls to
+   * `low`, `refill` more are ordered and arrive this many hours later (spare dies, rolls …)
+   */
+  lead: z.number().positive().optional(),
 });
 export type InventoryItemCfg = z.infer<typeof InventoryItem>;
+
+/**
+ * A wearing tool counted in units it has made: forging die, trim die, cutter, punch, mould.
+ * Near the end of its life measurements drift towards the limits; at the planned change point
+ * (`limit` × `life`) it is changed as soon as the machine is free, at the end of its life the machine
+ * stops for the change. A change uses one spare from inventory when `spare` names an item.
+ */
+const Tooling = z.object({
+  label: z.string(),
+  life: z.number().int().positive(),
+  /** seconds a change takes */
+  change: z.number().positive().default(600),
+  /** inventory key of the spare a change uses up */
+  spare: z.string().optional(),
+  /** how far wear pushes measurements at end of life, in sigmas (0 = no effect) */
+  drift: z.number().min(0).default(3),
+  /** planned change point as a share of the life (0.85 = change at 85 %) */
+  limit: z.number().min(0.3).max(1).default(1),
+  /** removed tools are reconditioned (a die re-sunk) and come back as spares after `hours`; `rate` is the share that can be */
+  repair: z.object({ hours: z.number().positive(), rate: z.number().min(0).max(1) }).optional(),
+});
+export type ToolingCfg = z.infer<typeof Tooling>;
+/** per-step tooling overrides: no defaults, so only what the step names replaces the machine's */
+const ToolingPatch = z.object({
+  label: z.string().optional(),
+  life: z.number().int().positive().optional(),
+  change: z.number().positive().optional(),
+  spare: z.string().optional(),
+  drift: z.number().min(0).optional(),
+  limit: z.number().min(0.3).max(1).optional(),
+});
 
 export const Machine = z.object({
   label: z.string(),
@@ -151,16 +205,28 @@ export const Machine = z.object({
    * Near the end of its life measurements drift towards the limits; at the end the machine stops
    * for a change, which uses one spare from inventory when `spare` names an item.
    */
-  tooling: z.object({
-    label: z.string(),
-    life: z.number().int().positive(),
-    /** seconds a change takes */
-    change: z.number().positive().default(600),
-    /** inventory key of the spare a change uses up */
-    spare: z.string().optional(),
-    /** how far wear pushes measurements at end of life, in sigmas (0 = no effect) */
-    drift: z.number().min(0).default(3),
-  }).optional(),
+  tooling: Tooling.optional(),
+  /** fuel burnt per hour (natural gas for a furnace …), idle / running */
+  fuel: z.object({ label: z.string(), unit: z.string(), idle: z.number().min(0), run: z.number().min(0) }).optional(),
+  /** how often it breaks down and how long the crew takes; defaults suit a demo, real plants are slower */
+  upkeep: z.object({
+    /** running hours between breakdowns at full health (a worn machine breaks down up to 7× as often) */
+    mtbf: z.number().positive().default(3.33),
+    /** minutes the crew takes to repair a breakdown, [min, max] */
+    repair: z.tuple([z.number().positive(), z.number().positive()]).default([1, 3]),
+    /** running hours until wear calls for planned maintenance */
+    pm: z.number().positive().default(3.06),
+    /** minutes planned maintenance takes, [min, max] */
+    pmTime: z.tuple([z.number().positive(), z.number().positive()]).default([0.67, 1.5]),
+    /** short stops (a part sticking in the die, a jammed chute): per running hour, seconds [min, max], what the operator logs */
+    stops: z.object({
+      perHour: z.number().min(0),
+      secs: z.tuple([z.number().positive(), z.number().positive()]),
+      reasons: z.array(z.string()).min(1),
+    }).optional(),
+  }).default({ mtbf: 3.33, repair: [1, 3], pm: 3.06, pmTime: [0.67, 1.5] }),
+  /** what a unit failed by `rejectRate` is recorded as */
+  defect: z.string().optional(),
   /** default inventory this machine lends / takes back (a step can override) */
   take: Take.optional(),
   give: z.array(z.string()).optional(),
@@ -180,6 +246,10 @@ export const Step = z.union([
     cycle: z.number().positive().optional(),
     makes: z.string().optional(),
     measure: Measure.optional(),
+    /** kW idle / running for this step (an induction heater sized for a heavier billet …) */
+    power: z.object({ idle: z.number(), run: z.number() }).optional(),
+    /** tooling overrides for this step (a smaller die lasts longer …) */
+    tooling: ToolingPatch.optional(),
     /** inventory lent out (or used up) when a unit finishes this step; the unit waits if there is not enough */
     take: Take.optional(),
     /** lent inventory the unit hands back at this step (anything still held is returned when it leaves) */

@@ -1,5 +1,5 @@
 // Live objects the simulation mutates. Static plant structure comes from core/layout.
-import type { MachineCfg, MeasureCfg } from '@/config/schema';
+import type { MachineCfg, MeasureCfg, ToolingCfg } from '@/config/schema';
 import type { LineLayout, Waypoint } from '@/core/layout';
 
 export type AssetType = 'station' | 'conveyor' | 'buffer' | 'outfeed' | 'warehouse' | 'fgzone' | 'agv' | 'truck';
@@ -43,6 +43,8 @@ export interface Product {
   stall: number;
   /** inventory this unit has been lent (tents, tableware …), by key */
   held?: Record<string, number>;
+  /** failed a check and was reworked: not first-pass good */
+  rework?: boolean;
 }
 
 /** Live count of one inventory item of the plant. */
@@ -55,6 +57,8 @@ export interface InventoryState {
   avail: number;
   low: number;
   refill: number;
+  /** hours from order to delivery for items bought to order */
+  lead?: number;
 }
 
 export interface Cargo { kind: 'raw' | 'fg'; n: number }
@@ -124,7 +128,7 @@ export interface Asset {
   /** label of the inventory item this station is waiting for */
   waitFor?: string;
   /** wearing tool (die, cutter …): units made with the current one */
-  tool?: { label: string; life: number; used: number; change: number; spare?: string; drift: number };
+  tool?: ToolingCfg & { used: number };
   /** seconds left of a tool change */
   changing: number;
   reading?: { v: number; ok: boolean; at: number };
@@ -198,7 +202,7 @@ export type SimEvent =
   | { type: 'reject'; line: string; asset: string; x: number; z: number; kind: ProductKind }
   | { type: 'fault'; asset: string };
 
-export type Command = 'start' | 'stop' | 'speed' | 'reset' | 'maint' | 'fault' | 'restock' | 'ship' | 'retool';
+export type Command = 'start' | 'stop' | 'speed' | 'reset' | 'maint' | 'fault' | 'restock' | 'ship' | 'retool' | 'toollimit';
 export interface CommandResult { ok: boolean; msg: string }
 
 export interface LineKpi { tp: number; perf: number; avail: number; quality: number; oee: number; good: number; scrap: number }

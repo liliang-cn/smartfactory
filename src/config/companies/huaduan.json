@@ -16,14 +16,14 @@
           "name": "曲轴 {n} 线",
           "note": "热模锻",
           "product": "crankshaft",
-          "route": "hot-die",
+          "route": "hot-die-crank",
           "repeat": 4
         },
         {
           "name": "连杆 {n} 线",
           "note": "热模锻",
           "product": "conrod",
-          "route": "hot-die",
+          "route": "hot-die-conrod",
           "repeat": 2
         }
       ]
@@ -64,14 +64,14 @@
           "name": "主轴 {n} 线",
           "note": "自由锻",
           "product": "shaft",
-          "route": "open-die",
+          "route": "open-die-shaft",
           "repeat": 2
         },
         {
           "name": "模块 {n} 线",
           "note": "自由锻",
           "product": "block",
-          "route": "open-die",
+          "route": "open-die-block",
           "repeat": 2
         }
       ]
