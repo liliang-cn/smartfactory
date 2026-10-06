@@ -87,7 +87,7 @@ export interface PlantState {
     verdict: Asset['verdict'] | null;
     live: LiveValues | null;
   })[];
-  lines: { id: string; spawnT: number; pid: number; good: number; scrap: number; tp: number; products: ProductTuple[] }[];
+  lines: { id: string; spawnT: number; pid: number; good: number; scrap: number; tp: number; products: ProductTuple[]; lot?: [string, string] }[];
   agvs: Pick<AgvState, 'idx' | 'x' | 'z' | 'heading' | 'cargo' | 'mode' | 'dwell' | 'waiting' | 'waitedT' | 'task'>[] & { id: string }[];
   trucks: (Pick<TruckState, 'idx' | 'x' | 'z' | 'heading' | 'phase' | 'wait' | 'dock' | 'load'> & { id: string })[];
   alarms: Alarm[];
@@ -1364,6 +1364,7 @@ export class PlantSim {
       })),
       lines: this.lines.map((l) => ({
         id: l.id, spawnT: p3(l.spawnT), pid: l.pid, good: l.good, scrap: l.scrap, tp: l.doneTimes.length,
+        lot: l.lot ? [l.lot.no, l.lot.supplier] as [string, string] : undefined,
         products: l.products.map((x) => [x.id, p3(x.s), x.done, x.proc, p3(x.t), x.kind, p3(x.stall), x.held ?? null] as ProductTuple),
       })),
       agvs: this.agvs.map((g) => ({
@@ -1455,6 +1456,7 @@ export class PlantSim {
       if (!l) continue;
       l.spawnT = x.spawnT;
       l.pid = x.pid;
+      if (x.lot) l.lot = { no: x.lot[0], supplier: x.lot[1], factor: l.lot?.factor ?? 1, left: l.lot?.no === x.lot[0] ? l.lot.left : 0 };
       l.good = x.good;
       l.scrap = x.scrap;
       // Only the count of the last hour's completions matters locally (throughput KPI).

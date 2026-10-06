@@ -40,7 +40,7 @@ export function Tracker() {
         <div className="mb-3.5 flex items-center gap-2.5">
           <span className="grid size-[22px] place-items-center rounded-md bg-primary text-primary-foreground"><ClipboardListIcon className="size-3.5" /></span>
           <h3 className="shrink-0 whitespace-nowrap text-[15px] font-extrabold">{layout.terms.order?.title ?? '工单跟踪'}</h3>
-          <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{line.name}  {o.no}  {o.part}</span>
+          <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{line.name}  {o.no}  {o.part}{line.lot?.no ? `  炉号 ${line.lot.no}${line.lot.supplier ? `（${line.lot.supplier}）` : ''}` : ''}</span>
           <div className="ml-auto flex max-w-[50%] shrink-0 gap-0.5 overflow-x-auto rounded-lg bg-muted p-[3px] [scrollbar-width:none]">
             {sim.lines.map((l) => (
               <button

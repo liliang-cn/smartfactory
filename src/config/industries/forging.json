@@ -306,14 +306,14 @@
         {
           "name": "华东特钢",
           "share": 0.6,
-          "bad": 0.04,
-          "factor": 3
+          "bad": 0.03,
+          "factor": 10
         },
         {
           "name": "西岭钢铁",
           "share": 0.4,
-          "bad": 0.18,
-          "factor": 4
+          "bad": 0.15,
+          "factor": 10
         }
       ]
     },
@@ -574,14 +574,14 @@
         {
           "name": "华东特钢",
           "share": 0.6,
-          "bad": 0.04,
-          "factor": 3
+          "bad": 0.03,
+          "factor": 10
         },
         {
           "name": "西岭钢铁",
           "share": 0.4,
-          "bad": 0.18,
-          "factor": 4
+          "bad": 0.15,
+          "factor": 10
         }
       ]
     },
@@ -696,14 +696,14 @@
         {
           "name": "北方重钢",
           "share": 0.7,
-          "bad": 0.05,
-          "factor": 3
+          "bad": 0.04,
+          "factor": 8
         },
         {
           "name": "临江钢铁",
           "share": 0.3,
           "bad": 0.15,
-          "factor": 3
+          "factor": 8
         }
       ]
     },
@@ -829,13 +829,13 @@
           "name": "兴华轴承钢",
           "share": 0.8,
           "bad": 0.03,
-          "factor": 3
+          "factor": 10
         },
         {
           "name": "临江钢铁",
           "share": 0.2,
           "bad": 0.15,
-          "factor": 4
+          "factor": 10
         }
       ]
     },
