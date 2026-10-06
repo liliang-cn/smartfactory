@@ -738,10 +738,10 @@ func (e *Engine) RestoreJSON(company, state string) string { return e.str("resto
 
 // WhatIf runs lines of a plant hours ahead from their current state twice, as they are and with
 // the changes ({match, command, arg}) applied, and returns both summaries as JSON.
-func (e *Engine) WhatIf(company, plant string, lines []string, hours, dt float64, changes any, seed int) string {
+func (e *Engine) WhatIf(company, plant string, lines []string, hours, dt float64, changes any, seed, runs int) string {
 	l, _ := json.Marshal(lines)
 	c, _ := json.Marshal(changes)
-	return e.str("whatIf", company, plant, string(l), hours, dt, string(c), seed)
+	return e.str("whatIf", company, plant, string(l), hours, dt, string(c), seed, runs)
 }
 
 // Bundle is the engine's JavaScript, for running it elsewhere (a what-if in Node).

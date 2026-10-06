@@ -139,10 +139,10 @@ metrics:
     agg: sum
     expr: "run_s / 3600.0"
   - name: ideal_output_hours
-    description: "完成件数按理论节拍折算的时间（小时）。"
+    description: "瓶颈工序加工的件数按理论节拍折算的时间（小时）。"
     entity: line_hour
     agg: sum
-    expr: "produced * ideal_cycle_s / 3600.0"
+    expr: "neck_cycles * ideal_cycle_s / 3600.0"
   - name: good_ideal_hours
     description: "合格件数按理论节拍折算的时间（小时）。"
     entity: line_hour
@@ -154,7 +154,7 @@ metrics:
     formula: "line_run_hours / nullif(planned_hours, 0)"
     additivity: non_additive
   - name: performance
-    description: "性能开动率 = 理论节拍折算时间 / 加工时间。"
+    description: "性能开动率 = 瓶颈工序加工件数 × 理论节拍 / 瓶颈工序加工时间（不超过 100%）。"
     synonyms: [性能开动率, 速度开动率]
     formula: "ideal_output_hours / nullif(line_run_hours, 0)"
     additivity: non_additive
@@ -166,19 +166,19 @@ metrics:
 
   # ---- machine time (machine grain) ----
   - name: machine_run_hours
-    description: "设备加工时间（小时）。"
+    description: "设备加工时间（小时），按设备累加：按产线分组时是这条线所有设备之和，不是产线时间。"
     synonyms: [设备运行时间, 加工时间]
     entity: machine_hour
     agg: sum
     expr: "run_s / 3600.0"
   - name: starved_hours
-    description: "设备空等时间（小时）：在线但没有工件（待料）。"
+    description: "设备空等时间（小时）：在线但没有工件（待料）。按设备累加，按产线分组时是全线所有设备之和；非瓶颈设备空等是正常的，看产线损失用 availability。"
     synonyms: [待料时间, 空等时间]
     entity: machine_hour
     agg: sum
     expr: "idle_s / 3600.0"
   - name: blocked_hours
-    description: "设备被堵时间（小时）：下游不接料或等备件。"
+    description: "设备被堵时间（小时）：下游不接料或等备件。按设备累加，按产线分组时是全线所有设备之和。"
     synonyms: [堵料时间, 阻塞时间]
     entity: machine_hour
     agg: sum

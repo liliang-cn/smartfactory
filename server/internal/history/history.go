@@ -134,6 +134,7 @@ type batch struct {
 	LineHours []struct {
 		Line, Hour                             string
 		Planned, Run                           float64
+		NeckCycles                             int
 		Started, Produced, Good, Rework, Scrap int
 		GoodKg, InputKg, IdealCycle            float64
 	} `json:"lineHours"`
@@ -230,11 +231,12 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 				r.Machine, cal(r.Hour), r.Run, r.Idle, r.Blocked, r.Fault, r.Maint, r.Changeover, r.Stopped, r.Cycles, r.Scrap, r.Rework, r.Kwh, r.Fuel)
 		}
 		for _, r := range x.LineHours {
-			b.Queue(`INSERT INTO line_hours VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			b.Queue(`INSERT INTO line_hours (line_id, hour, planned_s, run_s, started, produced, good, rework, scrap, good_kg, input_kg, ideal_cycle_s, neck_cycles)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 				ON CONFLICT (line_id, hour) DO UPDATE SET planned_s=line_hours.planned_s+$3, run_s=line_hours.run_s+$4,
 				started=line_hours.started+$5, produced=line_hours.produced+$6, good=line_hours.good+$7, rework=line_hours.rework+$8,
-				scrap=line_hours.scrap+$9, good_kg=line_hours.good_kg+$10, input_kg=line_hours.input_kg+$11`,
-				r.Line, cal(r.Hour), r.Planned, r.Run, r.Started, r.Produced, r.Good, r.Rework, r.Scrap, r.GoodKg, r.InputKg, r.IdealCycle)
+				scrap=line_hours.scrap+$9, good_kg=line_hours.good_kg+$10, input_kg=line_hours.input_kg+$11, neck_cycles=line_hours.neck_cycles+$13`,
+				r.Line, cal(r.Hour), r.Planned, r.Run, r.Started, r.Produced, r.Good, r.Rework, r.Scrap, r.GoodKg, r.InputKg, r.IdealCycle, r.NeckCycles)
 		}
 		for _, r := range x.Quality {
 			b.Queue(`INSERT INTO quality_hours VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`,

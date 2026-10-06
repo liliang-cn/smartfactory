@@ -29,6 +29,8 @@ interface MachineHour {
 }
 interface LineHour {
   line: string; hour: string; planned: number; run: number;
+  /** units the bottleneck machine finished: what performance counts (setup pieces scrapped upstream never reach it) */
+  neckCycles: number;
   started: number; produced: number; good: number; rework: number; scrap: number; goodKg: number; inputKg: number; idealCycle: number;
 }
 interface QualityHour {
@@ -157,7 +159,11 @@ export class History {
 
   // ---------- events from the plant ----------
 
-  cycle(a: Asset) { this.machineHour(a).cycles++; }
+  cycle(a: Asset) {
+    this.machineHour(a).cycles++;
+    const line = a.line;
+    if (line && (!this.only || this.only.has(line.id)) && this.neck(line) === a) this.lineHour(line).neckCycles++;
+  }
 
   /** a unit left the end of the line */
   output(line: Line, p: Product) {
@@ -244,7 +250,7 @@ export class History {
     let h = this.lh.get(line.id);
     if (!h) {
       h = {
-        line: this.id(line), hour: localTime(this.hour), planned: 0, run: 0, started: 0, produced: 0, good: 0, rework: 0, scrap: 0,
+        line: this.id(line), hour: localTime(this.hour), planned: 0, run: 0, neckCycles: 0, started: 0, produced: 0, good: 0, rework: 0, scrap: 0,
         goodKg: 0, inputKg: 0, idealCycle: this.neck(line).cycle,
       };
       this.lh.set(line.id, h);

@@ -352,7 +352,7 @@ function seeded(seed: number) {
  * changes applied — and sums up both. Meant for an offline engine restored from the live state.
  * A change `match`es an asset id (HP-201), an id prefix (HP: every die press) or a line name.
  */
-function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt: number, changesJson: string, seed: number): string {
+function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt: number, changesJson: string, seed: number, runs = 1): string {
   return result(() => {
     const p = get(c)?.byId[plantId];
     if (!p) throw new Error(`找不到 ${c}/${plantId}`);
@@ -363,7 +363,7 @@ function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt
     const changes = JSON.parse(changesJson || '[]') as Change[];
     const saved = p.saveState();
     const random = Math.random;
-    const run = (apply: boolean) => {
+    const run = (apply: boolean, seed: number) => {
       p.restoreState(saved);
       for (const a of p.assets.values()) a.live = undefined;
       Math.random = seeded(seed);
@@ -388,13 +388,67 @@ function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt
       return { applied, ...sum(b, lines.map((l) => [`${plantId}-${l.id}`, l.name] as [string, string])) };
     };
     try {
-      const baseline = run(false);
-      const scenario = run(true);
-      return { company: c, plant: plantId, hours, dt, seed, lines: lines.map((l) => l.name), changes: scenario.applied, baseline: { ...baseline, applied: undefined }, scenario: { ...scenario, applied: undefined } };
+      // one run decides nothing: a breakdown in one and not the other swamps the change. Several
+      // seeds, each shared by the pair, and the mean of each side.
+      const n = Math.max(1, Math.min(8, Math.round(runs)));
+      const base: ReturnType<typeof run>[] = [];
+      const plan: ReturnType<typeof run>[] = [];
+      for (let i = 0; i < n; i++) {
+        base.push(run(false, seed + i));
+        plan.push(run(true, seed + i));
+      }
+      const before = average(base);
+      const after = average(plan);
+      return {
+        company: c, plant: plantId, hours, runs: n, seeds: [seed, seed + n - 1], lines: lines.map((l) => l.name), changes: plan[0].applied,
+        说明: '现状 = 不做任何改动；方案 = 应用 changes 之后；两边各跑 runs 次（同一组随机种子）取平均。变化 = 方案 − 现状。每次的 OEE 和废品率列在 每次 里，用来判断差异是否大于随机波动。',
+        现状: before, 方案: after, 变化: difference(before, after),
+        每次: base.map((b, i) => ({ seed: seed + i, 现状: b.lines.map((l) => ({ line: l.line, oee: l.oee, scrapRate: l.scrapRate })), 方案: plan[i].lines.map((l) => ({ line: l.line, oee: l.oee, scrapRate: l.scrapRate })) })),
+      };
     } finally {
       Math.random = random;
       p.restoreState(saved);
     }
+  });
+}
+
+type Summary = ReturnType<typeof sum>;
+
+/** The mean of several runs' summaries: numbers averaged, counts per category averaged. */
+function average(xs: Summary[]): Summary {
+  const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+  const mean = (vs: (number | null)[]) => { const v = vs.filter((x): x is number => x !== null); return v.length ? r4(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+  const meanMap = (ms: Record<string, number>[]) => {
+    const out: Record<string, number> = {};
+    for (const m of ms) for (const [k, v] of Object.entries(m)) out[k] = (out[k] ?? 0) + v / ms.length;
+    for (const k in out) out[k] = Math.round(out[k] * 10) / 10;
+    return out;
+  };
+  return {
+    lines: xs[0].lines.map((l, i) => {
+      const ls = xs.map((x) => x.lines[i]);
+      const out: Record<string, unknown> = { line: l.line };
+      for (const k of Object.keys(l) as (keyof typeof l)[]) {
+        if (k === 'line') continue;
+        out[k] = k === 'downtimeMinutes' || k === 'defects' ? meanMap(ls.map((x) => x[k] as Record<string, number>)) : mean(ls.map((x) => x[k] as number | null));
+      }
+      return out as typeof l;
+    }),
+    spares: xs[0].spares.map((s, i) => ({ ...s, min: Math.min(...xs.map((x) => x.spares[i]?.min ?? s.min)), stockoutHours: mean(xs.map((x) => x.spares[i]?.stockoutHours ?? 0)) ?? 0 })),
+  };
+}
+
+/** after − before, line by line, for the headline numbers. */
+function difference(before: Summary, after: Summary) {
+  const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+  const d = (a: number | null, b: number | null) => (a === null || b === null ? null : r4(b - a));
+  return before.lines.map((b, i) => {
+    const a = after.lines[i];
+    return {
+      line: b.line, produced: d(b.produced, a.produced), good: d(b.good, a.good), scrap: d(b.scrap, a.scrap),
+      scrapRate: d(b.scrapRate, a.scrapRate), firstPassYield: d(b.firstPassYield, a.firstPassYield),
+      availability: d(b.availability, a.availability), oee: d(b.oee, a.oee), toolChanges: d(b.toolChanges, a.toolChanges),
+    };
   });
 }
 

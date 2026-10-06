@@ -32,7 +32,8 @@ type simIn struct {
 	Lines   []string    `json:"lines,omitempty" jsonschema:"line names to simulate, e.g. 曲轴 2 线; keep it to the lines the plan touches (each extra line slows the run)"`
 	Hours   float64     `json:"hours,omitempty" jsonschema:"how far ahead to simulate, 8–168 hours (default 72)"`
 	Changes []simChange `json:"changes" jsonschema:"what the plan changes; empty runs the baseline only"`
-	Seed    int         `json:"seed,omitempty" jsonschema:"random seed; the same seed gives the baseline and the plan the same luck"`
+	Seed    int         `json:"seed,omitempty" jsonschema:"first random seed; run i uses seed+i for both sides, so they share the same luck"`
+	Runs    int         `json:"runs,omitempty" jsonschema:"how many seeds to average, 1–6 (default 3): one run cannot tell a change from a lucky breakdown"`
 }
 
 type simOut struct {
@@ -61,7 +62,7 @@ const simWait = 20 * time.Second
 
 func addSimTool(s *mcp.Server, eng *engine.Engine) {
 	mcp.AddTool(s, &mcp.Tool{Name: "simulate_plan", Description: "What-if on the twin: copies the plant's current state, runs the given lines ahead twice — as they are, and with the changes applied — " +
-		"and returns both: output, first-pass yield, scrap rate, availability, OEE, tool changes and average hits per change, downtime by category, defects by type, " +
+		"and returns the mean of both over several seeds (现状 / 方案), their difference (变化 = 方案 − 现状) and each run's OEE and scrap rate (每次), so a change can be told from luck: output, first-pass yield, scrap rate, availability, OEE, tool changes and average hits per change, downtime by category, defects by type, " +
 		"and spare stock (minimum, stock-out hours). Nothing on the live plant changes. A run takes a few minutes: if status is running, call again with the same " +
 		"arguments later. Logistics are assumed to keep up; it predicts, the history database measures."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in simIn) (*mcp.CallToolResult, simOut, error) {
@@ -75,6 +76,10 @@ func addSimTool(s *mcp.Server, eng *engine.Engine) {
 			if in.Seed == 0 {
 				in.Seed = 7
 			}
+			if in.Runs == 0 {
+				in.Runs = 3
+			}
+			in.Runs = min(max(in.Runs, 1), 6)
 			for _, c := range in.Changes {
 				if c.Command != "toollimit" && c.Command != "speed" {
 					return nil, simOut{}, fmt.Errorf("change %q: command must be toollimit or speed", c.Match)
@@ -109,7 +114,7 @@ func addSimTool(s *mcp.Server, eng *engine.Engine) {
 				if j.err != nil {
 					return nil, simOut{Status: "failed", Note: j.err.Error()}, nil
 				}
-				return nil, simOut{Status: "done", Note: fmt.Sprintf("模拟 %.0f 小时，用时 %s；同一随机种子下基线与方案对比", in.Hours, time.Since(j.started).Round(time.Second)), Result: j.out}, nil
+				return nil, simOut{Status: "done", Note: fmt.Sprintf("模拟 %.0f 小时 × %d 组随机种子，用时 %s；现状与方案各取平均，变化 = 方案 − 现状", in.Hours, in.Runs, time.Since(j.started).Round(time.Second)), Result: j.out}, nil
 			default:
 				return nil, simOut{Status: "running", Note: fmt.Sprintf("推演进行中（已 %s），约 1–4 分钟完成；稍后用完全相同的参数再调用一次取结果", time.Since(j.started).Round(time.Second))}, nil
 			}
@@ -141,7 +146,7 @@ func (j *simJob) run(eng *engine.Engine, state string, in simIn) {
 			j.err = fmt.Errorf("could not copy the plant's state (%v)", r.Skipped)
 			return
 		}
-		raw = off.WhatIf(in.Company, in.Plant, in.Lines, in.Hours, 2, in.Changes, in.Seed)
+		raw = off.WhatIf(in.Company, in.Plant, in.Lines, in.Hours, 2, in.Changes, in.Seed, in.Runs)
 	}
 	var out map[string]any
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
@@ -168,7 +173,7 @@ for (const ind of inp.industries) SF.addIndustry(JSON.stringify(ind));
 if (inp.companyConfig) SF.addCompany(JSON.stringify(inp.companyConfig));
 const r = JSON.parse(SF.restore(inp.company, inp.state));
 if (!r.restored.length) { process.stdout.write(JSON.stringify({ ok: false, errors: ['could not copy the plant state: ' + r.skipped.join(', ')] })); process.exit(0); }
-process.stdout.write(SF.whatIf(inp.company, inp.plant, JSON.stringify(inp.lines || []), inp.hours, inp.dt, JSON.stringify(inp.changes || []), inp.seed));
+process.stdout.write(SF.whatIf(inp.company, inp.plant, JSON.stringify(inp.lines || []), inp.hours, inp.dt, JSON.stringify(inp.changes || []), inp.seed, inp.runs));
 `
 
 var bundleOnce struct {
@@ -196,7 +201,7 @@ func runInNode(node string, eng *engine.Engine, state string, in simIn) (string,
 	}
 	input := map[string]any{
 		"company": in.Company, "state": state, "plant": in.Plant, "lines": in.Lines, "hours": in.Hours, "dt": 2,
-		"changes": in.Changes, "seed": in.Seed, "industries": []json.RawMessage{},
+		"changes": in.Changes, "seed": in.Seed, "runs": in.Runs, "industries": []json.RawMessage{},
 	}
 	if company, inds, ok := eng.RuntimeCompany(in.Company); ok {
 		list := []json.RawMessage{}

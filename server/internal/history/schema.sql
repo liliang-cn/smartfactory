@@ -196,6 +196,8 @@ ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS part_name text NOT NULL DEFAULT
 ALTER TABLE lots ADD COLUMN IF NOT EXISTS part_name text NOT NULL DEFAULT '';
 -- a family (the line's product) and each of its part numbers are rows here; family names the family
 ALTER TABLE parts ADD COLUMN IF NOT EXISTS family text NOT NULL DEFAULT '';
+-- units the line's bottleneck machine finished in the hour (what performance is counted on)
+ALTER TABLE line_hours ADD COLUMN IF NOT EXISTS neck_cycles integer NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS machine_hours_hour ON machine_hours (hour);
 CREATE INDEX IF NOT EXISTS line_hours_hour ON line_hours (hour);
