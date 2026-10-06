@@ -51,7 +51,8 @@ var (
 	simSlot = make(chan struct{}, 1) // one run at a time: they are CPU-bound
 )
 
-const simWait = 45 * time.Second
+// under the 30 s a typical MCP client waits for a tool call
+const simWait = 20 * time.Second
 
 func addSimTool(s *mcp.Server, eng *engine.Engine) {
 	mcp.AddTool(s, &mcp.Tool{Name: "simulate_plan", Description: "What-if on the twin: copies the plant's current state, runs the given lines ahead twice — as they are, and with the changes applied — " +
