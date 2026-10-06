@@ -165,14 +165,14 @@ type cmdIn struct {
 	Company string   `json:"company" jsonschema:"company id"`
 	Plant   string   `json:"plant" jsonschema:"plant id"`
 	Asset   string   `json:"asset" jsonschema:"asset id"`
-	Command string   `json:"command" jsonschema:"one of start, stop, reset, maint, speed, fault, restock, ship, retool (change a worn die / cutter)"`
-	Arg     *float64 `json:"arg,omitempty" jsonschema:"for speed: 0.5 to 1.5 (fraction of nominal)"`
+	Command string   `json:"command" jsonschema:"one of start, stop, reset, maint, speed, fault, restock, ship, retool (change a worn die / cutter now), toollimit (planned die / tool change point)"`
+	Arg     *float64 `json:"arg,omitempty" jsonschema:"for speed: 0.5 to 1.5 (fraction of nominal); for toollimit: 0.3 to 1 (share of the tool life at which it is changed, e.g. 0.85)"`
 }
 type cmdOut struct {
 	Sent string `json:"sent"`
 }
 
-var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship", "retool"}
+var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship", "retool", "toollimit"}
 
 // New builds the MCP server.
 func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
@@ -285,7 +285,7 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 			return nil, sourcesOut{Sources: hub.Sources()}, nil
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "send_command", Description: "Operate a machine: start, stop, reset a fault, toggle maintenance, set speed (arg 0.5–1.5), inject a fault drill, restock the raw store, ship finished goods. Applies to the server-side twin that every viewer sees, and is forwarded to devices through the protocol adapters."},
+	mcp.AddTool(s, &mcp.Tool{Name: "send_command", Description: "Operate a machine: start, stop, reset a fault, toggle maintenance, set speed (arg 0.5–1.5), inject a fault drill, restock the raw store, ship finished goods, change a die now (retool) or set the planned die-change point (toollimit, arg 0.3–1 of the die life). Applies to the server-side twin that every viewer sees, and is forwarded to devices through the protocol adapters."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in cmdIn) (*mcp.CallToolResult, cmdOut, error) {
 			if !slices.Contains(commands, in.Command) {
 				return nil, cmdOut{}, fmt.Errorf("unknown command %q; use one of %v", in.Command, commands)
@@ -302,6 +302,7 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 		})
 
 	addSceneTools(s, eng)
+	addSimTool(s, eng)
 	return s
 }
 

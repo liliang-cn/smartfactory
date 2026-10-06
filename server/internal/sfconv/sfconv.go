@@ -49,7 +49,7 @@ const (
 var States = []string{"idle", "running", "blocked", "stopped", "fault", "maint", "changeover"}
 
 // Commands by code; 0 means none.
-var Commands = []string{"", "start", "stop", "reset", "maint", "speed", "fault", "retool"}
+var Commands = []string{"", "start", "stop", "reset", "maint", "speed", "fault", "retool", "toollimit"}
 
 func StateCode(s string) uint16 {
 	for i, v := range States {

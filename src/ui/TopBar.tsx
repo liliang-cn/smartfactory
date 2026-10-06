@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BellIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
+import { BellIcon, CheckIcon, ChevronDownIcon, LightbulbIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -213,6 +213,26 @@ const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcu
  * Shown when the app is served by the SmartFactory server: the protocol links to real equipment
  * (shared by the whole server) and which machines each one feeds.
  */
+/** The advisor console (DataIntelligence) that reads this company's history, when there is one. */
+let advisors: Promise<Record<string, string>> | null = null;
+function AdvisorLink() {
+  const company = runtime().bundle.company.id;
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    advisors ??= fetch('/api/advisors').then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    advisors.then((m) => setUrl(m?.[company]));
+  }, [company]);
+  if (!url) return null;
+  return (
+    <Button asChild variant="outline" className="h-9 gap-1.5 px-3 max-md:size-9 max-md:p-0">
+      <a href={url} target="_blank" rel="noreferrer" title="经营顾问：用历史数据找原因、提方案、验收效果">
+        <LightbulbIcon className="size-4" />
+        <span className="max-md:hidden">顾问</span>
+      </a>
+    </Button>
+  );
+}
+
 function LiveLinks() {
   useTick();
   const { status, sources } = useLive();
@@ -307,6 +327,7 @@ export function TopBar() {
       <div className="flex-1 max-md:hidden" />
       <SpeedToggle />
       <LiveLinks />
+      <AdvisorLink />
       <LiveClock />
       <AlarmBell />
       <div className="flex items-center gap-2.5 max-xl:hidden">

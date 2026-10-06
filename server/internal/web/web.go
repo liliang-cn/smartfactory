@@ -28,6 +28,8 @@ type Server struct {
 	Static  fs.FS
 	MCP     http.Handler
 	Log     *slog.Logger
+	// Advisors is the advisor console (DataIntelligence) of each company that has one.
+	Advisors map[string]string
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -38,6 +40,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/live", s.live)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.CompanyIDs(), "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.sources()})
+	})
+	mux.HandleFunc("GET /api/advisors", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, s.Advisors)
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
