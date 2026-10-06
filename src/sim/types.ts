@@ -192,6 +192,8 @@ export interface Line {
   pmWeek?: number;
   /** the work order being run */
   job?: Job;
+  /** the efficiency the planner promises due dates by: what the line's recent orders actually ran at */
+  planEff?: number;
   layout: LineLayout;
   z: number;
   x0: number;

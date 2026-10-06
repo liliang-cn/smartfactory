@@ -27,6 +27,8 @@ const HOUR = 3600_000;
 const end = Math.floor((until ? Number(until) : Date.now()) / HOUR) * HOUR;
 const start = end - Number(days) * 24 * HOUR;
 out({ dims: JSON.parse(SF.historyDims(company)), from: start, to: end });
+// the warm-up runs in the days before the start, so what it leaves (open orders, lots) is dated right
+SF.setClock(company, start - Number(warmup) * 86_400_000);
 if (!SF.advance(company, Number(warmup) * 86400, 1)) throw new Error(`no company ${company}`);
 SF.historyOn(company, start);
 for (let h = 0; h < Number(days) * 24; h++) {

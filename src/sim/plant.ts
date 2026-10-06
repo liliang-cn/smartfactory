@@ -307,9 +307,9 @@ export class PlantSim {
     line.job = {
       no: `${parts[0] || 'MO'}-${ymd}-${parts[parts.length - 1]}${String(seq % 100).padStart(2, '0')}`, seq, variant: v,
       partNo: vs[v].partNo, name: vs[v].name, weight: vs[v].weight ?? L.product.weight ?? 0, input: vs[v].input ?? L.product.input ?? 0, qty, good: 0, scrap: 0, issued: now,
-      // the customer's due date: planned at 82 % of the bottleneck's rate with four hours' slack,
-      // so a bad day (a breakdown, no spare die, a bad heat, a changeover) makes it late
-      due: now + ((qty * neck) / 0.82) * 1000 + 4 * 3600_000,
+      // the planner promises at the efficiency the line's recent orders ran at, plus three hours:
+      // a bad day (a breakdown, no spare die, a bad heat, a changeover) makes the order late
+      due: now + ((qty * neck) / (line.planEff ?? 0.75)) * 1000 + 3 * 3600_000,
       heat: line.lot?.no ?? '', supplier: line.lot?.supplier ?? '',
     };
     if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
@@ -338,6 +338,9 @@ export class PlantSim {
     j.good++;
     if (j.good >= j.qty) {
       j.done = this.wall();
+      const neck = Math.max(...line.stations.map((a) => a.cycle));
+      const ran = Math.min(1, Math.max(0.2, (j.qty * neck) / Math.max(1, (j.done - j.issued) / 1000)));
+      line.planEff = 0.7 * (line.planEff ?? 0.75) + 0.3 * ran;
       this.history?.jobDone(line, j);
       this.newJob(line);
     }

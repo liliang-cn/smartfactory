@@ -313,6 +313,14 @@ function historyDims(c: string): string {
   return JSON.stringify({ company: { id: c, name: co.bundle.company.name }, plants, parts: [...parts.values()] });
 }
 
+/** Sets a company's plants' wall clock: `ms` is where they are now (a backfill starts in the past). */
+function setClock(c: string, ms: number): boolean {
+  const co = get(c);
+  if (!co) return false;
+  for (const p of co.plants) p.epoch = ms - p.elapsed * 1000;
+  return true;
+}
+
 /** Runs one company `seconds` ahead in steps of `dt`, nobody watching (history backfill, what-if runs). */
 function advance(c: string, seconds: number, dt: number): boolean {
   const co = get(c);
@@ -433,5 +441,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, removeCompany, industryList, industry, schema,
-  historyOn, history, historyDims, advance, whatIf,
+  historyOn, history, historyDims, advance, whatIf, setClock,
 };
