@@ -35,9 +35,10 @@ interface QualityHour {
 interface StockHour { item: string; label: string; hour: string; min: number; end: number; cap: number }
 interface Downtime { machine: string; line: string; start: string; end: string; category: string; reason: string }
 interface ToolChange { machine: string; line: string; tool: string; start: string; end: string; hits: number; life: number; limit: number; trigger: string }
-interface Defect { machine: string; line: string; at: string; type: string; feature: string; value: number | null; disposition: string; order: string }
+interface Defect { machine: string; line: string; at: string; type: string; feature: string; value: number | null; disposition: string; order: string; heat: string; supplier: string }
+interface LotRow { heat: string; supplier: string; line: string; part: string; first: string; last: string; produced: number; good: number; rework: number; scrap: number }
 export interface WorkOrder {
-  no: string; line: string; part: string; customer: string; heat: string; qty: number;
+  no: string; line: string; part: string; customer: string; heat: string; supplier: string; qty: number;
   issued: string; due: string; completed: string | null; good: number; scrap: number;
 }
 
@@ -50,6 +51,7 @@ export interface HistoryBatch {
   toolChanges: ToolChange[];
   defects: Defect[];
   orders: WorkOrder[];
+  lots: LotRow[];
 }
 
 interface Open { state: AssetState; since: number; short: boolean; reason: string; hits: number; life: number; limit: number; trigger: string }
@@ -67,6 +69,8 @@ export class History {
   private sh = new Map<string, StockHour>();
   private open = new Map<string, Open>();
   private orders = new Map<string, OrderRun>();
+  /** lots touched since the last drain */
+  private lots = new Map<string, LotRow>();
   private out: HistoryBatch = History.empty();
   /** record only these lines (a what-if run of part of the plant) */
   only?: Set<string>;
@@ -78,11 +82,12 @@ export class History {
     this.plantNo = plantNo;
     this.t0 = t0;
     this.hour = hourOf(this.now());
+    sim.epoch = t0;
     for (const line of sim.lines) this.issue(line, 1);
   }
 
   static empty(): HistoryBatch {
-    return { machineHours: [], lineHours: [], quality: [], stock: [], downtime: [], toolChanges: [], defects: [], orders: [] };
+    return { machineHours: [], lineHours: [], quality: [], stock: [], downtime: [], toolChanges: [], defects: [], orders: [], lots: [] };
   }
 
   now() { return this.t0 + this.sim.elapsed * 1000; }
@@ -162,6 +167,12 @@ export class History {
     lh.produced++;
     if (p.rework) lh.rework++;
     else lh.good++;
+    const lr = this.lot(line, p);
+    if (lr) {
+      lr.produced++;
+      if (p.rework) lr.rework++;
+      else lr.good++;
+    }
     const prod = line.layout.product;
     lh.goodKg += prod.weight ?? 0;
     const r = this.orders.get(line.id);
@@ -176,10 +187,18 @@ export class History {
   }
 
   /** a unit failed a check: scrapped, or reworked and kept on the line */
-  defect(line: Line, a: Asset, type: string, feature: string, value: number | null, rework: boolean) {
+  defect(line: Line, a: Asset, type: string, feature: string, value: number | null, rework: boolean, p?: Product) {
     const at = localTime(this.now());
     const r = this.orders.get(line.id);
-    this.out.defects.push({ machine: this.id(a), line: this.id(line), at, type, feature, value, disposition: rework ? '返修' : '报废', order: r?.o.no ?? '' });
+    this.out.defects.push({
+      machine: this.id(a), line: this.id(line), at, type, feature, value, disposition: rework ? '返修' : '报废', order: r?.o.no ?? '',
+      heat: p?.lot ?? '', supplier: p?.sup ?? '',
+    });
+    const lr = p && !rework ? this.lot(line, p) : null;
+    if (lr) {
+      lr.produced++;
+      lr.scrap++;
+    }
     const mh = this.machineHour(a);
     const lh = this.lineHour(line);
     if (rework) {
@@ -206,6 +225,18 @@ export class History {
     q.min = Math.min(q.min, v);
     q.max = Math.max(q.max, v);
     if (!ok) q.out++;
+  }
+
+  private lot(line: Line, p: Product) {
+    if (!p.lot) return null;
+    const at = localTime(this.now());
+    let r = this.lots.get(p.lot);
+    if (!r) {
+      r = { heat: p.lot, supplier: p.sup ?? '', line: this.id(line), part: line.layout.product.key, first: at, last: at, produced: 0, good: 0, rework: 0, scrap: 0 };
+      this.lots.set(p.lot, r);
+    }
+    r.last = at;
+    return r;
   }
 
   // ---------- buckets ----------
@@ -273,10 +304,10 @@ export class History {
     const qty = L.order.qty;
     // the customer's due date: planned at 75 % of the bottleneck's rate, plus a day of slack
     const due = now + (qty * this.neck(line).cycle) / 0.75 * 1000 + 24 * HOUR;
-    const heat = `${d.slice(2, 4)}${'ABCDEFGHJK'[Math.floor(Math.random() * 10)]}${String(Math.floor(Math.random() * 1e5)).padStart(5, '0')}`;
+    const heat = line.lot?.no ?? '';
     const o: WorkOrder = {
       no: `${(L.order.no.split('-')[0] || 'MO')}-${ymd}-${this.plantNo}${String(L.no).padStart(2, '0')}${String(seq % 100).padStart(2, '0')}`,
-      line: this.id(line), part: prod.key, customer: prod.customer ?? '', heat, qty,
+      line: this.id(line), part: prod.key, customer: prod.customer ?? '', heat, supplier: line.lot?.supplier ?? '', qty,
       issued: d, due: localTime(due), completed: null, good: 0, scrap: 0,
     };
     this.orders.set(line.id, { o, seq });
@@ -290,6 +321,8 @@ export class History {
   drain(flush = false): HistoryBatch {
     if (flush) this.roll(this.hour);
     const b = this.out;
+    b.lots.push(...this.lots.values());
+    this.lots.clear();
     for (const r of this.orders.values()) b.orders.push({ ...r.o });
     this.out = History.empty();
     return b;

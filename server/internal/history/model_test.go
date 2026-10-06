@@ -31,6 +31,8 @@ func TestModelCompiles(t *testing.T) {
 		{"spc mean by feature", semantic.Query{Metrics: []string{"measure_mean", "out_of_spec_rate"}, GroupBy: []string{"machine", "feature"}}},
 		{"spares", semantic.Query{Metrics: []string{"spare_min_stock", "spare_stockout_hours"}, GroupBy: []string{"plant_name", "spare_item"}}},
 		{"on-time by customer", semantic.Query{Metrics: []string{"on_time_rate", "orders_completed"}, GroupBy: []string{"customer"}}},
+		{"scrap rate by supplier", semantic.Query{Metrics: []string{"lot_scrap_rate", "lots_used"}, GroupBy: []string{"supplier"}}},
+		{"defects by heat", semantic.Query{Metrics: []string{"defects"}, GroupBy: []string{"defect_supplier", "defect_type"}}},
 		{"material yield by part and shift", semantic.Query{Metrics: []string{"material_yield", "good_tonnes"}, GroupBy: []string{"part_name", "shift"}}},
 	}
 	for _, c := range cases {

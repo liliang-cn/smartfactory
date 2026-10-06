@@ -70,6 +70,59 @@
         }
       }
     },
+    "calendar": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "night": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "to": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 24
+            },
+            "stops": {
+              "default": 1,
+              "type": "number",
+              "minimum": 1
+            },
+            "flaws": {
+              "default": 1,
+              "type": "number",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "pm": {
+          "type": "object",
+          "properties": {
+            "hours": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "start": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 23
+            }
+          },
+          "required": [
+            "hours",
+            "start"
+          ]
+        }
+      }
+    },
     "products": {
       "type": "object",
       "propertyNames": {
@@ -97,6 +150,36 @@
           },
           "customer": {
             "type": "string"
+          },
+          "suppliers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "share": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "bad": {
+                  "default": 0.05,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "factor": {
+                  "default": 4,
+                  "type": "number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "name",
+                "share"
+              ]
+            }
           },
           "stages": {
             "type": "object",
@@ -766,6 +849,18 @@
                   "hours",
                   "rate"
                 ]
+              },
+              "setup": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "warm": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -904,6 +999,61 @@
           },
           "defect": {
             "type": "string"
+          },
+          "flaws": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "rate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "material": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "wear": {
+                  "default": 1,
+                  "type": "number",
+                  "minimum": 1
+                },
+                "cold": {
+                  "default": 1,
+                  "type": "number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "type",
+                "rate"
+              ]
+            }
+          },
+          "detects": {
+            "type": "object",
+            "properties": {
+              "types": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "catch": {
+                "default": 0.95,
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "types"
+            ]
           },
           "take": {
             "type": "object",
@@ -1145,6 +1295,16 @@
                       "type": "number",
                       "minimum": 0.3,
                       "maximum": 1
+                    },
+                    "setup": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "warm": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     }
                   }
                 },

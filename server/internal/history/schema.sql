@@ -173,6 +173,26 @@ CREATE TABLE IF NOT EXISTS work_orders (
   on_time      integer NOT NULL
 );
 
+-- one material lot (steel heat) as used on a line: what came out of it
+CREATE TABLE IF NOT EXISTS lots (
+  heat_no    text PRIMARY KEY,
+  supplier   text NOT NULL,
+  line_id    text NOT NULL REFERENCES lines,
+  part_id    text NOT NULL REFERENCES parts,
+  first_at   timestamp NOT NULL,
+  last_at    timestamp NOT NULL,
+  -- the hour it was first used: what "this month's lots" counts by
+  hour       timestamp NOT NULL REFERENCES calendar,
+  produced   integer NOT NULL,
+  good       integer NOT NULL,
+  rework     integer NOT NULL,
+  scrap      integer NOT NULL
+);
+
+ALTER TABLE defects ADD COLUMN IF NOT EXISTS heat_no text NOT NULL DEFAULT '';
+ALTER TABLE defects ADD COLUMN IF NOT EXISTS supplier text NOT NULL DEFAULT '';
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS supplier text NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS machine_hours_hour ON machine_hours (hour);
 CREATE INDEX IF NOT EXISTS line_hours_hour ON line_hours (hour);
 CREATE INDEX IF NOT EXISTS downtime_hour ON downtime (hour);

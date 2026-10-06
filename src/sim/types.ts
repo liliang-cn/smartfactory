@@ -45,6 +45,12 @@ export interface Product {
   held?: Record<string, number>;
   /** failed a check and was reworked: not first-pass good */
   rework?: boolean;
+  /** a flaw left by a step, waiting for the inspection that finds it */
+  flaw?: string;
+  /** the material lot (steel heat) it was made from, its supplier and flaw factor */
+  lot?: string;
+  sup?: string;
+  lf?: number;
 }
 
 /** Live count of one inventory item of the plant. */
@@ -131,6 +137,9 @@ export interface Asset {
   tool?: ToolingCfg & { used: number };
   /** seconds left of a tool change */
   changing: number;
+  /** units still to scrap while setting up a new tool, and units made since the change */
+  setupLeft?: number;
+  sinceChange?: number;
   reading?: { v: number; ok: boolean; at: number };
   rejects: number;
   verdict?: { ok: boolean; at: number };
@@ -160,10 +169,17 @@ export interface LiveValues {
   f: Record<string, number | string | boolean>;
 }
 
+/** A material lot (one steel heat) feeding a line. */
+export interface Lot { no: string; supplier: string; factor: number; left: number }
+
 export interface Line {
   id: string;
   name: string;
   note: string;
+  /** the material lot being used */
+  lot?: Lot;
+  /** the week its planned maintenance last ran */
+  pmWeek?: number;
   layout: LineLayout;
   z: number;
   x0: number;

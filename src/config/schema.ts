@@ -90,6 +90,13 @@ export const Product = z.object({
   /** kg of material that goes in per unit (billet, ingot); weight / input is the material yield */
   input: z.number().positive().optional(),
   customer: z.string().optional(),
+  /**
+   * where the material comes from: each lot (a steel heat) is drawn from a supplier by `share`;
+   * a `bad` share of a supplier's lots carries `factor` times the material-borne flaws
+   */
+  suppliers: z.array(z.object({
+    name: z.string(), share: z.number().positive(), bad: z.number().min(0).max(1).default(0.05), factor: z.number().min(1).default(4),
+  })).optional(),
   stages: z.record(z.string(), z.object({ parts: z.array(Part).min(1) })),
 });
 export type ProductCfg = z.infer<typeof Product>;
@@ -167,6 +174,10 @@ const Tooling = z.object({
   limit: z.number().min(0.3).max(1).default(1),
   /** removed tools are reconditioned (a die re-sunk) and come back as spares after `hours`; `rate` is the share that can be */
   repair: z.object({ hours: z.number().positive(), rate: z.number().min(0).max(1) }).optional(),
+  /** units scrapped while setting up after a change (first-article adjustment) */
+  setup: z.number().int().min(0).default(0),
+  /** units until a new tool is at working temperature; flaws marked `cold` are more likely before that */
+  warm: z.number().int().min(0).default(0),
 });
 export type ToolingCfg = z.infer<typeof Tooling>;
 /** per-step tooling overrides: no defaults, so only what the step names replaces the machine's */
@@ -177,6 +188,8 @@ const ToolingPatch = z.object({
   spare: z.string().optional(),
   drift: z.number().min(0).optional(),
   limit: z.number().min(0.3).max(1).optional(),
+  setup: z.number().int().min(0).optional(),
+  warm: z.number().int().min(0).optional(),
 });
 
 export const Machine = z.object({
@@ -227,6 +240,17 @@ export const Machine = z.object({
   }).default({ mtbf: 3.33, repair: [1, 3], pm: 3.06, pmTime: [0.67, 1.5] }),
   /** what a unit failed by `rejectRate` is recorded as */
   defect: z.string().optional(),
+  /**
+   * flaws this step can leave in a unit, found later by an inspection that `detects` them:
+   * `rate` per unit, times `material` lot factor, up to `wear`× at the end of the tool's life,
+   * `cold`× while a new tool is warming up
+   */
+  flaws: z.array(z.object({
+    type: z.string(), rate: z.number().min(0).max(1),
+    material: z.boolean().default(false), wear: z.number().min(1).default(1), cold: z.number().min(1).default(1),
+  })).optional(),
+  /** an inspection: catches units carrying these flaws (with probability `catch`) and rejects them under the flaw's name */
+  detects: z.object({ types: z.array(z.string()).min(1), catch: z.number().min(0).max(1).default(0.95) }).optional(),
   /** default inventory this machine lends / takes back (a step can override) */
   take: Take.optional(),
   give: z.array(z.string()).optional(),
@@ -290,6 +314,14 @@ export const Industry = z.object({
       /** issued, kitted, in progress, completed, checked, delivered — default 工单下达 物料齐套 生产中 生产完成 质检入库 发运 */
       steps: z.array(z.string()).length(6).optional(),
     }).optional(),
+  }).default({}),
+  /**
+   * the working week: night shift (operators tire: more short stops and flaws) and a weekly planned
+   * maintenance slot per line (lines take turns through the week)
+   */
+  calendar: z.object({
+    night: z.object({ from: z.number().min(0).max(23), to: z.number().min(0).max(24), stops: z.number().min(1).default(1), flaws: z.number().min(1).default(1) }).optional(),
+    pm: z.object({ hours: z.number().positive(), start: z.number().min(0).max(23) }).optional(),
   }).default({}),
   products: z.record(z.string(), Product),
   machines: z.record(z.string(), Machine),

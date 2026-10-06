@@ -231,6 +231,16 @@
                                 "type": "number",
                                 "minimum": 0.3,
                                 "maximum": 1
+                              },
+                              "setup": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "warm": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
                               }
                             }
                           },

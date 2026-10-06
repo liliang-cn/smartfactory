@@ -52,7 +52,7 @@ func (s *Store) Close() { s.db.Close() }
 
 // Reset empties every table (a backfill starting over).
 func (s *Store) Reset(ctx context.Context) error {
-	_, err := s.db.Exec(ctx, `TRUNCATE work_orders, defects, tool_changes, downtime, stock_hours, quality_hours,
+	_, err := s.db.Exec(ctx, `TRUNCATE lots, work_orders, defects, tool_changes, downtime, stock_hours, quality_hours,
 		line_hours, machine_hours, calendar, machines, lines, parts, plants RESTART IDENTITY`)
 	return err
 }
@@ -159,14 +159,19 @@ type batch struct {
 		Machine, Line, At, Type, Feature string
 		Value                            *float64
 		Disposition, Order               string
+		Heat, Supplier                   string
 	} `json:"defects"`
 	Orders []struct {
-		No, Line, Part, Customer, Heat string
-		Qty                            int
-		Issued, Due                    string
-		Completed                      *string
-		Good, Scrap                    int
+		No, Line, Part, Customer, Heat, Supplier string
+		Qty                                      int
+		Issued, Due                              string
+		Completed                                *string
+		Good, Scrap                              int
 	} `json:"orders"`
+	Lots []struct {
+		Heat, Supplier, Line, Part, First, Last string
+		Produced, Good, Rework, Scrap           int
+	} `json:"lots"`
 }
 
 // cst is the zone the history's wall-clock times are in.
@@ -250,9 +255,9 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 				r.Machine, r.Line, cal(r.Start), st, en, en.Sub(st).Minutes(), r.Tool, r.Hits, r.Life, r.Limit*100, r.Trigger)
 		}
 		for _, r := range x.Defects {
-			b.Queue(`INSERT INTO defects (machine_id, line_id, hour, at, defect_type, feature, value, disposition, order_no)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-				r.Machine, r.Line, cal(r.At), parse(r.At), r.Type, r.Feature, r.Value, r.Disposition, r.Order)
+			b.Queue(`INSERT INTO defects (machine_id, line_id, hour, at, defect_type, feature, value, disposition, order_no, heat_no, supplier)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+				r.Machine, r.Line, cal(r.At), parse(r.At), r.Type, r.Feature, r.Value, r.Disposition, r.Order, r.Heat, r.Supplier)
 		}
 		for _, r := range x.Orders {
 			due := parse(r.Due)
@@ -269,9 +274,17 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 			} else if now.After(due) {
 				status = "已逾期"
 			}
-			b.Queue(`INSERT INTO work_orders VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			b.Queue(`INSERT INTO work_orders (order_no, line_id, part_id, customer, heat_no, qty, good, scrap, issued_at, due_at, completed_at, hour, status, completed, on_time, supplier)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 				ON CONFLICT (order_no) DO UPDATE SET good=$7, scrap=$8, completed_at=$11, hour=$12, status=$13, completed=$14, on_time=$15`,
-				r.No, r.Line, r.Part, r.Customer, r.Heat, r.Qty, r.Good, r.Scrap, parse(r.Issued), due, done, cal(when), status, completed, onTime)
+				r.No, r.Line, r.Part, r.Customer, r.Heat, r.Qty, r.Good, r.Scrap, parse(r.Issued), due, done, cal(when), status, completed, onTime, r.Supplier)
+		}
+		for _, r := range x.Lots {
+			// a lot arrives in pieces (one per drain): add them up
+			b.Queue(`INSERT INTO lots VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+				ON CONFLICT (heat_no) DO UPDATE SET last_at=greatest(lots.last_at, $6), produced=lots.produced+$8,
+				good=lots.good+$9, rework=lots.rework+$10, scrap=lots.scrap+$11`,
+				r.Heat, r.Supplier, r.Line, r.Part, parse(r.First), parse(r.Last), cal(r.First), r.Produced, r.Good, r.Rework, r.Scrap)
 		}
 	}
 	rows = b.Len()

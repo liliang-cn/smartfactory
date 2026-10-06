@@ -227,9 +227,70 @@ export class PlantSim {
 
   // ---------- simulation ----------
 
-  step(dt: number) {
-    this.clock += dt;
+  /**
+   * Plant time is China wall-clock time: `epoch` is the wall-clock moment of elapsed 0 (now, for a
+   * plant built now; set back for a history backfill). A follower takes the server's clock instead.
+   */
+  epoch = Date.now();
+  /** night shift now, and the hour of the week the calendar was last checked */
+  private night = false;
+  private calHour = -1;
+
+  wall() { return this.epoch + this.elapsed * 1000; }
+
+  private advanceClock(dt: number) {
     this.elapsed += dt;
+    if (this.follower) {
+      this.clock += dt;
+      return;
+    }
+    const local = this.wall() + 8 * 3600_000;
+    this.clock = (local % 86_400_000) / 1000;
+    const hour = Math.floor(local / 3_600_000);
+    if (hour !== this.calHour) {
+      this.calHour = hour;
+      this.calendar(local);
+    }
+  }
+
+  /** Once an hour: night shift or not, and whether a line's weekly planned maintenance starts now. */
+  private calendar(local: number) {
+    const cal = this.layout.calendar;
+    const h = Math.floor(local / 3_600_000) % 24;
+    const n = cal?.night;
+    this.night = !!n && (n.from < n.to ? h >= n.from && h < n.to : h >= n.from || h < n.to);
+    const pm = cal?.pm;
+    if (!pm || h !== pm.start) return;
+    const day = new Date(local).getUTCDay();
+    const week = Math.floor(local / (7 * 86_400_000));
+    for (const line of this.lines) {
+      // lines take turns through the week
+      if ((line.layout.no - 1) % 7 !== day || line.pmWeek === week) continue;
+      line.pmWeek = week;
+      for (const a of line.stations) {
+        if (liveFields(a)) continue;
+        a.maint = Math.max(a.maint, pm.hours * 3600);
+      }
+      this.note(line.stations[0], `${line.name}每周计划保养 ${pm.hours} 小时`, 'op');
+    }
+  }
+
+  /** A new material lot (one steel heat) for a line, drawn from the product's suppliers. */
+  private newLot(line: Line) {
+    const prod = line.layout.product;
+    const sups = prod.suppliers?.length ? prod.suppliers : [{ name: '', share: 1, bad: 0, factor: 1 }];
+    let r = Math.random() * sups.reduce((s, x) => s + x.share, 0);
+    const s = sups.find((x) => (r -= x.share) <= 0) ?? sups[0];
+    const factor = (Math.random() < (s.bad ?? 0) ? (s.factor ?? 1) : 1) * rand(0.8, 1.25);
+    const d = new Date(this.wall() + 8 * 3600_000);
+    const no = `${String(d.getUTCFullYear()).slice(2)}${'ABCDEFGHJK'[Math.floor(Math.random() * 10)]}${String(Math.floor(Math.random() * 1e5)).padStart(5, '0')}`;
+    // a heat is around 40 t of steel
+    const left = Math.max(1, Math.round(40_000 / (prod.input ?? 40)));
+    line.lot = { no, supplier: s.name, factor, left };
+  }
+
+  step(dt: number) {
+    this.advanceClock(dt);
     for (const line of this.lines) this.stepLine(line, dt);
     for (const g of this.agvs) this.stepAgv(g, dt);
     for (const t of this.trucks) this.stepTruck(t, dt);
@@ -257,8 +318,7 @@ export class PlantSim {
    * nothing else of the plant moving: a what-if run of a line costs a fraction of the plant.
    */
   stepLines(ids: Set<string>, dt: number) {
-    this.clock += dt;
-    this.elapsed += dt;
+    this.advanceClock(dt);
     for (const line of this.lines) {
       if (!ids.has(line.id)) continue;
       line.infeed.stock = line.infeed.cap;
@@ -273,6 +333,24 @@ export class PlantSim {
     if (this.histAcc >= 1) {
       this.histAcc -= 1;
       this.checkInventory();
+    }
+  }
+
+  /**
+   * Leaves at most one flaw in a unit: likelier with a bad material lot, a worn tool, a tool not yet
+   * at temperature, and on the night shift. An inspection downstream finds it, or the customer does.
+   */
+  private flaw(a: Asset, p: Product) {
+    const t = a.tool;
+    const worn = t ? Math.max(0, (t.used / t.life - 0.6) / 0.4) : 0;
+    const cold = !!t && (a.sinceChange ?? 1e9) < (t.warm ?? 0);
+    const night = this.night ? this.layout.calendar?.night?.flaws ?? 1 : 1;
+    for (const f of a.machine!.flaws!) {
+      const r = f.rate * (f.material ? p.lf ?? 1 : 1) * (1 + (f.wear - 1) * worn * worn) * (cold ? f.cold : 1) * night;
+      if (Math.random() < r) {
+        p.flaw = f.type;
+        return;
+      }
     }
   }
 
@@ -359,7 +437,10 @@ export class PlantSim {
     line.spawnT -= dt;
     const last = P[P.length - 1];
     if (v > 0 && line.infeed.stock > 0 && line.spawnT <= 0 && (!last || last.s > line.gap + 0.05)) {
-      P.push({ id: `${line.id}-${++line.pid}`, s: 0, done: -1, proc: -1, t: 0, kind: line.layout.input, stall: 0 });
+      if (!this.follower && (!line.lot || line.lot.left <= 0)) this.newLot(line);
+      const lot = line.lot;
+      if (lot) lot.left--;
+      P.push({ id: `${line.id}-${++line.pid}`, s: 0, done: -1, proc: -1, t: 0, kind: line.layout.input, stall: 0, lot: lot?.no, sup: lot?.supplier, lf: lot?.factor });
       line.infeed.stock--;
       line.spawnT = line.spawn;
       this.history?.released(line);
@@ -401,12 +482,38 @@ export class PlantSim {
         a.cycles++;
         this.history?.cycle(a);
         if (a.makes) p.kind = a.makes;
-        if (a.measure && !this.measure(a)) {
+        if (a.tool && !this.follower) {
+          a.sinceChange = (a.sinceChange ?? 1e9) + 1;
+          // the first pieces after a change go into setting the new tool up
+          if ((a.setupLeft ?? 0) > 0) {
+            a.setupLeft!--;
+            this.history?.defect(line, a, '换模调试件', '首件调试', null, false, p);
+            this.reject(line, a, i--);
+            continue;
+          }
+        }
+        if (a.machine?.flaws && !p.flaw && !this.follower) this.flaw(a, p);
+        if (a.machine?.detects && !this.follower) {
+          const d = a.machine.detects;
+          const caught = !!p.flaw && d.types.includes(p.flaw) && Math.random() < d.catch;
+          const m = a.measure;
+          let v: number | null = null;
+          if (m && !liveFields(a)?.measure) {
+            const lim = m.hi ?? m.target * 4;
+            v = caught ? lim * rand(1.15, 4) : m.target + Math.abs(Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random())) * m.sigma;
+            this.record(a, Math.min(v, caught ? v : lim * 0.95));
+          }
+          if (caught) {
+            this.history?.defect(line, a, p.flaw!, m?.label ?? a.name, v, false, p);
+            this.reject(line, a, i--);
+            continue;
+          }
+        } else if (a.measure && !this.measure(a)) {
           const m = a.measure;
           const v = a.reading?.v ?? null;
           const low = v !== null && m.lo !== undefined && v < m.lo;
           const type = (low ? m.defects?.lo : m.defects?.hi) ?? `${m.label}超差`;
-          this.history?.defect(line, a, type, m.label, v, m.rework);
+          this.history?.defect(line, a, type, m.label, v, m.rework, p);
           if (m.rework) {
             p.rework = true;
             continue;
@@ -418,10 +525,11 @@ export class PlantSim {
         if (rejectRate !== undefined && !a.measure && !this.follower) {
           const upstream = st.slice(0, p.done);
           const h = upstream.reduce((sum, u) => sum + u.health, 0) / Math.max(1, upstream.length);
-          const ok = Math.random() > rejectRate + (1 - h) * 0.1;
+          // worn upstream machines make more of what this check rejects, in proportion to its base rate
+          const ok = Math.random() > rejectRate * (1 + (1 - h) * 4);
           a.verdict = { ok, at: this.elapsed };
           if (!ok) {
-            this.history?.defect(line, a, a.machine?.defect ?? '外观不良', '外观', null, false);
+            this.history?.defect(line, a, a.machine?.defect ?? '外观不良', '外观', null, false, p);
             this.reject(line, a, i--);
           }
         }
@@ -761,7 +869,7 @@ export class PlantSim {
     if (running && !a.fault && !lv) {
       const rate = (1 / ((up?.mtbf ?? 3.33) * 3600)) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
       if (Math.random() < rate * dt) this.trip(a, pick(s.faults));
-      else if (up?.stops && Math.random() < (up.stops.perHour / 3600) * dt) {
+      else if (up?.stops && Math.random() < (up.stops.perHour / 3600) * dt * (this.night ? this.layout.calendar?.night?.stops ?? 1 : 1)) {
         // a short stop: the operator clears it, no crew needed
         this.trip(a, `短停：${pick(up.stops.reasons)}`);
         a.repairAt = this.elapsed + rand(up.stops.secs[0], up.stops.secs[1]);
@@ -843,6 +951,8 @@ export class PlantSim {
         // the removed tool goes for reconditioning (a die is re-sunk) and comes back as a spare
         if (t.spare && t.repair && Math.random() < t.repair.rate) this.repairs.push([t.spare, this.elapsed + t.repair.hours * 3600]);
         t.used = 0;
+        a.setupLeft = t.setup ?? 0;
+        a.sinceChange = 0;
         a.health = Math.min(1, a.health + 0.05);
         this.clear(a, 'tool');
         this.note(a, `${t.label}更换完成，寿命计数清零`, 'op');
@@ -1309,6 +1419,8 @@ export class PlantSim {
       if (a) a.repairAt = t;
     }
     this.repairs = saved.recond ?? [];
+    // carry on in the present: the plant's wall clock is now
+    this.epoch = Date.now() - this.elapsed * 1000;
     return true;
   }
 

@@ -16,6 +16,7 @@ entities:
   - {name: tool_change,  table: tool_changes,  primary_key: id}
   - {name: defect,       table: defects,       primary_key: id}
   - {name: work_order,   table: work_orders,   primary_key: order_no}
+  - {name: lot,          table: lots,          primary_key: heat_no}
 
 joins:
   - {from: line,         to: plant,    from_key: plant_id,   to_key: plant_id,   cardinality: many_to_one}
@@ -37,6 +38,8 @@ joins:
   - {from: defect,       to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
   - {from: work_order,   to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
   - {from: work_order,   to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: lot,          to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: lot,          to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
 
 dimensions:
   - {name: time,          entity: calendar,    column: hour,        type: time,        synonyms: [时间, 日期, 每天, 每周, 每月, 小时]}
@@ -60,6 +63,10 @@ dimensions:
   - {name: defect_type,   entity: defect,      column: defect_type, type: categorical, synonyms: [缺陷类型, 不良类型, 不良项]}
   - {name: disposition,   entity: defect,      column: disposition, type: categorical, synonyms: [处置, 处置方式, 报废还是返修]}
   - {name: order_status,  entity: work_order,  column: status,      type: categorical, synonyms: [工单状态]}
+  - {name: supplier,      entity: lot,         column: supplier,    type: categorical, synonyms: [钢厂, 原材料供应商, 供应商]}
+  - {name: heat_no,       entity: lot,         column: heat_no,     type: categorical, synonyms: [炉号, 炉批号, 材料批次]}
+  - {name: defect_supplier, entity: defect,    column: supplier,    type: categorical, synonyms: [缺陷件的钢厂]}
+  - {name: defect_heat_no,  entity: defect,    column: heat_no,     type: categorical, synonyms: [缺陷件的炉号]}
 
 metrics:
   # ---- output and quality (line grain) ----
@@ -357,4 +364,29 @@ metrics:
     description: "工单准时完工率 = 按期完工 / 完工。"
     synonyms: [准时完工率, 准时交付率, 交付达成率, OTD]
     formula: "1.0 * orders_on_time / nullif(orders_completed, 0)"
+    additivity: non_additive
+
+  # ---- material lots (steel heats) and their suppliers ----
+  - name: lots_used
+    description: "用过的炉批数（一炉钢一个批次）。"
+    synonyms: [炉批数, 批次数]
+    entity: lot
+    agg: count
+    expr: "heat_no"
+  - name: lot_produced
+    description: "各炉批完成加工的件数。"
+    synonyms: [炉批产量]
+    entity: lot
+    agg: sum
+    expr: "produced"
+  - name: lot_scrap
+    description: "各炉批的报废件数。"
+    synonyms: [炉批报废数]
+    entity: lot
+    agg: sum
+    expr: "scrap"
+  - name: lot_scrap_rate
+    description: "按炉批 / 钢厂看的废品率 = 炉批报废数 / 炉批产量。"
+    synonyms: [炉批废品率, 钢厂废品率, 按炉号废品率]
+    formula: "1.0 * lot_scrap / nullif(lot_produced, 0)"
     additivity: non_additive
