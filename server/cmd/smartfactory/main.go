@@ -76,6 +76,8 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	eng.Dir = cfg.Data
+	eng.Restore()
 	go eng.Run(ctx)
 	// Values read from equipment feed the server-side simulation.
 	go func() {
@@ -133,6 +135,12 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	log.Info("smartfactory serving", "version", version, "http", cfg.HTTP, "companies", eng.Companies, "sources", len(cfg.Sources), "mcp", mcpState)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
+	}
+	// Let the engine write its final state before the process goes away.
+	select {
+	case <-eng.Done:
+	case <-time.After(10 * time.Second):
+		log.Warn("engine did not finish saving in time")
 	}
 	return nil
 }

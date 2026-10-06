@@ -11,8 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dop251/goja"
@@ -33,8 +36,13 @@ type Engine struct {
 	mu       sync.Mutex
 	watchers map[chan []byte]*watch
 	ticks    int
-	// last measured cost of one step, for /api/health
-	StepCost time.Duration
+	stepCost atomic.Int64 // ns, last step
+
+	// Dir is where company state is saved (every minute and on shutdown); empty disables it.
+	Dir     string
+	savedAt time.Time
+	// Done is closed once Run has returned and the final save is on disk.
+	Done chan struct{}
 }
 
 // Result is what a command returns.
@@ -77,8 +85,8 @@ func New(log *slog.Logger) (*Engine, error) {
 		return nil, errors.New("engine bundle does not define SF")
 	}
 	obj := sf.ToObject(vm)
-	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list"} {
+	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{})}
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -124,16 +132,101 @@ func (e *Engine) str(name string, args ...any) string {
 	return out
 }
 
-// Run advances every plant in real time (10 Hz) and sends frames to watchers (2 Hz).
+// StepCost is how long the last simulation step took.
+func (e *Engine) StepCost() time.Duration { return time.Duration(e.stepCost.Load()) }
+
+// SavedAt is when state was last written to disk.
+func (e *Engine) SavedAt() time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.savedAt
+}
+
+// Restore carries every company on from its saved state, if any. Call before Run.
+func (e *Engine) Restore() {
+	if e.Dir == "" {
+		return
+	}
+	for _, c := range e.Companies {
+		b, err := os.ReadFile(filepath.Join(e.Dir, c+".json"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			e.log.Warn("read saved state", "company", c, "err", err)
+			continue
+		}
+		v, err := e.call("restore", c, string(b))
+		if err != nil {
+			e.log.Error("restore", "company", c, "err", err)
+			continue
+		}
+		var r struct{ Restored, Skipped []string }
+		json.Unmarshal([]byte(v.String()), &r)
+		e.log.Info("state restored", "company", c, "plants", r.Restored, "fresh", r.Skipped)
+	}
+}
+
+// save serialises every company on the loop goroutine and writes the files, in the
+// background unless wait is set (shutdown).
+func (e *Engine) save(wait bool) {
+	if e.Dir == "" {
+		return
+	}
+	data := map[string]string{}
+	for _, c := range e.Companies {
+		v, err := e.call("save", c)
+		if err != nil {
+			e.log.Error("save", "company", c, "err", err)
+			continue
+		}
+		data[c] = v.String()
+	}
+	write := func() {
+		if err := os.MkdirAll(e.Dir, 0o755); err != nil {
+			e.log.Error("state dir", "err", err)
+			return
+		}
+		for c, js := range data {
+			path := filepath.Join(e.Dir, c+".json")
+			tmp := path + ".tmp"
+			if err := os.WriteFile(tmp, []byte(js), 0o644); err != nil {
+				e.log.Error("write state", "company", c, "err", err)
+				continue
+			}
+			if err := os.Rename(tmp, path); err != nil {
+				e.log.Error("write state", "company", c, "err", err)
+			}
+		}
+		e.mu.Lock()
+		e.savedAt = time.Now()
+		e.mu.Unlock()
+	}
+	if wait {
+		write()
+	} else {
+		go write()
+	}
+}
+
+// Run advances every plant in real time (10 Hz), sends frames to watchers (2 Hz) and saves
+// state every minute and when ctx ends.
 func (e *Engine) Run(ctx context.Context) {
+	defer close(e.Done)
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
+	persist := time.NewTicker(time.Minute)
+	defer persist.Stop()
 	last := time.Now()
 	n := 0
 	for {
 		select {
 		case <-ctx.Done():
+			e.save(true)
+			e.log.Info("state saved", "dir", e.Dir)
 			return
+		case <-persist.C:
+			e.save(false)
 		case fn := <-e.calls:
 			fn()
 		case now := <-tick.C:
@@ -143,7 +236,7 @@ func (e *Engine) Run(ctx context.Context) {
 			if _, err := e.call("step", dt, e.watched()); err != nil {
 				e.log.Error("engine step", "err", err)
 			}
-			e.StepCost = time.Since(t0)
+			e.stepCost.Store(int64(time.Since(t0)))
 			if n++; n%5 == 0 {
 				e.broadcast()
 			}

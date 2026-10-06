@@ -1,10 +1,14 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,7 +35,7 @@ func TestEngineRuns(t *testing.T) {
 	// Simulate a minute quickly, then check that production and state moved.
 	e.SetTimeScale("huaduan", 20)
 	time.Sleep(3 * time.Second)
-	t.Logf("step cost for %d companies: %v", len(e.Companies), e.StepCost)
+	t.Logf("step cost for %d companies: %v", len(e.Companies), e.StepCost())
 
 	var snap struct {
 		Plants []struct {
@@ -108,3 +112,88 @@ func TestEngineRuns(t *testing.T) {
 }
 
 func discard() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func TestPersistence(t *testing.T) {
+	dir := t.TempDir()
+	e := newEngine(t)
+	e.Dir = dir
+	ctx, cancel := context.WithCancel(context.Background())
+	go e.Run(ctx)
+	e.SetTimeScale("huaduan", 20)
+	time.Sleep(2 * time.Second)
+	if r := e.Command("huaduan", "p2", "CV-1", "stop", nil); !r.OK {
+		t.Fatal(r.Msg)
+	}
+	cancel()
+	<-e.Done
+	before := kpis(t, e, "huaduan", "p2")
+
+	// A fresh engine picks up where the first one stopped.
+	e2 := newEngine(t)
+	e2.Dir = dir
+	e2.Restore()
+	after := kpis(t, e2, "huaduan", "p2")
+	if before.Clock != after.Clock || before.Good != after.Good || after.Good == 0 {
+		t.Fatalf("not restored: before %+v after %+v", before, after)
+	}
+	if after.CV1 {
+		t.Error("CV-1 should still be stopped after restore")
+	}
+	frame := map[string]any{}
+	fv, _ := e2.call("frame", "huaduan")
+	json.Unmarshal([]byte(fv.String()), &frame)
+	if frame["timeScale"] != 20.0 {
+		t.Errorf("time scale not restored: %v", frame["timeScale"])
+	}
+
+	// A plant whose structure changed is not restored.
+	b, _ := os.ReadFile(filepath.Join(dir, "huaduan.json"))
+	os.WriteFile(filepath.Join(dir, "huaduan.json"), []byte(strings.Replace(string(b), `"fp":"L1:`, `"fp":"Lx:`, 1)), 0o644)
+	e3 := newEngine(t)
+	e3.Dir = dir
+	e3.Restore()
+	if k := kpis(t, e3, "huaduan", "p1"); k.Clock == before.Clock {
+		t.Error("p1 with a changed fingerprint should start fresh")
+	}
+}
+
+type plantKpis struct {
+	Clock string
+	Good  float64
+	CV1   bool
+}
+
+func kpis(t *testing.T, e *Engine, company, plant string) plantKpis {
+	t.Helper()
+	var f struct {
+		Plants map[string]struct {
+			Clock  float64 `json:"clock"`
+			Assets []struct {
+				ID      string `json:"id"`
+				Enabled bool   `json:"enabled"`
+			} `json:"assets"`
+			Lines []struct {
+				Good float64 `json:"good"`
+			} `json:"lines"`
+		} `json:"plants"`
+	}
+	// the engine loop is not running here: call the JS function directly
+	v, err := e.call("frame", company)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(v.String()), &f); err != nil {
+		t.Fatal(err)
+	}
+	p := f.Plants[plant]
+	out := plantKpis{Clock: fmt.Sprintf("%.1f", p.Clock)}
+	for _, l := range p.Lines {
+		out.Good += l.Good
+	}
+	for _, a := range p.Assets {
+		if a.ID == "CV-1" {
+			out.CV1 = a.Enabled
+		}
+	}
+	return out
+}

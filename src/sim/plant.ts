@@ -58,6 +58,16 @@ type AssetInit = Partial<Asset> & Pick<Asset, 'id' | 'name' | 'type'>;
 
 type ProductTuple = [id: string, s: number, done: number, proc: number, t: number, kind: string, stall: number];
 
+/** A plant as written to disk by the server. */
+export interface SavedPlant {
+  fp: string;
+  state: PlantState;
+  /** completion times of the last hour, per line in layout order */
+  done: number[][];
+  meas: [string, number[]][];
+  repair: [string, number][];
+}
+
 /** A plant's replicated state, as sent from the server to browsers. */
 export interface PlantState {
   clock: number;
@@ -833,8 +843,8 @@ export class PlantSim {
 
   // ---------- replication (server → browsers) ----------
 
-  /** Everything a follower needs to match this plant; drains the event queue. */
-  exportState(): PlantState {
+  /** Everything a follower needs to match this plant; drains the event queue unless told not to. */
+  exportState(drain = true): PlantState {
     const p3 = (v: number) => Math.round(v * 1000) / 1000;
     return {
       clock: p3(this.clock), elapsed: p3(this.elapsed), energy: p3(this.energyKWh), power: p3(this.powerKW), alarmSeq: this.alarmSeq,
@@ -857,8 +867,48 @@ export class PlantSim {
       })),
       alarms: this.alarms.slice(0, 80),
       log: this.log.slice(0, 60),
-      events: this.events.splice(0),
+      events: drain ? this.events.splice(0) : [],
     };
+  }
+
+  // ---------- persistence (server restarts) ----------
+
+  /** Identifies the plant's structure; saved state only applies to the same structure. */
+  fingerprint(): string {
+    const lines = this.lines.map((l) => `${l.id}:${l.stations.map((a) => a.id).join(',')}`).join(';');
+    return `${lines}|${this.agvs.map((g) => g.asset.id).join(',')}|${this.trucks.map((t) => t.asset.id).join(',')}`;
+  }
+
+  /**
+   * Everything needed to carry on after a restart. The short trend buffers are left out (they
+   * refill within minutes); SPC readings, which take much longer to accumulate, are kept.
+   */
+  saveState(): SavedPlant {
+    const r = (v: number) => Math.round(v * 1000) / 1000;
+    const assets = [...this.assets.values()];
+    return {
+      fp: this.fingerprint(),
+      state: this.exportState(false),
+      done: this.lines.map((l) => l.doneTimes.map(r)),
+      meas: assets.filter((a) => a.hist.meas.length).map((a) => [a.id, a.hist.meas.map(r)]),
+      repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
+    };
+  }
+
+  /** Carries on from a saved state; false (and nothing changed) if the plant's structure differs. */
+  restoreState(saved: SavedPlant): boolean {
+    if (saved.fp !== this.fingerprint()) return false;
+    this.importState(saved.state);
+    this.lines.forEach((l, i) => { if (saved.done[i]) l.doneTimes = saved.done[i]; });
+    for (const [id, m] of saved.meas) {
+      const a = this.assets.get(id);
+      if (a) a.hist.meas = m;
+    }
+    for (const [id, t] of saved.repair) {
+      const a = this.assets.get(id);
+      if (a) a.repairAt = t;
+    }
+    return true;
   }
 
   /** Adopts the server's state; local motion continues from here until the next frame. */

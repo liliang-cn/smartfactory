@@ -33,7 +33,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.Companies, "stepMs": s.Engine.StepCost.Seconds() * 1000, "sources": s.Hub.Sources()})
+		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.Companies, "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.Hub.Sources()})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

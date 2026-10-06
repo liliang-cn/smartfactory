@@ -3,7 +3,7 @@
 // MCP tools read snapshots of it, and protocol adapters feed it measured values.
 // Built by `npm run build:engine` into server/internal/engine/js/engine.js.
 import { loadAll, type CompanyBundle } from '@/config/loader';
-import { PlantSim } from '@/sim/plant';
+import { PlantSim, type SavedPlant } from '@/sim/plant';
 import type { Command } from '@/sim/types';
 
 declare const host: { log(msg: string): void };
@@ -93,6 +93,37 @@ function setTimeScale(c: string, scale: number): boolean {
   return true;
 }
 
+const SAVE_VERSION = 1;
+
+/** The company's full state for persistence. */
+function save(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify({ v: SAVE_VERSION, company: c, timeScale: co.timeScale, plants: Object.fromEntries(co.plants.map((p) => [p.layout.id, p.saveState()])) });
+}
+
+/** Carries a company on from a saved state; plants whose structure changed start fresh. */
+function restore(c: string, json: string): string {
+  const co = get(c);
+  const restored: string[] = [];
+  const skipped: string[] = [];
+  if (!co) return JSON.stringify({ restored, skipped: ['(unknown company)'] });
+  let d: { v: number; timeScale?: number; plants: Record<string, SavedPlant> };
+  try {
+    d = JSON.parse(json);
+  } catch (e) {
+    return JSON.stringify({ restored, skipped: [`(unreadable: ${(e as Error).message})`] });
+  }
+  if (d.v !== SAVE_VERSION) return JSON.stringify({ restored, skipped: [`(save version ${d.v})`] });
+  co.timeScale = d.timeScale ?? 1;
+  for (const p of co.plants) {
+    const saved = d.plants[p.layout.id];
+    if (saved && p.restoreState(saved)) restored.push(p.layout.id);
+    else skipped.push(p.layout.id);
+  }
+  return JSON.stringify({ restored, skipped });
+}
+
 function list(): string {
   return JSON.stringify([...companies.values()].map((c) => ({
     id: c.bundle.company.id, name: c.bundle.company.name,
@@ -100,4 +131,4 @@ function list(): string {
   })));
 }
 
-(globalThis as Record<string, unknown>).SF = { init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list };
+(globalThis as Record<string, unknown>).SF = { init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore };

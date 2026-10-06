@@ -23,6 +23,8 @@ type Config struct {
 	// SF_TOKEN in the environment overrides it. Empty means no operator access.
 	Token string `json:"token"`
 	MQTT  Broker `json:"mqtt"`
+	// Data is where the simulation's state is kept across restarts ("" disables it).
+	Data string `json:"data"`
 	// Sources are protocol adapters that read from devices.
 	Sources []Source `json:"sources"`
 }
@@ -120,7 +122,7 @@ func (d Duration) Or(def time.Duration) time.Duration {
 }
 
 func Default() Config {
-	return Config{HTTP: ":4720", MQTT: Broker{Listen: ":41883", Prefix: "sf"}}
+	return Config{HTTP: ":4720", Data: "data", MQTT: Broker{Listen: ":41883", Prefix: "sf"}}
 }
 
 // Load reads path (if any) over the defaults.
