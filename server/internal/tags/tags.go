@@ -56,6 +56,10 @@ type SourceStatus struct {
 	Points    int       `json:"points"`
 	Received  uint64    `json:"received"`
 	LastAt    time.Time `json:"lastAt"`
+	// Targets are the assets this source feeds, as company/plant/asset.
+	Targets []string `json:"targets"`
+	// Labels name each target for people ("华锻集团 一厂 · HP-101"); filled by the web layer.
+	Labels []string `json:"labels,omitempty"`
 }
 
 // Sub is one subscriber's mailbox. Slow subscribers lose events rather than block the hub.
@@ -179,9 +183,22 @@ func (h *Hub) SetConnected(name string, ok bool, err error) {
 func (h *Hub) Sources() []SourceStatus {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+	targets := map[string]map[string]bool{}
+	for _, t := range h.last {
+		if targets[t.Source] == nil {
+			targets[t.Source] = map[string]bool{}
+		}
+		targets[t.Source][t.Company+"/"+t.Plant+"/"+t.Asset] = true
+	}
 	out := make([]SourceStatus, 0, len(h.sources))
 	for _, s := range h.sources {
-		out = append(out, *s)
+		st := *s
+		st.Targets = []string{}
+		for k := range targets[s.Name] {
+			st.Targets = append(st.Targets, k)
+		}
+		sort.Strings(st.Targets)
+		out = append(out, st)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

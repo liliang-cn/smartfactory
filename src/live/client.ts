@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { runtime, useUI } from '@/state/store';
-import { liveFields, type PlantState } from '@/sim/plant';
+import type { PlantState } from '@/sim/plant';
 import type { Asset, Command } from '@/sim/types';
 
 export interface SourceInfo {
@@ -17,6 +17,10 @@ export interface SourceInfo {
   error?: string;
   points: number;
   received: number;
+  /** assets this source feeds, as company/plant/asset */
+  targets?: string[];
+  /** the same, named for people */
+  labels?: string[];
 }
 
 interface LiveState {
@@ -26,11 +30,9 @@ interface LiveState {
   /** opened with the operator token: commands reach equipment, the clock can change */
   operator: boolean;
   sources: SourceInfo[];
-  /** assets currently fed by equipment */
-  liveAssets: number;
 }
 
-export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, sources: [], liveAssets: 0 }));
+export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, sources: [] }));
 
 interface Cmd { c: string; p: string; a: string; cmd: Command; arg?: number; by: string; o?: string }
 type ServerMsg =
@@ -111,14 +113,7 @@ function handle(m: ServerMsg) {
       break;
     case 'frame': {
       if (m.data.company !== rt.bundle.company.id) return;
-      let live = 0;
-      for (const [id, st] of Object.entries(m.data.plants)) {
-        const sim = rt.byId[id]?.sim;
-        if (!sim) continue;
-        sim.importState(st);
-        for (const a of sim.assets.values()) if (liveFields(a)) live++;
-      }
-      if (m.data.plants[useUI.getState().plantId]) useLive.setState({ liveAssets: live });
+      for (const [id, st] of Object.entries(m.data.plants)) rt.byId[id]?.sim.importState(st);
       if (useUI.getState().timeScale !== m.data.timeScale) useUI.setState({ timeScale: m.data.timeScale });
       useUI.getState().bump();
       break;

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -27,13 +28,16 @@ type Server struct {
 	Static  fs.FS
 	MCP     http.Handler
 	Log     *slog.Logger
+
+	namesOnce sync.Once
+	names     map[string]string
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.Companies, "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.Hub.Sources()})
+		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.Companies, "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.sources()})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -111,7 +115,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	send(map[string]any{"type": "hello", "operator": op, "sim": true, "version": s.Version, "sources": s.Hub.Sources()})
+	send(map[string]any{"type": "hello", "operator": op, "sim": true, "version": s.Version, "sources": s.sources()})
 
 	var (
 		company  string
@@ -216,7 +220,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		case <-status.C:
-			if err := wsjson.Write(ctx, c, map[string]any{"type": "sources", "sources": s.Hub.Sources()}); err != nil {
+			if err := wsjson.Write(ctx, c, map[string]any{"type": "sources", "sources": s.sources()}); err != nil {
 				return
 			}
 		}
@@ -236,6 +240,45 @@ func (s *Server) scheduleRevert(company string, m clientMsg) {
 		}
 		s.Engine.Command(company, m.Plant, m.Asset, back, arg)
 	})
+}
+
+// sources adds readable names (company and plant names from the simulation) to each target.
+func (s *Server) sources() []tags.SourceStatus {
+	out := s.Hub.Sources()
+	if s.Engine == nil {
+		return out
+	}
+	s.namesOnce.Do(func() {
+		var list []struct {
+			ID     string `json:"id"`
+			Name   string `json:"name"`
+			Plants []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"plants"`
+		}
+		s.names = map[string]string{}
+		if json.Unmarshal([]byte(s.Engine.List()), &list) == nil {
+			for _, c := range list {
+				for _, p := range c.Plants {
+					s.names[c.ID+"/"+p.ID] = c.Name + " " + p.Name
+				}
+			}
+		}
+	})
+	for i := range out {
+		for _, t := range out[i].Targets {
+			parts := strings.SplitN(t, "/", 3)
+			label := t
+			if len(parts) == 3 {
+				if n, ok := s.names[parts[0]+"/"+parts[1]]; ok {
+					label = n + " · " + parts[2]
+				}
+			}
+			out[i].Labels = append(out[i].Labels, label)
+		}
+	}
+	return out
 }
 
 // static serves the embedded single-page app: hashed assets cached for a year, the page itself

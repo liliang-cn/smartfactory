@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BellIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+  Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
@@ -11,6 +11,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import { useLive } from '@/live/client';
+import { liveFields } from '@/sim/plant';
 import { groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
 import { CHIP, STATE_LABEL, hhmm } from './status';
 
@@ -123,6 +124,7 @@ function Search() {
   }, []);
   const plant = usePlant();
   const assets = [...plant.sim.assets.values()];
+  const example = assets.find((a) => a.type === 'station');
   return (
     <>
       <button
@@ -135,26 +137,29 @@ function Search() {
         <Kbd className="max-md:hidden">/</Kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen} title="搜索" description="按编号或名称查找设备">
-        <CommandInput placeholder="输入编号或名称，如 CH-201、钎焊、AGV" />
-        <CommandList className="max-h-[60dvh]">
-          <CommandEmpty>没有匹配的设备，试试 RB、AGV、TRK 这样的编号前缀</CommandEmpty>
-          {groupsOf(plant.layout).map((g) => (
-            <CommandGroup key={g.id} heading={`${g.name}${g.note ? ` ${g.note}` : ''}`}>
-              {assets.filter((a) => a.group === g.id).map((a) => (
-                <CommandItem
-                  key={a.id}
-                  value={`${a.id} ${a.name} ${a.spec?.label ?? ''} ${a.line?.name ?? ''}`}
-                  onSelect={() => { setOpen(false); useUI.getState().select(a.id, true); }}
-                  className="gap-2.5 rounded-lg py-2"
-                >
-                  <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
-                  <b className="font-bold">{a.id}</b>
-                  <span className="truncate text-muted-foreground">{a.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ))}
-        </CommandList>
+        {/* this CommandDialog does not provide the cmdk root itself */}
+        <Command>
+          <CommandInput placeholder={`输入编号或名称，如 ${example?.id ?? 'CV-1'}、${example?.spec?.label ?? '输送线'}、AGV`} />
+          <CommandList className="max-h-[60dvh]">
+            <CommandEmpty>没有匹配的设备，试试 RB、AGV、TRK 这样的编号前缀</CommandEmpty>
+            {groupsOf(plant.layout).map((g) => (
+              <CommandGroup key={g.id} heading={`${g.name}${g.note ? ` ${g.note}` : ''}`}>
+                {assets.filter((a) => a.group === g.id).map((a) => (
+                  <CommandItem
+                    key={a.id}
+                    value={`${a.id} ${a.name} ${a.spec?.label ?? ''} ${a.line?.name ?? ''}`}
+                    onSelect={() => { setOpen(false); useUI.getState().select(a.id, true); }}
+                    className="gap-2.5 rounded-lg py-2"
+                  >
+                    <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
+                    <b className="font-bold">{a.id}</b>
+                    <span className="truncate text-muted-foreground">{a.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
       </CommandDialog>
     </>
   );
@@ -204,29 +209,72 @@ function LiveClock() {
 
 const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcua: 'OPC UA' };
 
-/** Shown when the app is served by the SmartFactory server: which protocol links are up. */
+/**
+ * Shown when the app is served by the SmartFactory server: the protocol links to real equipment
+ * (shared by the whole server) and which machines each one feeds.
+ */
 function LiveLinks() {
-  const { status, sources, liveAssets } = useLive();
+  useTick();
+  const { status, sources } = useLive();
+  const { layout, sim } = usePlant();
   if (status !== 'on' || !sources.length) return null;
   const up = sources.filter((s) => s.connected);
+  const rt = runtime();
+  const here = [...sim.assets.values()].filter((a) => liveFields(a)).length;
+  const place = (c: string, p: string) =>
+    c === rt.bundle.company.id
+      ? rt.byId[p]?.layout.name ?? p
+      : `${rt.bundle.directory.find((d) => d.id === c)?.name ?? c} ${p}`;
+  const go = (c: string, p: string, a: string) => {
+    if (c !== rt.bundle.company.id) {
+      location.href = `?company=${encodeURIComponent(c)}&plant=${encodeURIComponent(p)}&asset=${encodeURIComponent(a)}`;
+      return;
+    }
+    const ui = useUI.getState();
+    const switching = ui.plantId !== p;
+    if (switching) ui.setPlant(p);
+    setTimeout(() => useUI.getState().select(a, true), switching ? 400 : 0);
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-[34px] gap-1.5 rounded-[10px] bg-brand-soft px-2.5 text-[13px] font-bold text-primary hover:bg-brand-soft/80 max-md:hidden" aria-label="数据源">
+        <Button
+          variant="ghost"
+          className={cn('h-[34px] gap-1.5 rounded-[10px] px-2.5 text-[13px] font-bold max-md:hidden', here ? 'bg-brand-soft text-primary hover:bg-brand-soft/80' : 'bg-surface text-muted-foreground hover:bg-surface/80')}
+          aria-label="真实设备数据"
+          title={here ? `本厂 ${here} 台设备接入了真实数据` : '本厂设备都在仿真；真实数据接在别的厂'}
+        >
           <RadioTowerIcon className="size-4" />
           <span className="max-lg:hidden">实时</span>
-          <span className="tabular-nums">{up.length}/{sources.length}</span>
+          <span className="tabular-nums">{here ? `${here} 台` : `${up.length}/${sources.length}`}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[300px] rounded-2xl p-2 shadow-float">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">设备数据源 · 本厂 {liveAssets} 台设备在用实时数据</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-[320px] rounded-2xl p-2 shadow-float">
+        <DropdownMenuLabel className="grid gap-0.5 leading-snug">
+          <span className="text-[13px] font-extrabold">真实设备数据</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {up.length}/{sources.length} 路连接在线 ·{' '}
+            {here ? `${layout.name}有 ${here} 台设备在用真实数据` : `${layout.name}的设备都在仿真`}
+          </span>
+        </DropdownMenuLabel>
         {sources.map((s) => (
-          <div key={s.name} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-            <span className={cn('size-2 shrink-0 rounded-full', s.connected ? 'bg-success' : 'bg-destructive')} />
-            <span className="grid min-w-0 flex-1 leading-tight">
-              <b className="truncate text-[13px]">{s.name} <span className="font-semibold text-muted-foreground">{PROTO[s.type] ?? s.type}</span></b>
-              <small className="truncate text-[11.5px] text-muted-foreground">{s.connected ? `${s.url} · 收到 ${s.received} 条` : s.error || '未连接'}</small>
-            </span>
+          <div key={s.name} className="mt-1 rounded-xl px-2 py-1.5">
+            <div className="flex items-center gap-2.5">
+              <span className={cn('size-2 shrink-0 rounded-full', s.connected ? 'bg-success' : 'bg-destructive')} />
+              <span className="grid min-w-0 flex-1 leading-tight">
+                <b className="truncate text-[13px]">{s.name} <span className="font-semibold text-muted-foreground">{PROTO[s.type] ?? s.type}</span></b>
+                <small className="truncate text-[11.5px] text-muted-foreground">{s.connected ? `${s.url} · 收到 ${s.received} 条` : s.error || '未连接'}</small>
+              </span>
+            </div>
+            {(s.targets ?? []).map((t, i) => {
+              const [c, p, a] = t.split('/');
+              const local = c === rt.bundle.company.id && p === layout.id;
+              return (
+                <DropdownMenuItem key={t} onSelect={() => go(c, p, a)} className="mt-0.5 ml-4 rounded-lg py-1 text-[12.5px]">
+                  <span className={cn('truncate', local ? 'font-bold text-primary' : 'text-muted-foreground')}>→ {s.labels?.[i] ?? `${place(c, p)} · ${a}`}</span>
+                </DropdownMenuItem>
+              );
+            })}
           </div>
         ))}
       </DropdownMenuContent>

@@ -31,6 +31,14 @@ loadCompany(params.get('company'))
     const plant = rt.byId[params.get('plant') ?? ''] ?? rt.plants[0];
     useUI.getState().setPlant(plant.layout.id);
     startLive();
+    // ?asset=HP-101 opens with that machine selected once the scene is up
+    const asset = params.get('asset');
+    if (asset) {
+      setTimeout(() => useUI.getState().select(asset, true), 1500);
+      const url = new URL(location.href);
+      url.searchParams.delete('asset');
+      history.replaceState(null, '', url);
+    }
     const { default: App } = await import('./App');
     root.render(<StrictMode><App /></StrictMode>);
   })
