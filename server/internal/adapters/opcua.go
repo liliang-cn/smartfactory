@@ -64,6 +64,9 @@ func RunOPCUA(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.L
 	}
 
 	hub.OnCommand(func(c tags.Command) {
+		if !Forward(src.Public, c) {
+			return
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		for _, b := range src.Commands {
@@ -79,14 +82,23 @@ func RunOPCUA(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.L
 				fail(err)
 				return
 			}
-			val := b.Value
-			if c.Arg != nil && b.Value == 0 {
+			var val any = b.Value
+			if b.Text != "" {
+				val = b.Text
+			} else if c.Arg != nil && b.Value == 0 {
 				val = *c.Arg
 			}
-			req := &ua.WriteRequest{NodesToWrite: []*ua.WriteValue{{
-				NodeID: id, AttributeID: ua.AttributeIDValue,
-				Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(val)},
-			}}}
+			writes := []*ua.WriteValue{}
+			if b.ArgNode != "" && c.Arg != nil {
+				if aid, err := ua.ParseNodeID(b.ArgNode); err == nil {
+					writes = append(writes, &ua.WriteValue{NodeID: aid, AttributeID: ua.AttributeIDValue,
+						Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(*c.Arg)}})
+				}
+			}
+			// the command itself goes last, after its argument
+			writes = append(writes, &ua.WriteValue{NodeID: id, AttributeID: ua.AttributeIDValue,
+				Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(val)}})
+			req := &ua.WriteRequest{NodesToWrite: writes}
 			if _, err := client.Write(ctx, req); err != nil {
 				log.Warn("write", "node", b.Node, "err", err)
 				fail(err)

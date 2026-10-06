@@ -90,7 +90,9 @@ node_hwmon_temp_celsius{chip="nvme_nvme0",sensor="temp1"} 54.85
 	}, hub, log)
 
 	want := map[string]float64{"HP-101": 64, "HP-201": 67, "RF-101": 54.85}
-	src := map[string]string{"HP-101": "broker", "HP-201": "plc", "RF-101": "scada"}
+	host, _ := os.Hostname()
+	// MQTT values are credited to the publishing client (the edge), not to the broker
+	src := map[string]string{"HP-101": "smartfactory-edge-" + host, "HP-201": "plc", "RF-101": "scada"}
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		got := map[string]tags.Tag{}

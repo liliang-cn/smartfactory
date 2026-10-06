@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -167,9 +168,15 @@ func Convention(prefix, topic string, payload []byte, src string) ([]tags.Tag, e
 		if err := json.Unmarshal(payload, &m); err != nil {
 			return nil, fmt.Errorf("%s: expected a JSON object of fields: %w", topic, err)
 		}
+		// alphabetical, so a fault's text arrives before the fault state and a reading before its counter
+		fields := make([]string, 0, len(m))
+		for f := range m {
+			fields = append(fields, f)
+		}
+		sort.Strings(fields)
 		out := make([]tags.Tag, 0, len(m))
-		for f, v := range m {
-			out = append(out, tags.Tag{Company: c, Plant: p, Asset: a, Field: f, Value: v, Source: src})
+		for _, f := range fields {
+			out = append(out, tags.Tag{Company: c, Plant: p, Asset: a, Field: f, Value: m[f], Source: src})
 		}
 		return out, nil
 	}

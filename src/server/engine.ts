@@ -124,6 +124,24 @@ function restore(c: string, json: string): string {
   return JSON.stringify({ restored, skipped });
 }
 
+/** A plant's machines in protocol order, with what is needed to map fault codes and readings. */
+function machines(c: string, plant: string): string {
+  const p = get(c)?.byId[plant];
+  if (!p) return 'null';
+  return JSON.stringify(p.machines().map((a) => ({ id: a.id, name: a.name, faults: a.spec?.faults ?? [], measured: !!a.measure })));
+}
+
+/** Equipment mode (device emulator): every plant queues its measured units for publishing. */
+function playEquipment() {
+  for (const c of companies.values()) for (const p of c.plants) p.playEquipment();
+}
+
+/** What a plant's equipment reports right now, plus units measured since the last call. */
+function telemetry(c: string, plant: string): string {
+  const p = get(c)?.byId[plant];
+  return p ? JSON.stringify(p.telemetry()) : 'null';
+}
+
 function list(): string {
   return JSON.stringify([...companies.values()].map((c) => ({
     id: c.bundle.company.id, name: c.bundle.company.name,
@@ -131,4 +149,4 @@ function list(): string {
   })));
 }
 
-(globalThis as Record<string, unknown>).SF = { init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore };
+(globalThis as Record<string, unknown>).SF = { init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, playEquipment, telemetry };

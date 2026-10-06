@@ -22,6 +22,7 @@ import (
 	"github.com/simonvetter/modbus"
 
 	"smartfactory/internal/config"
+	"smartfactory/internal/sfconv"
 )
 
 type Config struct {
@@ -100,14 +101,14 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		log.Info("modbus tcp slave listening", "addr", cfg.Modbus.Listen, "holding", len(cfg.Modbus.Holding))
 	}
 
-	var ns *server.MapNamespace
+	var ns *sfconv.LockedNamespace
 	if cfg.OPCUA != nil {
 		srv := server.New(
 			server.EndPoint(cfg.OPCUA.Host, cfg.OPCUA.Port),
 			server.EnableSecurity("None", ua.MessageSecurityModeNone),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		)
-		ns = server.NewMapNamespace(srv, "SmartFactoryEdge")
+		ns = sfconv.NewLockedNamespace(srv, "SmartFactoryEdge")
 		for _, n := range cfg.OPCUA.Nodes {
 			ns.Data[n.Node] = 0.0
 		}

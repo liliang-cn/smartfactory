@@ -229,6 +229,9 @@ export class PlantSim {
   // a neglected machine shows up first as drift on the chart, then as rejects.
   private measure(a: Asset, quiet = false): boolean {
     if (this.follower) return true;
+    // A machine that reports its own measurements decides pass/fail itself.
+    const lv = liveFields(a);
+    if (lv && ('measure' in lv || 'mcount' in lv)) return a.reading?.ok ?? true;
     const m = a.measure!;
     const wear = 1 - a.health;
     const gauss = Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
@@ -240,6 +243,10 @@ export class PlantSim {
   /** Records one measured unit (simulated, or reported by the equipment) and checks for drift. */
   private record(a: Asset, v: number, quiet = false): boolean {
     const m = a.measure!;
+    if (!quiet) {
+      this.mcount.set(a.id, ((this.mcount.get(a.id) ?? 0) + 1) % 65536);
+      if (this.readings && this.readings.length < 500) this.readings.push([a.id, Math.round(v * 1e4) / 1e4]);
+    }
     const ok = (m.lo === undefined || v >= m.lo) && (m.hi === undefined || v <= m.hi);
     const h = a.hist.meas;
     h.push(v);
@@ -627,7 +634,7 @@ export class PlantSim {
     if (a.health < 0.35) this.raise(a, 'health', 3, `健康度 ${(a.health * 100).toFixed(0)}%，建议安排维护`);
     else if (a.health > 0.4) this.clear(a, 'health');
 
-    if (running && !a.fault) {
+    if (running && !a.fault && !lv) {
       const rate = (1 / 12000) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
       if (Math.random() < rate * dt) this.trip(a, pick(s.faults));
     }
@@ -641,7 +648,8 @@ export class PlantSim {
    * maintenance. Without this a plant that runs for hours ends up with every machine faulted.
    */
   private crew(a: Asset) {
-    if (this.follower || !a.spec?.faults) return;
+    // equipment that reports its own state has its own crew
+    if (this.follower || !a.spec?.faults || liveFields(a)) return;
     if (a.fault) {
       a.repairAt ??= this.elapsed + rand(60, 180);
       const hot = a.spec.trip !== undefined && a.temp > a.spec.trip - 4;
@@ -780,31 +788,43 @@ export class PlantSim {
     const a = this.assets.get(id);
     if (!a) return false;
     a.live ??= { src, at: 0, f: {} };
+    const prev = a.live.f[field];
     a.live.src = src;
     a.live.at = Date.now();
     a.live.f[field] = value;
     const num = typeof value === 'number' ? value : Number(value);
     switch (field) {
       case 'running':
-      case 'state':
-        if (value === 'fault') this.trip(a, `设备上报故障（${src}）`);
-        else if (value === 'maint') a.maint = Math.max(a.maint, 30);
-        else if (truthy(value)) a.enabled = true;
+        if (truthy(value)) a.enabled = true;
         else if (falsy(value)) a.enabled = false;
         break;
+      case 'state':
+        this.deviceState(a, String(value), src);
+        break;
       case 'fault':
-        if (falsy(value)) {
-          if (a.fault) { a.fault = null; this.clear(a, 'fault'); this.note(a, `设备故障已解除（${src}）`); }
-        } else {
-          this.trip(a, typeof value === 'string' ? value : `设备上报故障（${src}）`);
-        }
+        if (falsy(value)) this.deviceRecovered(a, src);
+        else this.deviceFault(a, typeof value === 'string' ? value : '');
+        break;
+      case 'faultCode':
+        if (num === 0) this.deviceRecovered(a, src);
+        else if (Number.isFinite(num)) this.deviceFault(a, a.spec?.faults?.[num - 1] ?? `故障代码 ${num}`);
+        break;
+      case 'health':
+        if (Number.isFinite(num)) a.health = clamp(num, 0, 1);
         break;
       case 'speed':
         if (Number.isFinite(num)) a.speed = clamp(num > 5 ? num / 100 : num, 0.5, 1.5);
         break;
       case 'measure':
+        // one message per measured unit (MQTT)
         if (a.measure && Number.isFinite(num)) this.record(a, num);
         break;
+      case 'mcount': {
+        // polled protocols: a new unit was measured when the counter moved
+        const last = a.live.f.lastMeasure;
+        if (a.measure && prev !== undefined && Number(prev) !== num && typeof last === 'number') this.record(a, last);
+        break;
+      }
       case 'stock':
         if (Number.isFinite(num)) a.stock = num;
         break;
@@ -816,6 +836,66 @@ export class PlantSim {
         break;
     }
     return true;
+  }
+
+  /** running / idle / blocked / stopped / fault / maint as the machine reports it. */
+  private deviceState(a: Asset, v: string, src: string) {
+    if (v === 'fault') {
+      const f = a.live?.f;
+      const code = Number(f?.faultCode);
+      this.deviceFault(a, typeof f?.fault === 'string' && f.fault ? f.fault : code > 0 ? a.spec?.faults?.[code - 1] ?? '' : '');
+      return;
+    }
+    this.deviceRecovered(a, src);
+    if (v === 'maint') a.maint = Math.max(a.maint, 5);
+    else a.maint = 0;
+    if (v === 'stopped') a.enabled = false;
+    else if (v !== 'maint') a.enabled = true;
+  }
+
+  private deviceFault(a: Asset, text: string) {
+    const t = text || `设备上报故障（${a.live?.src ?? '设备'}）`;
+    if (!a.fault) this.trip(a, t);
+    else if (text && a.fault.text !== text) a.fault.text = text;
+  }
+
+  private deviceRecovered(a: Asset, src: string) {
+    if (!a.fault) return;
+    a.fault = null;
+    a.repairAt = undefined;
+    this.clear(a, 'fault');
+    this.note(a, `设备已恢复运行（${src}）`, 'op');
+  }
+
+  // ---------- running as the equipment (device emulator) ----------
+
+  /** Measured units waiting to be published, when this plant plays the equipment. */
+  private readings: [string, number][] | null = null;
+  private mcount = new Map<string, number>();
+
+  /** Makes this plant keep a queue of measured units for publishing. */
+  playEquipment() {
+    this.readings = [];
+  }
+
+  /** Machines with thermal/power behaviour, in a fixed order both sides of a protocol agree on. */
+  machines(): Asset[] {
+    return [...this.assets.values()].filter((a) => isMachineSpec(a.spec));
+  }
+
+  /** What the equipment reports right now, plus units measured since the last call. */
+  telemetry() {
+    const r = (v: number, d = 100) => Math.round(v * d) / d;
+    const machines = this.machines().map((a) => {
+      const code = a.fault ? (a.spec?.faults?.indexOf(a.fault.text.replace('（模拟）', '')) ?? -1) + 1 || 99 : 0;
+      return {
+        id: a.id, state: a.fault ? 'fault' : a.state, fault: a.fault?.text ?? '', faultCode: code,
+        temp: r(a.temp, 10), power: r(a.power, 10), vib: r(a.vib), speed: r(a.speed), health: r(a.health, 1000),
+        mcount: this.mcount.get(a.id) ?? 0, lastMeasure: a.reading?.v ?? 0, measured: !!a.measure,
+      };
+    });
+    const readings = this.readings ? this.readings.splice(0) : [];
+    return { machines, readings };
   }
 
   /** A compact picture of the plant for the server (MCP tools read it). */

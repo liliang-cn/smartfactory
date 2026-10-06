@@ -167,6 +167,13 @@ func (h *Hub) Source(name, typ, url string, points int) *SourceStatus {
 	return s
 }
 
+// HasSource reports whether an adapter of that name has registered.
+func (h *Hub) HasSource(name string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.sources[name] != nil
+}
+
 // SetConnected updates an adapter's link state.
 func (h *Hub) SetConnected(name string, ok bool, err error) {
 	h.mu.Lock()

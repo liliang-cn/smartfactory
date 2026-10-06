@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
+
+	"smartfactory/internal/sfconv"
 )
 
 //go:embed all:js
@@ -86,7 +88,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{})}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "playEquipment", "telemetry"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -429,4 +431,42 @@ func (e *Engine) Ingest(company, plant, asset, field string, value any, src stri
 
 func (e *Engine) SetTimeScale(company string, scale float64) bool {
 	return e.str("setTimeScale", company, scale) == "true"
+}
+
+// Machines lists a plant's machines in the order the protocol conventions use.
+func (e *Engine) Machines(company, plant string) []sfconv.Machine {
+	var out []sfconv.Machine
+	json.Unmarshal([]byte(e.str("machines", company, plant)), &out)
+	return out
+}
+
+// PlayEquipment switches every plant into device-emulator mode (see the devices package).
+func (e *Engine) PlayEquipment() { e.str("playEquipment") }
+
+// MachineState is what one machine reports.
+type MachineState struct {
+	ID          string  `json:"id"`
+	State       string  `json:"state"`
+	Fault       string  `json:"fault"`
+	FaultCode   int     `json:"faultCode"`
+	Temp        float64 `json:"temp"`
+	Power       float64 `json:"power"`
+	Vib         float64 `json:"vib"`
+	Speed       float64 `json:"speed"`
+	Health      float64 `json:"health"`
+	MCount      int     `json:"mcount"`
+	LastMeasure float64 `json:"lastMeasure"`
+	Measured    bool    `json:"measured"`
+}
+
+// Telemetry is a plant's equipment state plus units measured since the last call.
+type Telemetry struct {
+	Machines []MachineState `json:"machines"`
+	Readings [][2]any       `json:"readings"`
+}
+
+func (e *Engine) Telemetry(company, plant string) (Telemetry, error) {
+	var t Telemetry
+	err := json.Unmarshal([]byte(e.str("telemetry", company, plant)), &t)
+	return t, err
 }

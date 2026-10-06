@@ -173,10 +173,16 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 				bucket--
 			}
 			res := s.Engine.Command(company, m.Plant, m.Asset, m.Cmd, m.Arg)
-			if res.OK && op {
-				s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: m.Cmd, Arg: m.Arg, By: "operator", Origin: m.O})
-			} else if res.OK {
-				s.scheduleRevert(company, m)
+			if res.OK {
+				// Adapters decide what reaches equipment: operators reach everything, visitors
+				// only emulated equipment (public sources).
+				by := "visitor"
+				if op {
+					by = "operator"
+				} else {
+					s.scheduleRevert(company, m)
+				}
+				s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: m.Cmd, Arg: m.Arg, By: by, Origin: m.O})
 			}
 			send(map[string]any{"type": "result", "ok": res.OK, "msg": res.Msg})
 		case "time":
@@ -214,7 +220,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			}
 		case e := <-sub.C:
 			// operator / MCP actions on the watched company, for the "who did what" toast
-			if e.Type == "cmd" && e.Cmd.Company == company {
+			if e.Type == "cmd" && e.Cmd.Company == company && (e.Cmd.By == "operator" || e.Cmd.By == "mcp") {
 				if err := wsjson.Write(ctx, c, e); err != nil {
 					return
 				}
@@ -238,7 +244,9 @@ func (s *Server) scheduleRevert(company string, m clientMsg) {
 		if back == "speed" {
 			arg = &one
 		}
-		s.Engine.Command(company, m.Plant, m.Asset, back, arg)
+		if s.Engine.Command(company, m.Plant, m.Asset, back, arg).OK {
+			s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: back, Arg: arg, By: "auto"})
+		}
 	})
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
+	"slices"
 	"sync"
 	"time"
 
@@ -49,6 +51,9 @@ func RunModbus(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.
 	}
 
 	hub.OnCommand(func(c tags.Command) {
+		if !Forward(src.Public, c) {
+			return
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		for _, b := range src.Commands {
@@ -60,10 +65,20 @@ func RunModbus(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.
 				return
 			}
 			var err error
-			if b.Register == "coil" {
-				err = client.WriteCoil(b.Address, b.Value != 0)
-			} else {
-				err = client.WriteRegister(b.Address, uint16(b.Value))
+			if b.ArgAddress != nil && c.Arg != nil {
+				scale := b.ArgScale
+				if scale == 0 {
+					scale = 1
+				}
+				err = client.WriteRegister(*b.ArgAddress, uint16(int16(*c.Arg*scale)))
+			}
+			// the command itself goes last, after its argument
+			if err == nil {
+				if b.Register == "coil" {
+					err = client.WriteCoil(b.Address, b.Value != 0)
+				} else {
+					err = client.WriteRegister(b.Address, uint16(b.Value))
+				}
 			}
 			if err != nil {
 				log.Warn("write", "addr", b.Address, "err", err)
@@ -80,10 +95,13 @@ func RunModbus(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.
 		mu.Lock()
 		if err := ensure(); err != nil {
 			fail(err)
+		} else if blocks, err := readBlocks(client, src.Points); err != nil {
+			log.Warn("read", "err", err)
+			fail(err)
 		} else {
 			ok := true
 			for _, p := range src.Points {
-				v, err := readPoint(client, p)
+				v, err := pointValue(client, blocks, p)
 				if err != nil {
 					log.Warn("read", "register", p.Register, "addr", p.Address, "err", err)
 					fail(err)
@@ -106,39 +124,98 @@ func RunModbus(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.
 	}
 }
 
-func readPoint(c *modbus.ModbusClient, p config.Point) (any, error) {
+// registers holds one poll's worth of holding/input registers, read in a few large requests.
+type registers map[modbus.RegType]map[uint16]uint16
+
+func width(kind string) uint16 {
+	if kind == "int32" || kind == "uint32" || kind == "float32" {
+		return 2
+	}
+	return 1
+}
+
+// readBlocks reads every register the points need with as few requests as possible
+// (contiguous runs of at most 120 registers).
+func readBlocks(c *modbus.ModbusClient, points []config.Point) (registers, error) {
+	want := map[modbus.RegType]map[uint16]bool{}
+	for _, p := range points {
+		rt, ok := regType(p.Register)
+		if !ok {
+			continue
+		}
+		if want[rt] == nil {
+			want[rt] = map[uint16]bool{}
+		}
+		for i := uint16(0); i < width(p.Kind); i++ {
+			want[rt][p.Address+i] = true
+		}
+	}
+	out := registers{}
+	for rt, addrs := range want {
+		sorted := make([]uint16, 0, len(addrs))
+		for a := range addrs {
+			sorted = append(sorted, a)
+		}
+		slices.Sort(sorted)
+		out[rt] = map[uint16]uint16{}
+		for i := 0; i < len(sorted); {
+			start, end := sorted[i], sorted[i]
+			j := i + 1
+			for j < len(sorted) && sorted[j] == end+1 && sorted[j]-start < 120 {
+				end = sorted[j]
+				j++
+			}
+			vals, err := c.ReadRegisters(start, end-start+1, rt)
+			if err != nil {
+				return nil, err
+			}
+			for k, v := range vals {
+				out[rt][start+uint16(k)] = v
+			}
+			i = j
+		}
+	}
+	return out, nil
+}
+
+func regType(r string) (modbus.RegType, bool) {
+	switch r {
+	case "holding", "":
+		return modbus.HOLDING_REGISTER, true
+	case "input":
+		return modbus.INPUT_REGISTER, true
+	}
+	return 0, false
+}
+
+// pointValue decodes a point from the block read (big-endian words, high word first, which is
+// the library's default) or reads coils and discrete inputs directly.
+func pointValue(c *modbus.ModbusClient, b registers, p config.Point) (any, error) {
 	switch p.Register {
 	case "coil":
 		return c.ReadCoil(p.Address)
 	case "discrete":
 		return c.ReadDiscreteInput(p.Address)
-	case "holding", "input", "":
-	default:
+	}
+	rt, ok := regType(p.Register)
+	if !ok {
 		return nil, fmt.Errorf("unknown register type %q", p.Register)
 	}
-	rt := modbus.HOLDING_REGISTER
-	if p.Register == "input" {
-		rt = modbus.INPUT_REGISTER
-	}
+	r := b[rt]
+	hi, lo := r[p.Address], r[p.Address+1]
 	switch p.Kind {
 	case "", "int16":
-		v, err := c.ReadRegister(p.Address, rt)
-		return float64(int16(v)), err
+		return float64(int16(hi)), nil
 	case "uint16":
-		v, err := c.ReadRegister(p.Address, rt)
-		return float64(v), err
+		return float64(hi), nil
 	case "int32":
-		v, err := c.ReadUint32(p.Address, rt)
-		return float64(int32(v)), err
+		return float64(int32(uint32(hi)<<16 | uint32(lo))), nil
 	case "uint32":
-		v, err := c.ReadUint32(p.Address, rt)
-		return float64(v), err
+		return float64(uint32(hi)<<16 | uint32(lo)), nil
 	case "float32":
-		v, err := c.ReadFloat32(p.Address, rt)
-		return float64(v), err
+		return float64(math.Float32frombits(uint32(hi)<<16 | uint32(lo))), nil
 	case "bool":
-		v, err := c.ReadRegister(p.Address, rt)
-		return v != 0, err
+		return hi != 0, nil
 	}
 	return nil, fmt.Errorf("unknown kind %q", p.Kind)
 }

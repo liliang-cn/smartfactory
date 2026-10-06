@@ -3,6 +3,7 @@
 //
 //	smartfactory [-config smartfactory.json] [-http :4719]
 //	smartfactory edge -config edge.json
+//	smartfactory devices -config devices.json
 //	smartfactory version
 package main
 
@@ -22,9 +23,11 @@ import (
 
 	"smartfactory/internal/adapters"
 	"smartfactory/internal/config"
+	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/mcptools"
+	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
 	sfweb "smartfactory/internal/web"
 	"smartfactory/web"
@@ -39,7 +42,7 @@ func main() {
 
 	args := os.Args[1:]
 	cmd := "serve"
-	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "version") {
+	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "version") {
 		cmd, args = args[0], args[1:]
 	}
 	var err error
@@ -48,6 +51,8 @@ func main() {
 		fmt.Println(version)
 	case "edge":
 		err = runEdge(ctx, args, log)
+	case "devices":
+		err = runDevices(ctx, args, log)
 	default:
 		err = serve(ctx, args, log)
 	}
@@ -102,6 +107,14 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		defer b.Close()
 	}
 	for _, src := range cfg.Sources {
+		if src.Convention == "sf" && (src.Type == "modbus" || src.Type == "opcua") {
+			ms := eng.Machines(src.Company, src.Plant)
+			if len(ms) == 0 {
+				log.Error("source skipped: no such plant", "source", src.Name, "plant", src.Company+"/"+src.Plant)
+				continue
+			}
+			src = sfconv.Expand(src, ms)
+		}
 		switch src.Type {
 		case "mqtt":
 			go adapters.RunMQTT(ctx, src, hub, log)
@@ -155,4 +168,20 @@ func runEdge(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	log.Info("smartfactory edge starting", "version", version, "scrape", cfg.Scrape, "metrics", len(cfg.Metrics))
 	return edge.Run(ctx, cfg, log)
+}
+
+func runDevices(ctx context.Context, args []string, log *slog.Logger) error {
+	fs := flag.NewFlagSet("devices", flag.ExitOnError)
+	path := fs.String("config", "devices.json", "emulated equipment config (JSON)")
+	fs.Parse(args)
+	cfg, err := devices.Load(*path)
+	if err != nil {
+		return err
+	}
+	eng, err := engine.New(log)
+	if err != nil {
+		return err
+	}
+	log.Info("smartfactory devices starting", "version", version, "plants", len(cfg.Plants))
+	return devices.Run(ctx, cfg, eng, log)
 }

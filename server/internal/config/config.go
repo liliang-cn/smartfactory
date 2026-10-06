@@ -37,6 +37,8 @@ type Broker struct {
 	Prefix string `json:"prefix"`
 	// Users with passwords; empty allows anonymous clients.
 	Users map[string]string `json:"users"`
+	// Public: devices on this broker are emulated, so visitors' commands are published too.
+	Public bool `json:"public"`
 }
 
 type Source struct {
@@ -48,8 +50,14 @@ type Source struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	ClientID string `json:"clientId"`
-	// mqtt: also accept convention topics under this prefix from this broker
+	// mqtt: also accept convention topics under this prefix from this broker.
+	// modbus/opcua: "sf" derives every point from the plant's machines (see package sfconv).
 	Convention string `json:"convention"`
+	// modbus/opcua with the "sf" convention: the plant the device serves
+	Company string `json:"company"`
+	Plant   string `json:"plant"`
+	// Public sources are emulated equipment: visitors' commands reach them too.
+	Public bool `json:"public"`
 	// modbus: unit (slave) id
 	Unit uint8 `json:"unit"`
 	// modbus/opcua: polling interval, e.g. "1s"
@@ -97,8 +105,13 @@ type CmdBinding struct {
 	Register string  `json:"register"`
 	Address  uint16  `json:"address"`
 	Value    float64 `json:"value"`
-	// opcua
-	Node string `json:"node"`
+	// modbus: the command's argument is written here first, ×ArgScale
+	ArgAddress *uint16 `json:"argAddress"`
+	ArgScale   float64 `json:"argScale"`
+	// opcua: Text (if set) is written instead of Value; the argument goes to ArgNode
+	Node    string `json:"node"`
+	Text    string `json:"text"`
+	ArgNode string `json:"argNode"`
 }
 
 // Duration reads "1s", "500ms" from JSON.
