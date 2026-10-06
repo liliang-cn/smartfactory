@@ -526,13 +526,14 @@ export class PlantSim {
         const a = st[p.proc];
         if (!this.ready(a)) continue;
         p.t += dt * a.speed;
-        a.progress = Math.min(1, p.t / a.cycle);
-        if (p.t < a.cycle) continue;
+        const need = p.need ?? a.cycle;
+        a.progress = Math.min(1, p.t / need);
+        if (p.t < need) continue;
         // inventory this step lends out: the unit waits here until there is enough
         if (a.take && !this.follower) {
           const short = this.shortOf(a.take);
           if (short) {
-            p.t = a.cycle;
+            p.t = need;
             if (a.waitFor !== short.label) {
               a.waitFor = short.label;
               this.raise(a, 'inv', 3, `${short.label}不足，等待中`);
@@ -624,6 +625,10 @@ export class PlantSim {
         next.busy = p;
         p.proc = n;
         p.t = 0;
+        const pace = this.layout.pace ?? 0;
+        p.need = pace > 0 && !this.follower
+          ? next.cycle * (1 + Math.abs(Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random())) * pace)
+          : undefined;
       }
       if (!next && p.s >= line.len - 1e-4 && line.outfeed.count < line.outfeed.cap) {
         line.outfeed.count++;

@@ -88,6 +88,7 @@ export interface PlantLayout {
   flow: 'belt' | 'walk';
   terms: IndustryCfg['terms'];
   calendar: IndustryCfg['calendar'];
+  pace: number;
   inventory: InventoryLayout[];
   lines: LineLayout[];
   box: { x0: number; x1: number; z0: number; z1: number };
@@ -351,6 +352,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     flow: industry.flow,
     terms: industry.terms,
     calendar: industry.calendar,
+    pace: industry.pace,
     // a plant that lists its inventory keeps only those items (a BBQ site has no tents)
     inventory: Object.entries(industry.inventory).filter(([key]) => !plant.inventory || key in plant.inventory).map(([key, it]) => {
       const cap = plant.inventory?.[key] ?? it.capacity;

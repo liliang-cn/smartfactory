@@ -123,6 +123,12 @@
         }
       }
     },
+    "pace": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.5
+    },
     "products": {
       "type": "object",
       "propertyNames": {
@@ -150,6 +156,37 @@
           },
           "customer": {
             "type": "string"
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "partNo": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "weight": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "input": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "share": {
+                  "default": 1,
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "partNo",
+                "name"
+              ]
+            }
           },
           "suppliers": {
             "type": "array",

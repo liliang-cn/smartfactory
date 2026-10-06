@@ -45,6 +45,8 @@ export interface Product {
   held?: Record<string, number>;
   /** failed a check and was reworked: not first-pass good */
   rework?: boolean;
+  /** seconds this unit takes at the machine it is in (the nominal cycle plus this unit's scatter) */
+  need?: number;
   /** a flaw left by a step, waiting for the inspection that finds it */
   flaw?: string;
   /** the material lot (steel heat) it was made from, its supplier and flaw factor */

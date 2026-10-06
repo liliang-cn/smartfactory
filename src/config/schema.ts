@@ -331,6 +331,11 @@ export const Industry = z.object({
     night: z.object({ from: z.number().min(0).max(23), to: z.number().min(0).max(24), stops: z.number().min(1).default(1), flaws: z.number().min(1).default(1) }).optional(),
     pm: z.object({ hours: z.number().positive(), start: z.number().min(0).max(23) }).optional(),
   }).default({}),
+  /**
+   * how far real cycles run over the nominal one: each unit takes cycle × (1 + |N(0, pace)|), so
+   * performance sits a few percent under 100 % the way it does on a real line (0 = always nominal)
+   */
+  pace: z.number().min(0).max(0.5).default(0),
   products: z.record(z.string(), Product),
   machines: z.record(z.string(), Machine),
   /** what the site keeps a count of (tents, tables, charcoal …), shown as in use / available / capacity */
