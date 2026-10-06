@@ -231,7 +231,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       const x = cursor + len / 2;
       cursor += len + 1.4;
       const makes = st.makes ?? machine.makes ?? (arch === 'packer' && product.stages.packed ? 'packed' : undefined);
-      for (const k of [...Object.keys(('take' in st ? st.take : undefined) ?? machine.take ?? {}), ...(('give' in st ? st.give : undefined) ?? machine.give ?? []), ...(machine.tooling?.spare ? [machine.tooling.spare] : [])]) {
+      for (const k of [...Object.keys(('take' in st ? st.take : undefined) ?? machine.take ?? {}), ...(('give' in st ? st.give : undefined) ?? machine.give ?? []), ...(machine.tooling?.spare ? [machine.tooling.spare] : []), ...('tooling' in st && st.tooling?.spare ? [st.tooling.spare] : [])]) {
         if (!industry.inventory[k]) throw new Error(`${name}：${st.name ?? machine.label} 用到的库存 ${k} 没有在行业包 inventory 里定义`);
       }
       if (makes && !product.stages[makes]) throw new Error(`${name}：产品 ${product.name} 没有工序状态 ${makes}`);

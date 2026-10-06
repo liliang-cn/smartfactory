@@ -1350,7 +1350,7 @@
         "label": "锻模",
         "life": 6000,
         "change": 5400,
-        "spare": "forgeDie",
+        "spare": "crankDie",
         "drift": 3.5,
         "repair": {
           "hours": 72,
@@ -2208,7 +2208,8 @@
         },
         "tooling": {
           "life": 14000,
-          "change": 3600
+          "change": 3600,
+          "spare": "conrodDie"
         },
         "measure": {
           "label": "大头厚度（热态）",
@@ -2515,23 +2516,14 @@
     ]
   },
   "inventory": {
-    "forgeDie": {
-      "label": "备用锻模",
-      "unit": "副",
-      "kind": "consume",
-      "capacity": 12,
-      "refill": 6,
-      "low": 0.34,
-      "lead": 336
-    },
     "rollDie": {
       "label": "备用辊锻模",
       "unit": "副",
       "kind": "consume",
       "capacity": 8,
       "refill": 4,
-      "low": 0.25,
-      "lead": 336
+      "low": 0.38,
+      "lead": 240
     },
     "trimDie": {
       "label": "备用切边模",
@@ -2539,7 +2531,7 @@
       "kind": "consume",
       "capacity": 10,
       "refill": 4,
-      "low": 0.3,
+      "low": 0.4,
       "lead": 240
     },
     "punch": {
@@ -2568,6 +2560,24 @@
       "refill": 200,
       "low": 0.25,
       "lead": 72
+    },
+    "crankDie": {
+      "label": "备用曲轴锻模",
+      "unit": "副",
+      "kind": "consume",
+      "capacity": 10,
+      "refill": 4,
+      "low": 0.4,
+      "lead": 240
+    },
+    "conrodDie": {
+      "label": "备用连杆锻模",
+      "unit": "副",
+      "kind": "consume",
+      "capacity": 6,
+      "refill": 3,
+      "low": 0.5,
+      "lead": 240
     }
   }
 }

@@ -3,14 +3,17 @@
 // V8 runs the bundle about 20× faster than the server's embedded engine, which is why this
 // is a script: 30 days of a three-plant company take minutes instead of an hour.
 //
-//   node scripts/backfill.mjs huaduan 30 | smartfactory history load -config cfg.json -company huaduan -reset
+//   node scripts/backfill.mjs huaduan 30 [warmup days] [end ms] | smartfactory history load -config cfg.json -company huaduan -reset
+//
+// End defaults to the start of this hour; pass the hour live recording started, so the two never
+// add up the same hour.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [company, days = '30', warmup = '3'] = process.argv.slice(2);
+const [company, days = '30', warmup = '3', until] = process.argv.slice(2);
 if (!company) {
-  console.error('usage: node scripts/backfill.mjs <company> [days] [warmup days]');
+  console.error('usage: node scripts/backfill.mjs <company> [days] [warmup days] [end ms]');
   process.exit(2);
 }
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -21,7 +24,7 @@ SF.init();
 
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
 const HOUR = 3600_000;
-const end = Math.floor(Date.now() / HOUR) * HOUR;
+const end = Math.floor((until ? Number(until) : Date.now()) / HOUR) * HOUR;
 const start = end - Number(days) * 24 * HOUR;
 out({ dims: JSON.parse(SF.historyDims(company)), from: start, to: end });
 if (!SF.advance(company, Number(warmup) * 86400, 1)) throw new Error(`no company ${company}`);
