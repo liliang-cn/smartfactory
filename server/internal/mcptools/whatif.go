@@ -1,12 +1,17 @@
 package mcptools
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -90,7 +95,7 @@ func addSimTool(s *mcp.Server, eng *engine.Engine) {
 				j = &simJob{done: make(chan struct{}), started: time.Now()}
 				simJobs[id] = j
 				state := eng.SaveJSON(in.Company)
-				go j.run(eng.Dir, state, in)
+				go j.run(eng, state, in)
 			}
 			simMu.Unlock()
 
@@ -111,24 +116,35 @@ func addSimTool(s *mcp.Server, eng *engine.Engine) {
 		})
 }
 
-func (j *simJob) run(dir, state string, in simIn) {
+func (j *simJob) run(eng *engine.Engine, state string, in simIn) {
 	defer close(j.done)
 	simSlot <- struct{}{}
 	defer func() { <-simSlot }()
-	off, err := engine.NewOffline(slog.Default())
-	if err != nil {
-		j.err = err
-		return
-	}
-	off.Dir = dir
-	off.LoadConfigs()
-	var r struct{ Restored, Skipped []string }
-	if err := json.Unmarshal([]byte(off.RestoreJSON(in.Company, state)), &r); err != nil || len(r.Skipped) > 0 && len(r.Restored) == 0 {
-		j.err = fmt.Errorf("could not copy the plant's state (%v)", r.Skipped)
-		return
+	var raw string
+	if node, err := exec.LookPath("node"); err == nil {
+		// The same bundle in V8 runs about 20× faster than in the embedded engine.
+		raw, err = runInNode(node, eng, state, in)
+		if err != nil {
+			j.err = err
+			return
+		}
+	} else {
+		off, err := engine.NewOffline(slog.Default())
+		if err != nil {
+			j.err = err
+			return
+		}
+		off.Dir = eng.Dir
+		off.LoadConfigs()
+		var r struct{ Restored, Skipped []string }
+		if err := json.Unmarshal([]byte(off.RestoreJSON(in.Company, state)), &r); err != nil || len(r.Restored) == 0 {
+			j.err = fmt.Errorf("could not copy the plant's state (%v)", r.Skipped)
+			return
+		}
+		raw = off.WhatIf(in.Company, in.Plant, in.Lines, in.Hours, 2, in.Changes, in.Seed)
 	}
 	var out map[string]any
-	if err := json.Unmarshal([]byte(off.WhatIf(in.Company, in.Plant, in.Lines, in.Hours, 2, in.Changes, in.Seed)), &out); err != nil {
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		j.err = err
 		return
 	}
@@ -138,4 +154,70 @@ func (j *simJob) run(dir, state string, in simIn) {
 	}
 	delete(out, "ok")
 	j.out = out
+}
+
+// runner loads the bundle, the company's run-time configs (if it was created over MCP) and the
+// live state, then runs the what-if; input on stdin, result on stdout.
+const runner = `const fs = require('fs');
+globalThis.host = { log: (m) => process.stderr.write(String(m) + '\n') };
+(0, eval)(fs.readFileSync(process.argv[2], 'utf8'));
+const inp = JSON.parse(fs.readFileSync(0, 'utf8'));
+const SF = globalThis.SF;
+SF.init();
+for (const ind of inp.industries) SF.addIndustry(JSON.stringify(ind));
+if (inp.companyConfig) SF.addCompany(JSON.stringify(inp.companyConfig));
+const r = JSON.parse(SF.restore(inp.company, inp.state));
+if (!r.restored.length) { process.stdout.write(JSON.stringify({ ok: false, errors: ['could not copy the plant state: ' + r.skipped.join(', ')] })); process.exit(0); }
+process.stdout.write(SF.whatIf(inp.company, inp.plant, JSON.stringify(inp.lines || []), inp.hours, inp.dt, JSON.stringify(inp.changes || []), inp.seed));
+`
+
+var bundleOnce struct {
+	sync.Once
+	dir string
+	err error
+}
+
+func runInNode(node string, eng *engine.Engine, state string, in simIn) (string, error) {
+	bundleOnce.Do(func() {
+		b, err := engine.Bundle()
+		if err == nil {
+			bundleOnce.dir, err = os.MkdirTemp("", "sf-whatif-")
+		}
+		if err == nil {
+			err = os.WriteFile(filepath.Join(bundleOnce.dir, "engine.js"), b, 0o644)
+		}
+		if err == nil {
+			err = os.WriteFile(filepath.Join(bundleOnce.dir, "run.cjs"), []byte(runner), 0o644)
+		}
+		bundleOnce.err = err
+	})
+	if bundleOnce.err != nil {
+		return "", bundleOnce.err
+	}
+	input := map[string]any{
+		"company": in.Company, "state": state, "plant": in.Plant, "lines": in.Lines, "hours": in.Hours, "dt": 2,
+		"changes": in.Changes, "seed": in.Seed, "industries": []json.RawMessage{},
+	}
+	if company, inds, ok := eng.RuntimeCompany(in.Company); ok {
+		list := []json.RawMessage{}
+		for _, v := range inds {
+			list = append(list, v)
+		}
+		input["industries"], input["companyConfig"] = list, company
+	}
+	body, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, filepath.Join(bundleOnce.dir, "run.cjs"), filepath.Join(bundleOnce.dir, "engine.js"))
+	cmd.Stdin = bytes.NewReader(body)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("what-if in node: %v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return string(out), nil
 }

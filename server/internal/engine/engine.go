@@ -743,3 +743,6 @@ func (e *Engine) WhatIf(company, plant string, lines []string, hours, dt float64
 	c, _ := json.Marshal(changes)
 	return e.str("whatIf", company, plant, string(l), hours, dt, string(c), seed)
 }
+
+// Bundle is the engine's JavaScript, for running it elsewhere (a what-if in Node).
+func Bundle() ([]byte, error) { return files.ReadFile("js/engine.js") }
