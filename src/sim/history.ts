@@ -302,8 +302,9 @@ export class History {
     const d = localTime(now);
     const ymd = d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
     const qty = L.order.qty;
-    // the customer's due date: planned at 75 % of the bottleneck's rate, plus a day of slack
-    const due = now + (qty * this.neck(line).cycle) / 0.75 * 1000 + 24 * HOUR;
+    // the customer's due date: planned at 82 % of the bottleneck's rate with four hours' slack, so a
+    // bad day (a breakdown, no spare die, a bad heat) makes an order late
+    const due = now + (qty * this.neck(line).cycle) / 0.82 * 1000 + 4 * HOUR;
     const heat = line.lot?.no ?? '';
     const o: WorkOrder = {
       no: `${(L.order.no.split('-')[0] || 'MO')}-${ymd}-${this.plantNo}${String(L.no).padStart(2, '0')}${String(seq % 100).padStart(2, '0')}`,
