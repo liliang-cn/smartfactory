@@ -206,7 +206,7 @@ const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcu
 
 /** Shown when the app is served by the SmartFactory server: which protocol links are up. */
 function LiveLinks() {
-  const { status, sources, fields } = useLive();
+  const { status, sources, liveAssets } = useLive();
   if (status !== 'on' || !sources.length) return null;
   const up = sources.filter((s) => s.connected);
   return (
@@ -219,7 +219,7 @@ function LiveLinks() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[300px] rounded-2xl p-2 shadow-float">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">设备数据源 · 已接入 {fields} 个点位</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs text-muted-foreground">设备数据源 · 本厂 {liveAssets} 台设备在用实时数据</DropdownMenuLabel>
         {sources.map((s) => (
           <div key={s.name} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
             <span className={cn('size-2 shrink-0 rounded-full', s.connected ? 'bg-success' : 'bg-destructive')} />
@@ -261,7 +261,7 @@ export function TopBar() {
       <LiveLinks />
       <LiveClock />
       <AlarmBell />
-      <div className="flex items-center gap-2.5 max-lg:hidden">
+      <div className="flex items-center gap-2.5 max-xl:hidden">
         <span className="grid size-[38px] place-items-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 font-extrabold text-white">早</span>
         <span className="grid leading-tight max-xl:hidden">
           <b className="text-[13.5px]">早班值班长</b>

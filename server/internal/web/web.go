@@ -15,11 +15,13 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"smartfactory/internal/engine"
 	"smartfactory/internal/tags"
 )
 
 type Server struct {
 	Hub     *tags.Hub
+	Engine  *engine.Engine
 	Token   string
 	Version string
 	Static  fs.FS
@@ -31,7 +33,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "sources": s.Hub.Sources()})
+		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.Companies, "stepMs": s.Engine.StepCost.Seconds() * 1000, "sources": s.Hub.Sources()})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -71,15 +73,26 @@ func (s *Server) requireToken(next http.Handler) http.Handler {
 }
 
 type clientMsg struct {
-	Type    string          `json:"type"`
-	Company string          `json:"company"`
-	Data    json.RawMessage `json:"data"`
-	Cmd     *tags.Command   `json:"cmd"`
+	Type    string   `json:"type"`
+	Company string   `json:"company"`
+	Plant   string   `json:"plant"`
+	Asset   string   `json:"asset"`
+	Cmd     string   `json:"cmd"`
+	Arg     *float64 `json:"arg"`
+	Scale   float64  `json:"scale"`
+	// O is the sending browser, echoed on broadcasts so it can skip its own
+	O string `json:"o"`
 }
 
-// live is the browser feed: every tag and operator command as it happens. Browsers send back
-// a snapshot of their simulation so MCP clients can see KPIs and alarms, and — with the operator
-// token — commands that should reach the devices.
+// Visitors may operate the simulated plant (it is a demo), but their actions undo themselves
+// after a while so one visitor cannot leave the plant stopped for everyone.
+const visitorRevert = 90 * time.Second
+
+var revertOf = map[string]string{"stop": "start", "fault": "reset", "speed": "speed"}
+
+// live is the browser link. The server runs the simulation; a browser watches one company and
+// gets frames of the plant it is looking at (and the others now and then), sends commands, and
+// with the operator token can also change the plant clock and reach real equipment.
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	op := s.operator(r)
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true, CompressionMode: websocket.CompressionContextTakeover})
@@ -87,17 +100,31 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.CloseNow()
-	c.SetReadLimit(4 << 20)
+	c.SetReadLimit(64 << 10)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	sub := s.Hub.Subscribe()
-	defer s.Hub.Unsubscribe(sub)
-	hello := map[string]any{"type": "hello", "operator": op, "version": s.Version, "sources": s.Hub.Sources(), "tags": s.Hub.Last("", "", "")}
-	if err := wsjson.Write(ctx, c, hello); err != nil {
-		return
+	out := make(chan any, 64)
+	send := func(v any) {
+		select {
+		case out <- v:
+		default:
+		}
 	}
+	send(map[string]any{"type": "hello", "operator": op, "sim": true, "version": s.Version, "sources": s.Hub.Sources()})
 
+	var (
+		company  string
+		frames   <-chan []byte
+		setPlant func(string)
+		unwatch  = func() {}
+		bucket   = 5.0
+		refill   = time.Now()
+	)
+	defer func() { unwatch() }()
+
+	// The reader only reads; everything is handled on this goroutine.
+	in := make(chan clientMsg, 16)
 	go func() {
 		defer cancel()
 		for {
@@ -105,31 +132,88 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			if err := wsjson.Read(ctx, c, &m); err != nil {
 				return
 			}
-			switch m.Type {
-			case "snapshot":
-				if m.Company != "" && len(m.Data) > 0 {
-					s.Hub.SetSnapshot(m.Company, m.Data)
-				}
-			case "cmd":
-				if op && m.Cmd != nil && m.Cmd.Asset != "" {
-					cmd := *m.Cmd
-					cmd.By = "operator"
-					s.Log.Info("operator command", "company", cmd.Company, "plant", cmd.Plant, "asset", cmd.Asset, "cmd", cmd.Cmd)
-					s.Hub.Command(cmd)
-				}
+			select {
+			case in <- m:
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
 
+	handle := func(m clientMsg) {
+		switch m.Type {
+		case "watch":
+			if m.Company != company {
+				unwatch()
+				company = m.Company
+				frames, setPlant, unwatch = s.Engine.Watch(company, m.Plant)
+			} else if setPlant != nil {
+				setPlant(m.Plant)
+			}
+		case "plant":
+			if setPlant != nil {
+				setPlant(m.Plant)
+			}
+		case "cmd":
+			if company == "" || m.Asset == "" {
+				return
+			}
+			if !op {
+				// token bucket: a burst of 5, then one every 3 s
+				bucket = min(5, bucket+time.Since(refill).Seconds()/3)
+				refill = time.Now()
+				if bucket < 1 {
+					send(map[string]any{"type": "result", "ok": false, "msg": "操作太频繁，稍后再试"})
+					return
+				}
+				bucket--
+			}
+			res := s.Engine.Command(company, m.Plant, m.Asset, m.Cmd, m.Arg)
+			if res.OK && op {
+				s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: m.Cmd, Arg: m.Arg, By: "operator", Origin: m.O})
+			} else if res.OK {
+				s.scheduleRevert(company, m)
+			}
+			send(map[string]any{"type": "result", "ok": res.OK, "msg": res.Msg})
+		case "time":
+			if !op {
+				send(map[string]any{"type": "result", "ok": false, "msg": "全厂时钟是共享的，只有操作员可以调整"})
+				return
+			}
+			if company != "" {
+				s.Engine.SetTimeScale(company, m.Scale)
+			}
+		case "hist":
+			if company != "" {
+				send(map[string]any{"type": "hist", "plant": m.Plant, "asset": m.Asset, "data": json.RawMessage(s.Engine.Hist(company, m.Plant, m.Asset))})
+			}
+		}
+	}
+
+	sub := s.Hub.Subscribe()
+	defer s.Hub.Unsubscribe(sub)
 	status := time.NewTicker(5 * time.Second)
 	defer status.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case e := <-sub.C:
-			if err := wsjson.Write(ctx, c, e); err != nil {
+		case m := <-in:
+			handle(m)
+		case f := <-frames:
+			if err := c.Write(ctx, websocket.MessageText, f); err != nil {
 				return
+			}
+		case v := <-out:
+			if err := wsjson.Write(ctx, c, v); err != nil {
+				return
+			}
+		case e := <-sub.C:
+			// operator / MCP actions on the watched company, for the "who did what" toast
+			if e.Type == "cmd" && e.Cmd.Company == company {
+				if err := wsjson.Write(ctx, c, e); err != nil {
+					return
+				}
 			}
 		case <-status.C:
 			if err := wsjson.Write(ctx, c, map[string]any{"type": "sources", "sources": s.Hub.Sources()}); err != nil {
@@ -137,6 +221,21 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func (s *Server) scheduleRevert(company string, m clientMsg) {
+	back, ok := revertOf[m.Cmd]
+	if !ok {
+		return
+	}
+	one := 1.0
+	time.AfterFunc(visitorRevert, func() {
+		var arg *float64
+		if back == "speed" {
+			arg = &one
+		}
+		s.Engine.Command(company, m.Plant, m.Asset, back, arg)
+	})
 }
 
 // static serves the embedded single-page app: hashed assets cached for a year, the page itself

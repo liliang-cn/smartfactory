@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"smartfactory/internal/engine"
 	"smartfactory/internal/tags"
 )
 
@@ -59,16 +60,16 @@ type asset struct {
 	Live   string  `json:"live,omitempty"`
 }
 
-func load(hub *tags.Hub, company string) (*snapshot, time.Duration, error) {
-	s, ok := hub.Snapshot(company)
-	if !ok {
-		return nil, 0, fmt.Errorf("no snapshot for %q yet: the simulation runs in the web app, open https://factory.superleo.cn/?company=%s once (live protocol values are available without it via read_tags)", company, company)
+func load(eng *engine.Engine, company string) (*snapshot, error) {
+	raw := eng.Snapshot(company)
+	if raw == "null" {
+		return nil, fmt.Errorf("no company %q; see list_sites", company)
 	}
 	var snap snapshot
-	if err := json.Unmarshal(s.Data, &snap); err != nil {
-		return nil, 0, err
+	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
+		return nil, err
 	}
-	return &snap, time.Since(s.At).Round(time.Second), nil
+	return &snap, nil
 }
 
 func (s *snapshot) plant(id string) (*plant, error) {
@@ -91,11 +92,10 @@ type siteOut struct {
 	Companies []siteCompany `json:"companies"`
 }
 type siteCompany struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name,omitempty"`
-	SnapshotAge string      `json:"snapshotAge,omitempty"`
-	Plants      []sitePlant `json:"plants,omitempty"`
-	LiveTags    int         `json:"liveTags"`
+	ID       string      `json:"id"`
+	Name     string      `json:"name"`
+	Plants   []sitePlant `json:"plants"`
+	LiveTags int         `json:"liveTags"`
 }
 type sitePlant struct {
 	ID   string `json:"id"`
@@ -108,7 +108,6 @@ type plantIn struct {
 	Plant   string `json:"plant" jsonschema:"plant id, e.g. p1"`
 }
 type plantOut struct {
-	SnapshotAge string           `json:"snapshotAge"`
 	Plant       string           `json:"plant"`
 	Kpis        map[string]any   `json:"kpis"`
 	Lines       []map[string]any `json:"lines"`
@@ -123,8 +122,7 @@ type alarmsIn struct {
 	ActiveOnly bool   `json:"activeOnly,omitempty" jsonschema:"only alarms that are still active"`
 }
 type alarmsOut struct {
-	SnapshotAge string           `json:"snapshotAge"`
-	Alarms      []alarmWithPlant `json:"alarms"`
+	Alarms []alarmWithPlant `json:"alarms"`
 }
 type alarmWithPlant struct {
 	Plant string `json:"plant"`
@@ -137,10 +135,9 @@ type assetIn struct {
 	Asset   string `json:"asset" jsonschema:"asset id, e.g. HP-101"`
 }
 type assetOut struct {
-	SnapshotAge string     `json:"snapshotAge,omitempty"`
-	Asset       *asset     `json:"asset,omitempty"`
-	Alarms      []alarm    `json:"alarms,omitempty"`
-	LiveTags    []tags.Tag `json:"liveTags"`
+	Asset    *asset     `json:"asset,omitempty"`
+	Alarms   []alarm    `json:"alarms,omitempty"`
+	LiveTags []tags.Tag `json:"liveTags"`
 }
 
 type tagsIn struct {
@@ -174,33 +171,34 @@ type cmdOut struct {
 var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship"}
 
 // New builds the MCP server.
-func New(hub *tags.Hub, version string) *mcp.Server {
+func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "smartfactory", Title: "SmartFactory digital twin", Version: version}, &mcp.ServerOptions{
 		Instructions: "SmartFactory is a 3D digital twin of factories. Companies contain plants, plants contain production lines of machines (assets). " +
-			"Use list_sites first. KPIs, alarms and simulated machine state come from the running twin (snapshotAge says how fresh). " +
+			"Use list_sites first. The simulation runs on the server continuously; KPIs, alarms and machine state are current. " +
 			"Values read over MQTT / Modbus TCP / OPC UA from real equipment are in read_tags and are marked 'live' on assets. " +
-			"send_command acts on the twin and is forwarded to devices through the protocol adapters.",
+			"send_command acts on the twin (every viewer sees it) and is forwarded to devices through the protocol adapters.",
 	})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "list_sites", Description: "List companies and their plants known to the twin, with how fresh each company's snapshot is."},
+	mcp.AddTool(s, &mcp.Tool{Name: "list_sites", Description: "List companies and their plants in the twin, with how many live protocol values each has."},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, siteOut, error) {
-			var out siteOut
-			for _, c := range hub.Companies() {
-				sc := siteCompany{ID: c, LiveTags: len(hub.Last(c, "", ""))}
-				if snap, age, err := load(hub, c); err == nil {
-					sc.Name, sc.SnapshotAge = snap.Company.Name, age.String()
-					for _, p := range snap.Plants {
-						sc.Plants = append(sc.Plants, sitePlant{p.ID, p.Name, p.Hall})
-					}
-				}
-				out.Companies = append(out.Companies, sc)
+			var list []struct {
+				ID     string      `json:"id"`
+				Name   string      `json:"name"`
+				Plants []sitePlant `json:"plants"`
+			}
+			if err := json.Unmarshal([]byte(eng.List()), &list); err != nil {
+				return nil, siteOut{}, err
+			}
+			out := siteOut{Companies: []siteCompany{}}
+			for _, c := range list {
+				out.Companies = append(out.Companies, siteCompany{ID: c.ID, Name: c.Name, Plants: c.Plants, LiveTags: len(hub.Last(c.ID, "", ""))})
 			}
 			return nil, out, nil
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "plant_status", Description: "KPIs (OEE, throughput, quality), per-line figures, active alarm count, faulted machines and machines fed by live protocol data for one plant."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in plantIn) (*mcp.CallToolResult, plantOut, error) {
-			snap, age, err := load(hub, in.Company)
+			snap, err := load(eng, in.Company)
 			if err != nil {
 				return nil, plantOut{}, err
 			}
@@ -208,7 +206,7 @@ func New(hub *tags.Hub, version string) *mcp.Server {
 			if err != nil {
 				return nil, plantOut{}, err
 			}
-			out := plantOut{SnapshotAge: age.String(), Plant: p.Name + " " + p.Hall, Kpis: p.Kpis, Lines: p.Lines, Faulted: []asset{}, LiveAssets: []asset{}}
+			out := plantOut{Plant: p.Name + " " + p.Hall, Kpis: p.Kpis, Lines: p.Lines, Faulted: []asset{}, LiveAssets: []asset{}}
 			for _, a := range p.Alarms {
 				if a.Active {
 					out.ActiveAlarm++
@@ -227,11 +225,11 @@ func New(hub *tags.Hub, version string) *mcp.Server {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_alarms", Description: "Alarms of a company, newest first, optionally for one plant and only active ones."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in alarmsIn) (*mcp.CallToolResult, alarmsOut, error) {
-			snap, age, err := load(hub, in.Company)
+			snap, err := load(eng, in.Company)
 			if err != nil {
 				return nil, alarmsOut{}, err
 			}
-			out := alarmsOut{SnapshotAge: age.String(), Alarms: []alarmWithPlant{}}
+			out := alarmsOut{Alarms: []alarmWithPlant{}}
 			for _, p := range snap.Plants {
 				if in.Plant != "" && p.ID != in.Plant {
 					continue
@@ -249,8 +247,7 @@ func New(hub *tags.Hub, version string) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{Name: "get_asset", Description: "One machine: state, temperature, power, vibration, health, utilisation, fault text, its alarms, and any live protocol values bound to it."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in assetIn) (*mcp.CallToolResult, assetOut, error) {
 			out := assetOut{LiveTags: hub.Last(in.Company, in.Plant, in.Asset)}
-			if snap, age, err := load(hub, in.Company); err == nil {
-				out.SnapshotAge = age.String()
+			if snap, err := load(eng, in.Company); err == nil {
 				if p, err := snap.plant(in.Plant); err == nil {
 					for i := range p.Assets {
 						if p.Assets[i].ID == in.Asset {
@@ -284,7 +281,7 @@ func New(hub *tags.Hub, version string) *mcp.Server {
 			return nil, sourcesOut{Sources: hub.Sources()}, nil
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "send_command", Description: "Operate a machine: start, stop, reset a fault, toggle maintenance, set speed (arg 0.5–1.5), inject a fault drill, restock the raw store, ship finished goods. Applies to the twin in every open browser and is forwarded to devices through the protocol adapters."},
+	mcp.AddTool(s, &mcp.Tool{Name: "send_command", Description: "Operate a machine: start, stop, reset a fault, toggle maintenance, set speed (arg 0.5–1.5), inject a fault drill, restock the raw store, ship finished goods. Applies to the server-side twin that every viewer sees, and is forwarded to devices through the protocol adapters."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in cmdIn) (*mcp.CallToolResult, cmdOut, error) {
 			if !slices.Contains(commands, in.Command) {
 				return nil, cmdOut{}, fmt.Errorf("unknown command %q; use one of %v", in.Command, commands)
@@ -292,8 +289,12 @@ func New(hub *tags.Hub, version string) *mcp.Server {
 			if in.Company == "" || in.Plant == "" || in.Asset == "" {
 				return nil, cmdOut{}, fmt.Errorf("company, plant and asset are required")
 			}
+			r := eng.Command(in.Company, in.Plant, in.Asset, in.Command, in.Arg)
+			if !r.OK {
+				return nil, cmdOut{}, fmt.Errorf("%s", r.Msg)
+			}
 			hub.Command(tags.Command{Company: in.Company, Plant: in.Plant, Asset: in.Asset, Cmd: in.Command, Arg: in.Arg, By: "mcp"})
-			return nil, cmdOut{Sent: fmt.Sprintf("%s → %s/%s/%s", in.Command, in.Company, in.Plant, in.Asset)}, nil
+			return nil, cmdOut{Sent: r.Msg}, nil
 		})
 
 	return s

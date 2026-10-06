@@ -7,6 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 npm run build
+npm run build:engine
 rm -rf server/web/dist && mkdir -p server/web/dist && cp -R dist/. server/web/dist/ && touch server/web/dist/.keep
 
 version=$(git describe --always --dirty 2>/dev/null || echo dev)

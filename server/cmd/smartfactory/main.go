@@ -23,6 +23,7 @@ import (
 	"smartfactory/internal/adapters"
 	"smartfactory/internal/config"
 	"smartfactory/internal/edge"
+	"smartfactory/internal/engine"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/tags"
 	sfweb "smartfactory/internal/web"
@@ -71,6 +72,26 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 
 	hub := tags.NewHub()
+	eng, err := engine.New(log)
+	if err != nil {
+		return err
+	}
+	go eng.Run(ctx)
+	// Values read from equipment feed the server-side simulation.
+	go func() {
+		sub := hub.Subscribe()
+		defer hub.Unsubscribe(sub)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e := <-sub.C:
+				if e.Type == "tag" {
+					eng.Ingest(e.Tag.Company, e.Tag.Plant, e.Tag.Asset, e.Tag.Field, e.Tag.Value, e.Tag.Source)
+				}
+			}
+		}
+	}()
 	if cfg.MQTT.Listen != "" {
 		b, err := adapters.StartBroker(cfg.MQTT, hub, log)
 		if err != nil {
@@ -89,9 +110,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		}
 	}
 
-	ms := mcptools.New(hub, version)
+	ms := mcptools.New(hub, eng, version)
 	ws := &sfweb.Server{
-		Hub: hub, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log,
+		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
@@ -109,7 +130,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if cfg.Token != "" {
 		mcpState = "enabled at /mcp (Bearer token)"
 	}
-	log.Info("smartfactory serving", "version", version, "http", cfg.HTTP, "sources", len(cfg.Sources), "mcp", mcpState)
+	log.Info("smartfactory serving", "version", version, "http", cfg.HTTP, "companies", eng.Companies, "sources", len(cfg.Sources), "mcp", mcpState)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

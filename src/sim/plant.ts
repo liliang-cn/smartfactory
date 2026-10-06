@@ -6,7 +6,7 @@ import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
   AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
-  ProductKind, SimEvent, TruckState, TypeSpec,
+  Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
 export const AMBIENT = 22;
@@ -56,6 +56,29 @@ export const STATE_LABEL: Record<AssetState, string> = {
 
 type AssetInit = Partial<Asset> & Pick<Asset, 'id' | 'name' | 'type'>;
 
+type ProductTuple = [id: string, s: number, done: number, proc: number, t: number, kind: string, stall: number];
+
+/** A plant's replicated state, as sent from the server to browsers. */
+export interface PlantState {
+  clock: number;
+  elapsed: number;
+  energy: number;
+  power: number;
+  alarmSeq: number;
+  assets: (Pick<Asset, 'id' | 'enabled' | 'speed' | 'fault' | 'maint' | 'state' | 'temp' | 'vib' | 'power' | 'health' | 'util' | 'avail' | 'cycles' | 'progress' | 'rejects' | 'stock' | 'count' | 'battery' | 'vel' | 'task'> & {
+    busy: string | null;
+    reading: Asset['reading'] | null;
+    verdict: Asset['verdict'] | null;
+    live: LiveValues | null;
+  })[];
+  lines: { id: string; spawnT: number; pid: number; good: number; scrap: number; tp: number; products: ProductTuple[] }[];
+  agvs: Pick<AgvState, 'idx' | 'x' | 'z' | 'heading' | 'cargo' | 'mode' | 'dwell' | 'waiting' | 'waitedT' | 'task'>[] & { id: string }[];
+  trucks: (Pick<TruckState, 'idx' | 'x' | 'z' | 'heading' | 'phase' | 'wait' | 'dock' | 'load'> & { id: string })[];
+  alarms: Alarm[];
+  log: LogEntry[];
+  events: SimEvent[];
+}
+
 export class PlantSim {
   readonly layout: PlantLayout;
   clock = 6 * 3600 + 12 * 60; // shift clock, seconds since midnight
@@ -74,6 +97,14 @@ export class PlantSim {
   fg!: Asset;
   private alarmSeq = 1;
   private histAcc = 0;
+  /**
+   * Follows a server that runs the authoritative simulation. The local copy keeps moving parts
+   * and vehicles between server frames, but faults, alarms, the log, readings and rejects only
+   * arrive from the server.
+   */
+  follower = false;
+  /** false until a follower has received its first state from the server */
+  synced = true;
 
   constructor(layout: PlantLayout) {
     this.layout = layout;
@@ -187,6 +218,7 @@ export class PlantSim {
   // One reading per finished unit. Wear and over-speed push the process off target, so
   // a neglected machine shows up first as drift on the chart, then as rejects.
   private measure(a: Asset, quiet = false): boolean {
+    if (this.follower) return true;
     const m = a.measure!;
     const wear = 1 - a.health;
     const gauss = Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
@@ -280,7 +312,7 @@ export class PlantSim {
           continue;
         }
         const rejectRate = a.machine?.rejectRate;
-        if (rejectRate !== undefined && !a.measure) {
+        if (rejectRate !== undefined && !a.measure && !this.follower) {
           const upstream = st.slice(0, p.done);
           const h = upstream.reduce((sum, u) => sum + u.health, 0) / Math.max(1, upstream.length);
           const ok = Math.random() > rejectRate + (1 - h) * 0.1;
@@ -529,6 +561,7 @@ export class PlantSim {
   }
 
   private stepTelemetry(a: Asset, dt: number) {
+    this.crew(a);
     const s = a.spec;
     if (a.maint > 0) {
       a.maint -= dt;
@@ -585,32 +618,63 @@ export class PlantSim {
     else if (a.health > 0.4) this.clear(a, 'health');
 
     if (running && !a.fault) {
-      const rate = (1 / 4200) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
+      const rate = (1 / 12000) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
       if (Math.random() < rate * dt) this.trip(a, pick(s.faults));
+    }
+  }
+
+  // ---------- shift crew ----------
+
+  /**
+   * What the people on shift do without being asked: the maintenance crew clears a fault a few
+   * minutes after it happens (once the machine has cooled), and worn machines go in for planned
+   * maintenance. Without this a plant that runs for hours ends up with every machine faulted.
+   */
+  private crew(a: Asset) {
+    if (this.follower || !a.spec?.faults) return;
+    if (a.fault) {
+      a.repairAt ??= this.elapsed + rand(60, 180);
+      const hot = a.spec.trip !== undefined && a.temp > a.spec.trip - 4;
+      if (this.elapsed >= a.repairAt && !hot) {
+        a.fault = null;
+        a.repairAt = undefined;
+        a.health = Math.min(1, a.health + 0.15);
+        this.clear(a, 'fault');
+        this.note(a, '维修班组到场处理，故障已排除', 'op');
+      }
+      return;
+    }
+    a.repairAt = undefined;
+    if (a.health < 0.45 && a.maint <= 0 && a.type === 'station') {
+      a.maint = rand(40, 90);
+      this.note(a, `健康度 ${(a.health * 100).toFixed(0)}%，班组安排计划维护`, 'op');
     }
   }
 
   // ---------- alarms & log ----------
 
   private trip(a: Asset, text: string) {
-    if (a.fault) return;
+    if (a.fault || this.follower) return;
     a.fault = { text, at: this.clock };
     this.raise(a, 'fault', 1, text);
     this.events.push({ type: 'fault', asset: a.id });
   }
 
   private raise(a: Asset, code: string, prio: Alarm['prio'], text: string) {
+    if (this.follower) return;
     if (this.alarms.some((x) => x.asset === a.id && x.code === code && x.active)) return;
     const al: Alarm = { id: this.alarmSeq++, asset: a.id, code, prio, text, at: this.clock, active: true, acked: false };
     this.alarms.unshift(al);
     this.note(a, text, 'alarm', prio);
     if (this.alarms.length > 160) {
-      const idx = this.alarms.findLastIndex((x) => !x.active && x.acked);
+      let idx = this.alarms.length - 1;
+      while (idx >= 0 && !(!this.alarms[idx].active && this.alarms[idx].acked)) idx--;
       if (idx >= 0) this.alarms.splice(idx, 1);
     }
   }
 
   private clear(a: Asset, code: string) {
+    if (this.follower) return;
     for (const al of this.alarms) {
       if (al.asset === a.id && al.code === code && al.active) {
         al.active = false;
@@ -620,6 +684,7 @@ export class PlantSim {
   }
 
   private note(a: Asset, text: string, kind: LogEntry['kind'] = 'info', prio = 0) {
+    if (this.follower) return;
     this.log.unshift({ at: this.clock, asset: a.id, text, kind, prio });
     if (this.log.length > 300) this.log.pop();
   }
@@ -764,6 +829,90 @@ export class PlantSim {
         live: liveFields(a) ? a.live!.src : undefined,
       })),
     };
+  }
+
+  // ---------- replication (server → browsers) ----------
+
+  /** Everything a follower needs to match this plant; drains the event queue. */
+  exportState(): PlantState {
+    const p3 = (v: number) => Math.round(v * 1000) / 1000;
+    return {
+      clock: p3(this.clock), elapsed: p3(this.elapsed), energy: p3(this.energyKWh), power: p3(this.powerKW), alarmSeq: this.alarmSeq,
+      assets: [...this.assets.values()].map((a) => ({
+        id: a.id, enabled: a.enabled, speed: a.speed, fault: a.fault, maint: p3(a.maint), state: a.state,
+        temp: p3(a.temp), vib: p3(a.vib), power: p3(a.power), health: p3(a.health), util: p3(a.util), avail: p3(a.avail),
+        cycles: a.cycles, progress: p3(a.progress), busy: a.busy?.id ?? null, reading: a.reading ?? null, rejects: a.rejects,
+        verdict: a.verdict ?? null, stock: a.stock, count: a.count, battery: p3(a.battery), vel: p3(a.vel), task: a.task, live: a.live ?? null,
+      })),
+      lines: this.lines.map((l) => ({
+        id: l.id, spawnT: p3(l.spawnT), pid: l.pid, good: l.good, scrap: l.scrap, tp: l.doneTimes.length,
+        products: l.products.map((x) => [x.id, p3(x.s), x.done, x.proc, p3(x.t), x.kind, p3(x.stall)] as ProductTuple),
+      })),
+      agvs: this.agvs.map((g) => ({
+        id: g.asset.id, idx: g.idx, x: p3(g.x), z: p3(g.z), heading: p3(g.heading), cargo: g.cargo, mode: g.mode,
+        dwell: p3(g.dwell), waiting: g.waiting, waitedT: p3(g.waitedT), task: g.task,
+      })),
+      trucks: this.trucks.map((t) => ({
+        id: t.asset.id, idx: t.idx, x: p3(t.x), z: p3(t.z), heading: p3(t.heading), phase: t.phase, wait: p3(t.wait), dock: p3(t.dock), load: t.load,
+      })),
+      alarms: this.alarms.slice(0, 80),
+      log: this.log.slice(0, 60),
+      events: this.events.splice(0),
+    };
+  }
+
+  /** Adopts the server's state; local motion continues from here until the next frame. */
+  importState(s: PlantState) {
+    this.clock = s.clock;
+    this.elapsed = s.elapsed;
+    this.energyKWh = s.energy;
+    this.powerKW = s.power;
+    this.alarmSeq = s.alarmSeq;
+    const busy: [Asset, string][] = [];
+    for (const x of s.assets) {
+      const a = this.assets.get(x.id);
+      if (!a) continue;
+      if (x.reading && x.reading.at !== a.reading?.at) {
+        a.hist.meas.push(x.reading.v);
+        if (a.hist.meas.length > 60) a.hist.meas.shift();
+      }
+      Object.assign(a, {
+        enabled: x.enabled, speed: x.speed, fault: x.fault, maint: x.maint, state: x.state, temp: x.temp, vib: x.vib, power: x.power,
+        health: x.health, util: x.util, avail: x.avail, cycles: x.cycles, progress: x.progress, reading: x.reading ?? undefined,
+        rejects: x.rejects, verdict: x.verdict ?? undefined, stock: x.stock, count: x.count, battery: x.battery, vel: x.vel, task: x.task,
+        live: x.live ?? undefined, busy: null,
+      });
+      if (x.busy) busy.push([a, x.busy]);
+    }
+    const byId = new Map<string, Product>();
+    for (const x of s.lines) {
+      const l = this.lineById[x.id];
+      if (!l) continue;
+      l.spawnT = x.spawnT;
+      l.pid = x.pid;
+      l.good = x.good;
+      l.scrap = x.scrap;
+      // Only the count of the last hour's completions matters locally (throughput KPI).
+      if (l.doneTimes.length !== x.tp) l.doneTimes = new Array(x.tp).fill(this.elapsed);
+      l.products = x.products.map(([id, ps, done, proc, t, kind, stall]) => {
+        const p: Product = { id, s: ps, done, proc, t, kind, stall };
+        byId.set(id, p);
+        return p;
+      });
+    }
+    for (const [a, id] of busy) a.busy = byId.get(id) ?? null;
+    for (const x of s.agvs) {
+      const g = this.agvs.find((v) => v.asset.id === x.id);
+      if (g) Object.assign(g, { idx: x.idx, x: x.x, z: x.z, heading: x.heading, cargo: x.cargo, mode: x.mode, dwell: x.dwell, waiting: x.waiting, waitedT: x.waitedT, task: x.task });
+    }
+    for (const x of s.trucks) {
+      const t = this.trucks.find((v) => v.asset.id === x.id);
+      if (t) Object.assign(t, { idx: x.idx, x: x.x, z: x.z, heading: x.heading, phase: x.phase, wait: x.wait, dock: x.dock, load: x.load });
+    }
+    this.alarms = s.alarms;
+    this.log = s.log;
+    this.events.push(...s.events);
+    this.synced = true;
   }
 
   // ---------- derived ----------

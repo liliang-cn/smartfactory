@@ -119,6 +119,8 @@ export interface Asset {
   kind?: 'in' | 'out';
   agv?: AgvState;
   truck?: TruckState;
+  /** sim time when the maintenance crew will have cleared the current fault */
+  repairAt?: number;
   /** values read from equipment (MQTT / Modbus TCP / OPC UA); while fresh they replace the simulated ones */
   live?: LiveValues;
 }

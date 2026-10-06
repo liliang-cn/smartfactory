@@ -3,7 +3,7 @@
 // bumps a few times a second.
 import { create } from 'zustand';
 import { toast } from 'sonner';
-import { sendCommand } from '@/live/client';
+import { requestTimeScale, sendCommand } from '@/live/client';
 import type { CompanyBundle } from '@/config/loader';
 import type { PlantLayout } from '@/core/layout';
 import { PlantSim } from '@/sim/plant';
@@ -106,7 +106,9 @@ export const useUI = create<UIState>()((set, get) => ({
   hover(id, x = 0, y = 0) {
     set({ hovered: id, tip: id ? { id, x, y } : null });
   },
-  setTimeScale: (timeScale) => set({ timeScale }),
+  setTimeScale: (timeScale) => {
+    if (!requestTimeScale(timeScale)) set({ timeScale });
+  },
   setMode: (mode) => set({ mode }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   toggleFollow() {
@@ -120,10 +122,11 @@ export const useUI = create<UIState>()((set, get) => ({
     set((s) => ({ cam: { op, id, n: (s.cam?.n ?? 0) + 1 } }));
   },
   command(id, cmd, arg) {
+    // Following the server: it applies the command and answers with the result.
+    if (sendCommand(get().plantId, id, cmd, arg)) return;
     const r = currentSim().command(id, cmd, arg);
     if (r.ok) toast.success(r.msg);
     else toast.error(r.msg);
-    if (r.ok) sendCommand(get().plantId, id, cmd, arg);
     get().bump();
   },
   setFleetTab(fleetTab, open) {

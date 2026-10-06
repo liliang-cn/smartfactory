@@ -5,3 +5,5 @@ dist
 server/web/dist/*
 !server/web/dist/.keep
 server/bin/
+server/internal/engine/js/*
+!server/internal/engine/js/.keep

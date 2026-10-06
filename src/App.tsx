@@ -18,6 +18,8 @@ function FaultToasts() {
   useEffect(() => {
     for (const p of runtime().plants) {
       const { sim } = p;
+      // A browser following the server has no alarms of its own until the first frame.
+      if (!sim.synced) continue;
       const last = seen.current.get(sim) ?? sim.alarms[0]?.id ?? 0;
       for (const al of sim.alarms) {
         if (al.id <= last) break;
