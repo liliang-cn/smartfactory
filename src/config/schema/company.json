@@ -38,6 +38,14 @@
             "default": "生产车间",
             "type": "string"
           },
+          "site": {
+            "default": "hall",
+            "type": "string",
+            "enum": [
+              "hall",
+              "outdoor"
+            ]
+          },
           "sub": {
             "type": "string"
           },

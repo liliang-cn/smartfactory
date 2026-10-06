@@ -37,11 +37,23 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.Companies, "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.sources()})
+		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.CompanyIDs(), "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.sources()})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		writeJSON(w, s.Hub.Last(q.Get("company"), q.Get("plant"), q.Get("asset")))
+	})
+	// companies created at run time (MCP), for browsers
+	mux.HandleFunc("GET /api/config/directory", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, s.Engine.RuntimeDirectory())
+	})
+	mux.HandleFunc("GET /api/config/company/{id}", func(w http.ResponseWriter, r *http.Request) {
+		company, industries, ok := s.Engine.RuntimeCompany(r.PathValue("id"))
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, map[string]any{"company": company, "industries": industries})
 	})
 	if s.MCP != nil {
 		mux.Handle("/mcp", s.requireToken(s.MCP))

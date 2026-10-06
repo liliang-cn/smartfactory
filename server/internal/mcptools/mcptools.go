@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -173,7 +174,7 @@ var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "re
 // New builds the MCP server.
 func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "smartfactory", Title: "SmartFactory digital twin", Version: version}, &mcp.ServerOptions{
-		Instructions: "SmartFactory is a 3D digital twin of factories. Companies contain plants, plants contain production lines of machines (assets). " +
+		Instructions: "SmartFactory is a 3D digital twin platform for factories and other sites (venues, campsites …). Companies contain plants, plants contain lines of machines (assets). New scenes can be created with scene_guide → create_industry → create_company. " +
 			"Use list_sites first. The simulation runs on the server continuously; KPIs, alarms and machine state are current. " +
 			"Values read over MQTT / Modbus TCP / OPC UA from real equipment are in read_tags and are marked 'live' on assets. " +
 			"send_command acts on the twin (every viewer sees it) and is forwarded to devices through the protocol adapters.",
@@ -297,5 +298,81 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 			return nil, cmdOut{Sent: r.Msg}, nil
 		})
 
+	addSceneTools(s, eng)
 	return s
+}
+
+type guideIn struct {
+	Schema bool `json:"schema,omitempty" jsonschema:"also return the full JSON Schemas of both configs"`
+}
+type guideOut struct {
+	Guide          string          `json:"guide"`
+	IndustrySchema json.RawMessage `json:"industrySchema,omitempty"`
+	CompanySchema  json.RawMessage `json:"companySchema,omitempty"`
+}
+type idIn struct {
+	ID string `json:"id" jsonschema:"id"`
+}
+type configIn struct {
+	Config map[string]any `json:"config" jsonschema:"the whole config as a JSON object"`
+}
+
+// addSceneTools lets an agent create new scenes: industry packs and companies, validated by the
+// same schemas as the bundled ones and simulated immediately.
+func addSceneTools(s *mcp.Server, eng *engine.Engine) {
+	raw := func(js string) (json.RawMessage, error) {
+		if js == "null" {
+			return nil, fmt.Errorf("not found")
+		}
+		return json.RawMessage(js), nil
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "scene_guide", Description: "How to build a new digital-twin scene (any industry: factories, campsites, restaurants, hospitals …) from two JSON configs: read this before create_industry / create_company."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in guideIn) (*mcp.CallToolResult, guideOut, error) {
+			out := guideOut{Guide: guide}
+			if in.Schema {
+				out.IndustrySchema, _ = raw(eng.Schema("industry"))
+				out.CompanySchema, _ = raw(eng.Schema("company"))
+			}
+			return nil, out, nil
+		})
+	mcp.AddTool(s, &mcp.Tool{Name: "list_industries", Description: "Industry packs available (built-in and created), with their products and machines."},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, map[string]any, error) {
+			js, err := raw(eng.IndustryList())
+			return nil, map[string]any{"industries": js}, err
+		})
+	mcp.AddTool(s, &mcp.Tool{Name: "get_industry", Description: "The full config of an industry pack (with defaults filled in): the best example to copy from."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
+			js, err := raw(eng.Industry(in.ID))
+			if err != nil {
+				return nil, nil, fmt.Errorf("no industry pack %q; see list_industries", in.ID)
+			}
+			return nil, map[string]any{"industry": js}, nil
+		})
+	create := func(fn func([]byte) engine.ConfigResult) func(context.Context, *mcp.CallToolRequest, configIn) (*mcp.CallToolResult, map[string]any, error) {
+		return func(_ context.Context, _ *mcp.CallToolRequest, in configIn) (*mcp.CallToolResult, map[string]any, error) {
+			b, err := json.Marshal(in.Config)
+			if err != nil {
+				return nil, nil, err
+			}
+			r := fn(b)
+			if !r.OK {
+				return nil, nil, fmt.Errorf("配置没有通过校验（%s）：\n- %s", r.Where, strings.Join(r.Errors, "\n- "))
+			}
+			var detail map[string]any
+			json.Unmarshal(r.Detail, &detail)
+			return nil, detail, nil
+		}
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "create_industry", Description: "Create or replace an industry pack (products, machines, routes). Validated; errors say exactly what to fix. Companies using it are rebuilt."},
+		create(eng.CreateIndustry))
+	mcp.AddTool(s, &mcp.Tool{Name: "create_company", Description: "Create or replace a company (its plants and lines). It is simulated immediately and viewable at https://factory.superleo.cn/?company=<id>."},
+		create(eng.CreateCompany))
+	mcp.AddTool(s, &mcp.Tool{Name: "delete_company", Description: "Remove a company that was created with create_company."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
+			r := eng.DeleteCompany(in.ID)
+			if !r.OK {
+				return nil, nil, fmt.Errorf("%s", strings.Join(r.Errors, "; "))
+			}
+			return nil, map[string]any{"deleted": in.ID}, nil
+		})
 }

@@ -2,7 +2,7 @@
 // doors, roads, trees and neighbouring blocks. Everything is derived from the layout bounds.
 import * as THREE from 'three';
 import type { PlantLayout } from '@/core/layout';
-import { M, P, blk, canvasTex, cyl, mesh } from './kit';
+import { M, P, blk, bodyMat, canvasTex, cyl, mesh } from './kit';
 
 type Box = PlantLayout['box'];
 
@@ -16,12 +16,14 @@ export function buildWorld(L: PlantLayout): THREE.Group {
   const D = box.z1 - box.z0;
   const cx = (box.x0 + box.x1) / 2;
   const cz = (box.z0 + box.z1) / 2;
-  blk(g, M.white, W + 0.8, 0.3, D + 0.8, cx, -0.3, cz, 0.15);
+  const outdoor = L.site === 'outdoor';
+  blk(g, outdoor ? bodyMat('#bfe0a6') : M.white, W + 0.8, 0.3, D + 0.8, cx, -0.3, cz, 0.15);
   const floor = mesh(g, new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: floorTexture(L), roughness: 0.9 }), cx, 0.002, cz, false);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
 
-  buildWalls(g, box);
+  if (outdoor) buildFence(g, box);
+  else buildWalls(g, box);
   buildRoads(g, L);
   buildTrees(g, L);
   buildNeighbourhood(g, box);
@@ -37,12 +39,19 @@ function floorTexture(L: PlantLayout) {
   return canvasTex(Math.ceil(W * S), Math.ceil(D * S), (c, w, h) => {
     const X = (x: number) => (x - box.x0) * S;
     const Z = (z: number) => (z - box.z0) * S;
-    c.fillStyle = P.slab;
+    const outdoor = L.site === 'outdoor';
+    c.fillStyle = outdoor ? '#d3eabc' : P.slab;
     c.fillRect(0, 0, w, h);
-    c.strokeStyle = 'rgba(80,95,150,0.06)';
-    c.lineWidth = 2;
-    for (let x = box.x0; x <= box.x1; x += 6) { c.beginPath(); c.moveTo(X(x), 0); c.lineTo(X(x), h); c.stroke(); }
-    for (let z = box.z0; z <= box.z1; z += 6) { c.beginPath(); c.moveTo(0, Z(z)); c.lineTo(w, Z(z)); c.stroke(); }
+    if (outdoor) {
+      // mowing stripes
+      c.fillStyle = 'rgba(255,255,255,0.12)';
+      for (let x = box.x0; x <= box.x1; x += 8) c.fillRect(X(x), 0, 4 * S, h);
+    } else {
+      c.strokeStyle = 'rgba(80,95,150,0.06)';
+      c.lineWidth = 2;
+      for (let x = box.x0; x <= box.x1; x += 6) { c.beginPath(); c.moveTo(X(x), 0); c.lineTo(X(x), h); c.stroke(); }
+      for (let z = box.z0; z <= box.z1; z += 6) { c.beginPath(); c.moveTo(0, Z(z)); c.lineTo(w, Z(z)); c.stroke(); }
+    }
 
     const rr = (x0: number, z0: number, x1: number, z1: number, fill: string | null, stroke: string | null, dash: number[] = []) => {
       c.beginPath();
@@ -53,8 +62,9 @@ function floorTexture(L: PlantLayout) {
 
     for (const l of L.lines) {
       // line cell, and the dashed aisle edge on its front
-      rr(l.x0 - 0.8, l.z - l.beltW / 2 - 0.6, l.outfeed.x + 1.4, l.z + l.beltW / 2 + 1.9, 'rgba(47,91,234,0.045)', P.yellow);
-      c.strokeStyle = P.yellow;
+      if (outdoor) rr(l.x0 - 0.8, l.z - l.beltW / 2 - 0.6, l.outfeed.x + 1.4, l.z + l.beltW / 2 + 1.9, 'rgba(236,214,166,0.55)', '#d8b77c');
+      else rr(l.x0 - 0.8, l.z - l.beltW / 2 - 0.6, l.outfeed.x + 1.4, l.z + l.beltW / 2 + 1.9, 'rgba(47,91,234,0.045)', P.yellow);
+      c.strokeStyle = outdoor ? 'rgba(255,255,255,0.9)' : P.yellow;
       c.lineWidth = 0.12 * S;
       c.setLineDash([0.9 * S, 0.6 * S]);
       const ez = l.lane + 1.0;
@@ -94,7 +104,7 @@ function floorTexture(L: PlantLayout) {
       for (const p of a.route) { c.beginPath(); c.arc(X(p.x), Z(p.z), 0.75 * S, 0, Math.PI * 2); c.fill(); }
     }
 
-    c.fillStyle = 'rgba(47,91,234,0.5)';
+    c.fillStyle = outdoor ? 'rgba(52,110,64,0.6)' : 'rgba(47,91,234,0.5)';
     c.textBaseline = 'middle';
     const stencil = (txt: string, x: number, z: number, size: number) => {
       c.save();
@@ -156,6 +166,32 @@ function buildWalls(g: THREE.Object3D, box: Box) {
   for (const sz of [-1, 1]) blk(g, M.blue, 0.3, 4.2, 0.3, x1 + 0.2, 0, midZ + sz * 2.9, 0.06);
   blk(g, M.blue, 0.9, 0.3, 6.4, x1 + 0.5, 4.2, midZ, 0.08);
   for (const x of [x0 - 0.6, x1 + 0.6]) for (const sz of [-1, 1]) blk(g, M.ink, 0.3, 0.6, 0.3, x, 0, midZ + sz * 1.8, 0.06);
+}
+
+/** Outdoor sites: a low wooden fence with gates where the inbound and outbound roads meet it. */
+function buildFence(g: THREE.Object3D, box: Box) {
+  const wood = bodyMat('#c79a68');
+  const midZ = (box.z0 + box.z1) / 2;
+  const gate = (x: number, z: number) => (x === box.x0 || x === box.x1) && Math.abs(z - midZ) < 3;
+  const run = (xa: number, za: number, xb: number, zb: number) => {
+    const len = Math.hypot(xb - xa, zb - za);
+    const n = Math.max(1, Math.round(len / 3));
+    for (let i = 0; i <= n; i++) {
+      const x = xa + ((xb - xa) * i) / n;
+      const z = za + ((zb - za) * i) / n;
+      if (!gate(x, z)) blk(g, wood, 0.14, 1.0, 0.14, x, 0, z, 0.03);
+      if (i === n) break;
+      const x2 = xa + ((xb - xa) * (i + 1)) / n;
+      const z2 = za + ((zb - za) * (i + 1)) / n;
+      if (gate(x, z) || gate(x2, z2)) continue;
+      const along = xa === xb;
+      for (const y of [0.45, 0.8]) blk(g, wood, along ? 0.06 : Math.abs(x2 - x), 0.08, along ? Math.abs(z2 - z) : 0.06, (x + x2) / 2, y, (z + z2) / 2, 0.02);
+    }
+  };
+  run(box.x0, box.z0, box.x1, box.z0);
+  run(box.x0, box.z1, box.x1, box.z1);
+  run(box.x0, box.z0, box.x0, box.z1);
+  run(box.x1, box.z0, box.x1, box.z1);
 }
 
 function buildRoads(g: THREE.Object3D, L: PlantLayout) {

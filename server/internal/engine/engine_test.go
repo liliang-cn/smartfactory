@@ -27,15 +27,15 @@ func newEngine(t *testing.T) *Engine {
 
 func TestEngineRuns(t *testing.T) {
 	e := newEngine(t)
-	if len(e.Companies) < 2 {
-		t.Fatalf("companies: %v", e.Companies)
+	if len(e.CompanyIDs()) < 2 {
+		t.Fatalf("companies: %v", e.CompanyIDs())
 	}
 	go e.Run(t.Context())
 
 	// Simulate a minute quickly, then check that production and state moved.
 	e.SetTimeScale("huaduan", 20)
 	time.Sleep(3 * time.Second)
-	t.Logf("step cost for %d companies: %v", len(e.Companies), e.StepCost())
+	t.Logf("step cost for %d companies: %v", len(e.CompanyIDs()), e.StepCost())
 
 	var snap struct {
 		Plants []struct {

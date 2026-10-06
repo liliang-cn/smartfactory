@@ -2,7 +2,9 @@
 // in real time, with no browser involved. Browsers follow it through frames (exportState),
 // MCP tools read snapshots of it, and protocol adapters feed it measured values.
 // Built by `npm run build:engine` into server/internal/engine/js/engine.js.
-import { loadAll, type CompanyBundle } from '@/config/loader';
+import { z } from 'zod';
+import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
+import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
 import { PlantSim, type SavedPlant } from '@/sim/plant';
 import type { Command } from '@/sim/types';
 
@@ -17,12 +19,108 @@ const companies = new Map<string, Company>();
 /** Events nobody collected (no browser watching) are dropped beyond this. */
 const MAX_EVENTS = 200;
 
+/** Every industry pack known: bundled ones and those created at run time. */
+const industries = new Map<string, IndustryCfg>();
+const builtinIndustries = new Set<string>();
+const builtinCompanies = new Set<string>();
+
+function register(bundle: CompanyBundle) {
+  const plants = bundle.plants.map((l) => new PlantSim(l));
+  companies.set(bundle.company.id, { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])), timeScale: 1 });
+  pending.delete(bundle.company.id);
+}
+
 function init(): string {
+  for (const [path, raw] of Object.entries(industryRaw)) {
+    try {
+      const ind = validateIndustry(raw, path);
+      industries.set(ind.id, ind);
+      builtinIndustries.add(ind.id);
+    } catch (e) {
+      host.log((e as Error).message);
+    }
+  }
   for (const bundle of loadAll(companyRaw, industryRaw, (m) => host.log(m))) {
-    const plants = bundle.plants.map((l) => new PlantSim(l));
-    companies.set(bundle.company.id, { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])), timeScale: 1 });
+    register(bundle);
+    builtinCompanies.add(bundle.company.id);
   }
   return JSON.stringify([...companies.keys()]);
+}
+
+// ---------- configs created at run time (MCP) ----------
+
+/** Runs fn and reports {ok: true, ...} or {ok: false, errors} with readable (Chinese) issues. */
+function result(fn: () => object): string {
+  try {
+    return JSON.stringify({ ok: true, ...fn() });
+  } catch (e) {
+    if (e instanceof ConfigError) return JSON.stringify({ ok: false, errors: e.issues, where: e.file });
+    return JSON.stringify({ ok: false, errors: [(e as Error).message ?? String(e)] });
+  }
+}
+
+const runtimeCompanies = new Map<string, CompanyCfg>();
+
+function addIndustry(json: string): string {
+  return result(() => {
+    const raw = JSON.parse(json) as { id?: string };
+    const ind = validateIndustry(raw, `行业包 ${raw?.id ?? ''}`);
+    if (builtinIndustries.has(ind.id)) throw new ConfigError(`行业包 ${ind.id}`, [`${ind.id} 是内置行业包，换一个 id`]);
+    industries.set(ind.id, ind);
+    // companies built on the previous version of this pack are rebuilt (their state starts over)
+    const rebuilt: string[] = [];
+    for (const [id, cfg] of runtimeCompanies) {
+      if (cfg.plants.some((p) => (p.industry ?? cfg.industry) === ind.id)) {
+        register({ company: cfg, plants: layoutCompany(cfg, industries, `公司 ${id}`), directory: [] });
+        rebuilt.push(id);
+      }
+    }
+    return {
+      id: ind.id, name: ind.name, flow: ind.flow,
+      products: Object.keys(ind.products), machines: Object.keys(ind.machines), routes: Object.keys(ind.routes), rebuilt,
+    };
+  });
+}
+
+function addCompany(json: string): string {
+  return result(() => {
+    const raw = JSON.parse(json) as { id?: string };
+    const cfg = validateCompany(raw, `公司 ${raw?.id ?? ''}`);
+    if (builtinCompanies.has(cfg.id)) throw new ConfigError(`公司 ${cfg.id}`, [`${cfg.id} 是内置公司，换一个 id`]);
+    const plants = layoutCompany(cfg, industries, `公司 ${cfg.id}`);
+    register({ company: cfg, plants, directory: [] });
+    runtimeCompanies.set(cfg.id, cfg);
+    return {
+      id: cfg.id, name: cfg.name,
+      plants: plants.map((p) => ({ id: p.id, name: p.name, site: p.site, lines: p.lines.map((l) => l.name), machines: p.lines.reduce((n, l) => n + l.stations.length, 0) })),
+    };
+  });
+}
+
+function removeCompany(id: string): string {
+  return result(() => {
+    if (builtinCompanies.has(id)) throw new ConfigError(`公司 ${id}`, [`${id} 是内置公司，不能删除`]);
+    if (!companies.delete(id)) throw new ConfigError(`公司 ${id}`, ['没有这个公司']);
+    runtimeCompanies.delete(id);
+    pending.delete(id);
+    return { id };
+  });
+}
+
+function industryList(): string {
+  return JSON.stringify([...industries.values()].map((i) => ({
+    id: i.id, name: i.name, flow: i.flow, unit: i.unit, builtin: builtinIndustries.has(i.id),
+    products: Object.keys(i.products), machines: Object.fromEntries(Object.entries(i.machines).map(([k, m]) => [k, `${m.label} (${m.look.archetype})`])),
+  })));
+}
+
+function industry(id: string): string {
+  const i = industries.get(id);
+  return i ? JSON.stringify(i) : 'null';
+}
+
+function schema(kind: string): string {
+  return JSON.stringify(z.toJSONSchema(kind === 'company' ? CompanySchema : IndustrySchema, { io: 'input', unrepresentable: 'any' }));
 }
 
 /** Sim time not yet stepped, for companies advanced in coarse steps. */
@@ -149,4 +247,7 @@ function list(): string {
   })));
 }
 
-(globalThis as Record<string, unknown>).SF = { init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, playEquipment, telemetry };
+(globalThis as Record<string, unknown>).SF = {
+  init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, playEquipment, telemetry,
+  addIndustry, addCompany, removeCompany, industryList, industry, schema,
+};

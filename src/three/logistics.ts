@@ -6,7 +6,8 @@ import { M, P, blk, bodyMat, canvasTex, colorOf, cyl, cylGeo, mesh, rbox } from 
 import { andon, pallet, stack, type ModelHandle } from './common';
 import { stackLayout, unitBox } from './products';
 
-export function buildConveyor(line: LineLayout): ModelHandle {
+export function buildConveyor(line: LineLayout, walk = false, outdoor = false): ModelHandle {
+  if (walk) return buildWalkway(line, outdoor);
   const root = new THREE.Group();
   const len = line.x1 - line.x0;
   const Y = line.beltY;
@@ -46,6 +47,40 @@ export function buildConveyor(line: LineLayout): ModelHandle {
   };
 }
 
+/** The "conveyor" of a walk-flow line: a paved walkway people (or vehicles) move along. */
+function buildWalkway(line: LineLayout, outdoor: boolean): ModelHandle {
+  const root = new THREE.Group();
+  const len = line.x1 - line.x0;
+  const W = line.beltW;
+  root.position.set(line.x0 + len / 2, 0, line.z);
+  const tex = canvasTex(256, 64, (g, w, h) => {
+    g.fillStyle = outdoor ? '#efe3c8' : '#e6e9f4';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = outdoor ? '#e2d2b0' : '#d8dcec';
+    // irregular paving stones
+    for (let x = 4; x < w; x += 30) for (let y = 4; y < h; y += 30) {
+      g.beginPath();
+      g.roundRect(x + ((y / 30) % 2) * 12, y, 24, 22, 6);
+      g.fill();
+    }
+  });
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.set(len / 2, 1);
+  const path = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
+  const edge = bodyMat(outdoor ? '#c9a873' : '#cfd5ea');
+  mesh(root, new THREE.BoxGeometry(len, 0.05, W), path, 0, 0.025, 0);
+  for (const sz of [-1, 1]) blk(root, edge, len, 0.07, 0.1, 0, 0, sz * (W / 2 + 0.05), 0.03);
+  // a lamp post at the end carries the status light
+  blk(root, M.greyDark, 0.08, 1.4, 0.08, len / 2 - 0.3, 0, -(W / 2 + 0.3), 0.02);
+  const lamp = andon(root, len / 2 - 0.3, 1.4, -(W / 2 + 0.3));
+  return {
+    root, tint: [edge], top: 1.8, labelAt: new THREE.Vector3(-len / 2 + 1.5, 0, 0),
+    update(a, _dt, t) {
+      lamp.set(a.state, t);
+    },
+  };
+}
+
 /** Line-side stock shown as boxes the size of the stage, in the colour of its main part. */
 function sideStock(root: THREE.Object3D, product: ProductInfo, stage: string, maxUnits: number) {
   const s = stackLayout(product, stage, maxUnits);
@@ -56,21 +91,34 @@ function sideStock(root: THREE.Object3D, product: ProductInfo, stage: string, ma
   return { im, max: s.nx * s.nz * s.layers, palletW: s.palletW };
 }
 
-export function buildBuffer(line: LineLayout): ModelHandle {
+/**
+ * Walk-flow lines carry people, not parts: their supplies and returns are shown as generic
+ * crates on a pallet (food packs in, dishes and rubbish out) instead of stacks of the unit.
+ */
+function crateStock(root: THREE.Object3D, maxUnits: number, color: string) {
+  const nx = 4, nz = 3;
+  const layers = Math.max(1, Math.ceil(maxUnits / (nx * nz)));
+  pallet(root, 0, 0, 0, nx * 0.55, nz * 0.45);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
+  const im = stack(root, unitBox({ l: 0.5, h: 0.32, d: 0.4 }), mat, nx, nz, layers, 0.55, 0.34, 0.45, 0.14);
+  return { im, max: nx * nz * layers, palletW: nx * 0.55 };
+}
+
+export function buildBuffer(line: LineLayout, walk = false): ModelHandle {
   const root = new THREE.Group();
   root.position.set(line.infeed.x, 0, line.infeed.z);
-  const { im, max } = sideStock(root, line.product, line.input, line.infeed.cap);
+  const { im, max } = walk ? crateStock(root, line.infeed.cap, P.kraft) : sideStock(root, line.product, line.input, line.infeed.cap);
   return {
     root, tint: [], top: 1.8,
     update(a) { im.count = Math.min(max, a.stock); },
   };
 }
 
-export function buildOutfeed(line: LineLayout): ModelHandle {
+export function buildOutfeed(line: LineLayout, walk = false): ModelHandle {
   const root = new THREE.Group();
   root.position.set(line.outfeed.x, 0, line.outfeed.z);
   const last = line.product.order[line.product.order.length - 1];
-  const { im, max, palletW } = sideStock(root, line.product, last, line.outfeed.cap);
+  const { im, max, palletW } = walk ? crateStock(root, line.outfeed.cap, '#9fb2d8') : sideStock(root, line.product, last, line.outfeed.cap);
   blk(root, M.blue, 0.06, 1.4, Math.max(1.1, line.beltW), palletW / 2 + 0.15, 0, 0, 0.02);
   return {
     root, tint: [], top: 2.4,

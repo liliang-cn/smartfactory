@@ -82,6 +82,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		return err
 	}
 	eng.Dir = cfg.Data
+	eng.LoadConfigs()
 	eng.Restore()
 	go eng.Run(ctx)
 	// Values read from equipment feed the server-side simulation.
@@ -145,7 +146,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if cfg.Token != "" {
 		mcpState = "enabled at /mcp (Bearer token)"
 	}
-	log.Info("smartfactory serving", "version", version, "http", cfg.HTTP, "companies", eng.Companies, "sources", len(cfg.Sources), "mcp", mcpState)
+	log.Info("smartfactory serving", "version", version, "http", cfg.HTTP, "companies", eng.CompanyIDs(), "sources", len(cfg.Sources), "mcp", mcpState)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

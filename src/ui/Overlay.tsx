@@ -40,13 +40,13 @@ export function Kpis() {
   const base = prev.current.base;
   return (
     <section className="absolute left-5 top-20 z-20 flex gap-3 max-md:inset-x-0 max-md:top-[calc(62px+env(safe-area-inset-top))] max-md:snap-x max-md:snap-mandatory max-md:gap-2 max-md:overflow-x-auto max-md:px-2.5 max-md:pb-2.5 max-md:[scrollbar-width:none]">
-      <KpiCard icon={<GaugeIcon />} label="综合设备效率 OEE" value={pct(k.oee, 1)} delta={(k.oee - base.oee) * 100}
+      <KpiCard icon={<GaugeIcon />} label={layout.terms.oee ?? '综合设备效率 OEE'} value={pct(k.oee, 1)} delta={(k.oee - base.oee) * 100}
         sub={`可用 ${pct(k.avail)} 性能 ${pct(k.perf)} 质量 ${pct(k.quality)}`} />
-      <KpiCard icon={<PackageIcon />} label="每小时产量" value={`${k.tp}`} delta={k.tp - base.tp} sub={`${layout.unit}，近 60 分钟 ${layout.lines.length} 条线合计`} />
+      <KpiCard icon={<PackageIcon />} label={layout.terms.throughput ?? '每小时产量'} value={`${k.tp}`} delta={k.tp - base.tp} sub={`${layout.unit}，近 60 分钟 ${layout.lines.length} ${layout.terms.line ?? '条线'}合计`} />
       <KpiCard icon={<BadgeCheckIcon />} label={layout.qualityLabel} value={pct(k.quality, 1)} delta={(k.quality - base.quality) * 100}
         sub={`合格 ${k.good}，不合格 ${k.scrap}`} />
       <div className="max-xl:hidden max-md:contents">
-        <KpiCard icon={<ZapIcon />} label="实时功率" value={`${k.power.toFixed(0)} kW`} sub={`本班能耗 ${k.energy.toFixed(1)} kWh`} />
+        <KpiCard icon={<ZapIcon />} label={layout.terms.power ?? '实时功率'} value={`${k.power.toFixed(0)} kW`} sub={`本班能耗 ${k.energy.toFixed(1)} kWh`} />
       </div>
     </section>
   );

@@ -124,7 +124,8 @@ export class PlantSim {
   // ---------- construction ----------
 
   private asset(def: AssetInit): Asset {
-    const spec = def.machine ? machineSpec(def.machine) : BUILTIN[def.type];
+    let spec = def.machine ? machineSpec(def.machine) : BUILTIN[def.type];
+    if (def.type === 'agv' && this.layout.terms.vehicle) spec = { ...spec!, label: this.layout.terms.vehicle };
     const a: Asset = {
       group: 'WH', s: 0, cycle: 0, stock: 0, cap: 0, count: 0, battery: 0, vel: 0, task: '', rejects: 0, arch: def.type,
       ...def,

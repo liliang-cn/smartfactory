@@ -99,6 +99,8 @@ export const Look = z.object({
   operators: z.number().int().min(1).max(4).optional(),
   /** filler / tank: colour of the bottle or the liquid */
   fluid: Color.optional(),
+  /** plain: no factory fittings (manual: a counter instead of racks and tool rail; frame: a deck in the body colour, no HMI) */
+  style: z.enum(['industrial', 'plain']).optional(),
   parts: z.array(Part).default([]),
 });
 export type LookCfg = z.infer<typeof Look>;
@@ -151,6 +153,21 @@ export const Industry = z.object({
   /** what one unit is called: 件, 台, 箱, 辆 … */
   unit: z.string().default('件'),
   qualityLabel: z.string().default('一次合格率'),
+  /** belt: units ride conveyors between machines; walk: units are people (or vehicles) moving along walkways */
+  flow: z.enum(['belt', 'walk']).default('belt'),
+  /** dashboard wording for industries that are not factories (a campsite, a hospital, a car wash …) */
+  terms: z.object({
+    /** overall efficiency KPI, default 综合设备效率 OEE */
+    oee: z.string().optional(),
+    /** units per hour KPI, default 每小时产量 */
+    throughput: z.string().optional(),
+    /** power KPI, default 实时功率 */
+    power: z.string().optional(),
+    /** what a line is called, default 条线 (e.g. 个营区) */
+    line: z.string().optional(),
+    /** what the logistics vehicles are, default AGV 小车 (e.g. 送餐车) */
+    vehicle: z.string().optional(),
+  }).default({}),
   products: z.record(z.string(), Product),
   machines: z.record(z.string(), Machine),
   /** reusable routings, referenced by lines as `route` */
@@ -186,6 +203,8 @@ export const PlantCfg = z.object({
   /** two or three characters on the site badge */
   badge: z.string().max(3).optional(),
   hall: z.string().default('生产车间'),
+  /** hall: an indoor workshop with walls; outdoor: grass, a fence and walkways (venues, yards, farms) */
+  site: z.enum(['hall', 'outdoor']).default('hall'),
   sub: z.string().optional(),
   /** defaults to the company's industry */
   industry: z.string().optional(),

@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,7 +34,7 @@ type Engine struct {
 	calls chan func()
 	log   *slog.Logger
 
-	Companies []string
+	companies []string // guarded by mu
 
 	mu       sync.Mutex
 	watchers map[chan []byte]*watch
@@ -88,7 +89,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{})}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "playEquipment", "telemetry"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -99,7 +100,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("engine init: %w", err)
 	}
-	if err := json.Unmarshal([]byte(v.String()), &e.Companies); err != nil {
+	if err := json.Unmarshal([]byte(v.String()), &e.companies); err != nil {
 		return nil, err
 	}
 	return e, nil
@@ -149,7 +150,7 @@ func (e *Engine) Restore() {
 	if e.Dir == "" {
 		return
 	}
-	for _, c := range e.Companies {
+	for _, c := range e.CompanyIDs() {
 		b, err := os.ReadFile(filepath.Join(e.Dir, c+".json"))
 		if errors.Is(err, os.ErrNotExist) {
 			continue
@@ -176,7 +177,7 @@ func (e *Engine) save(wait bool) {
 		return
 	}
 	data := map[string]string{}
-	for _, c := range e.Companies {
+	for _, c := range e.CompanyIDs() {
 		v, err := e.call("save", c)
 		if err != nil {
 			e.log.Error("save", "company", c, "err", err)
@@ -470,3 +471,189 @@ func (e *Engine) Telemetry(company, plant string) (Telemetry, error) {
 	err := json.Unmarshal([]byte(e.str("telemetry", company, plant)), &t)
 	return t, err
 }
+
+// CompanyIDs lists the companies being simulated.
+func (e *Engine) CompanyIDs() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.companies...)
+}
+
+// ---------- configs created at run time (MCP) ----------
+//
+// Industry packs and companies submitted by clients are validated by the same schemas as the
+// bundled ones, hot-loaded into the simulation, and kept as files under {Dir}/configs so they
+// come back after a restart.
+
+// ConfigResult is the engine's verdict on a submitted config.
+type ConfigResult struct {
+	OK     bool            `json:"ok"`
+	Errors []string        `json:"errors,omitempty"`
+	Where  string          `json:"where,omitempty"`
+	Detail json.RawMessage `json:"detail,omitempty"`
+}
+
+func (e *Engine) configDir(kind string) string { return filepath.Join(e.Dir, "configs", kind) }
+
+func (e *Engine) verdict(js string) ConfigResult {
+	var r ConfigResult
+	if err := json.Unmarshal([]byte(js), &r); err != nil {
+		return ConfigResult{Errors: []string{err.Error()}}
+	}
+	r.Detail = json.RawMessage(js)
+	return r
+}
+
+func (e *Engine) persistConfig(kind, id string, raw []byte) error {
+	if e.Dir == "" {
+		return nil
+	}
+	dir := e.configDir(kind)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, id+".json"), raw, 0o644)
+}
+
+func configID(raw []byte) string {
+	var v struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(raw, &v)
+	return v.ID
+}
+
+// CreateIndustry validates and loads an industry pack, and keeps it.
+func (e *Engine) CreateIndustry(raw []byte) ConfigResult {
+	r := e.verdict(e.str("addIndustry", string(raw)))
+	if r.OK {
+		if err := e.persistConfig("industries", configID(raw), raw); err != nil {
+			e.log.Error("keep industry", "err", err)
+		}
+	}
+	return r
+}
+
+// CreateCompany validates, lays out and starts simulating a company, and keeps its config.
+func (e *Engine) CreateCompany(raw []byte) ConfigResult {
+	r := e.verdict(e.str("addCompany", string(raw)))
+	if r.OK {
+		id := configID(raw)
+		e.mu.Lock()
+		if !slices.Contains(e.companies, id) {
+			e.companies = append(e.companies, id)
+		}
+		e.mu.Unlock()
+		if err := e.persistConfig("companies", id, raw); err != nil {
+			e.log.Error("keep company", "err", err)
+		}
+	}
+	return r
+}
+
+// DeleteCompany stops simulating a company created at run time and forgets it.
+func (e *Engine) DeleteCompany(id string) ConfigResult {
+	r := e.verdict(e.str("removeCompany", id))
+	if r.OK {
+		e.mu.Lock()
+		e.companies = slices.DeleteFunc(e.companies, func(c string) bool { return c == id })
+		e.mu.Unlock()
+		if e.Dir != "" {
+			os.Remove(filepath.Join(e.configDir("companies"), id+".json"))
+			os.Remove(filepath.Join(e.Dir, id+".json"))
+		}
+	}
+	return r
+}
+
+// LoadConfigs brings back what was created at run time. Call before Restore and Run.
+func (e *Engine) LoadConfigs() {
+	if e.Dir == "" {
+		return
+	}
+	for _, kind := range []string{"industries", "companies"} {
+		files, _ := filepath.Glob(filepath.Join(e.configDir(kind), "*.json"))
+		for _, f := range files {
+			raw, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			fn := "addIndustry"
+			if kind == "companies" {
+				fn = "addCompany"
+			}
+			v, err := e.call(fn, string(raw))
+			if err != nil {
+				e.log.Error("load config", "file", f, "err", err)
+				continue
+			}
+			r := e.verdict(v.String())
+			if !r.OK {
+				e.log.Error("config no longer valid", "file", f, "errors", r.Errors)
+				continue
+			}
+			if kind == "companies" {
+				e.companies = append(e.companies, configID(raw))
+			}
+			e.log.Info("config loaded", "kind", kind, "id", configID(raw))
+		}
+	}
+}
+
+// RuntimeCompany returns a run-time company's config and the run-time industry packs it uses,
+// for browsers (bundled packs they already have).
+func (e *Engine) RuntimeCompany(id string) (company json.RawMessage, industries map[string]json.RawMessage, ok bool) {
+	if e.Dir == "" {
+		return nil, nil, false
+	}
+	raw, err := os.ReadFile(filepath.Join(e.configDir("companies"), filepath.Base(id)+".json"))
+	if err != nil {
+		return nil, nil, false
+	}
+	var cfg struct {
+		Industry string `json:"industry"`
+		Plants   []struct {
+			Industry string `json:"industry"`
+		} `json:"plants"`
+	}
+	json.Unmarshal(raw, &cfg)
+	industries = map[string]json.RawMessage{}
+	for _, ind := range append([]string{cfg.Industry}, func() (out []string) {
+		for _, p := range cfg.Plants {
+			out = append(out, p.Industry)
+		}
+		return
+	}()...) {
+		if ind == "" {
+			continue
+		}
+		if b, err := os.ReadFile(filepath.Join(e.configDir("industries"), filepath.Base(ind)+".json")); err == nil {
+			industries[ind] = b
+		}
+	}
+	return raw, industries, true
+}
+
+// RuntimeDirectory lists companies created at run time, for the company switcher.
+func (e *Engine) RuntimeDirectory() []map[string]string {
+	out := []map[string]string{}
+	if e.Dir == "" {
+		return out
+	}
+	files, _ := filepath.Glob(filepath.Join(e.configDir("companies"), "*.json"))
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var c struct{ ID, Name, Short string }
+		if json.Unmarshal(raw, &c) == nil && c.ID != "" {
+			out = append(out, map[string]string{"id": c.ID, "name": c.Name, "short": c.Short})
+		}
+	}
+	return out
+}
+
+func (e *Engine) IndustryList() string      { return e.str("industryList") }
+func (e *Engine) Industry(id string) string { return e.str("industry", id) }
+func (e *Engine) Schema(kind string) string { return e.str("schema", kind) }

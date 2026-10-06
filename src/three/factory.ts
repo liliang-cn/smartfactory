@@ -59,9 +59,9 @@ function buildStation(a: Asset, plant: PlantLayout): ModelHandle {
 export function buildModel(a: Asset, plant: PlantLayout): ModelHandle {
   const ll = a.line ? plant.lines.find((l) => l.id === a.line!.id)! : null;
   switch (a.type) {
-    case 'conveyor': return buildConveyor(ll!);
-    case 'buffer': return buildBuffer(ll!);
-    case 'outfeed': return buildOutfeed(ll!);
+    case 'conveyor': return buildConveyor(ll!, plant.flow === 'walk', plant.site === 'outdoor');
+    case 'buffer': return buildBuffer(ll!, plant.flow === 'walk');
+    case 'outfeed': return buildOutfeed(ll!, plant.flow === 'walk');
     case 'warehouse': return buildWarehouse(plant.warehouse);
     case 'fgzone': return buildFG(plant.fg);
     case 'agv': return buildAGV();

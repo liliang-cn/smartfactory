@@ -388,18 +388,25 @@ const buildManual: Builder = (c) => {
   const [L] = c.size;
   const edge = c.beltW / 2;
   const n = c.look.operators ?? 2;
-  blk(root, M.ink, L - 0.1, 0.03, 1.1, 0, 0, edge + 0.7, 0.03);
+  const plain = c.look.style === 'plain';
+  blk(root, plain ? c.body : M.ink, L - 0.1, 0.03, 1.1, 0, 0, edge + 0.7, 0.03);
   const rz = -(edge + 0.65);
-  for (const x of [-L / 2 + 0.15, L / 2 - 0.15]) blk(root, c.body, 0.08, 1.6, 0.6, x, 0, rz, 0.02);
-  for (const y of [0.45, 0.95, 1.45]) blk(root, c.body, L - 0.22, 0.05, 0.62, 0, y, rz, 0.02);
-  const bins = Math.max(2, Math.floor((L - 0.4) / 0.6));
-  for (const y of [0.5, 1.0]) for (let i = 0; i < bins; i++) blk(root, i % 2 ? M.yellow : c.accent, 0.5, 0.26, 0.5, -((bins - 1) * 0.6) / 2 + i * 0.6, y, rz, 0.05);
   const railZ = -(edge + 0.15);
-  for (const x of [-L / 2 + 0.05, L / 2 - 0.05]) blk(root, c.accent, 0.1, 2.5, 0.1, x, 0, railZ, 0.03);
-  blk(root, c.accent, L, 0.12, 0.12, 0, 2.5, railZ, 0.03);
+  if (plain) {
+    // a service counter behind the walkway, in the accent colour
+    blk(root, c.body, L - 0.4, 0.9, 0.6, 0, 0, rz, 0.05);
+    blk(root, c.accent, L - 0.36, 0.06, 0.64, 0, 0.9, rz, 0.02);
+  } else {
+    for (const x of [-L / 2 + 0.15, L / 2 - 0.15]) blk(root, c.body, 0.08, 1.6, 0.6, x, 0, rz, 0.02);
+    for (const y of [0.45, 0.95, 1.45]) blk(root, c.body, L - 0.22, 0.05, 0.62, 0, y, rz, 0.02);
+    const bins = Math.max(2, Math.floor((L - 0.4) / 0.6));
+    for (const y of [0.5, 1.0]) for (let i = 0; i < bins; i++) blk(root, i % 2 ? M.yellow : c.accent, 0.5, 0.26, 0.5, -((bins - 1) * 0.6) / 2 + i * 0.6, y, rz, 0.05);
+    for (const x of [-L / 2 + 0.05, L / 2 - 0.05]) blk(root, c.accent, 0.1, 2.5, 0.1, x, 0, railZ, 0.03);
+    blk(root, c.accent, L, 0.12, 0.12, 0, 2.5, railZ, 0.03);
+  }
   const pitch = Math.min(1.1, (L - 0.6) / n);
   const xs = Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * pitch);
-  const tools = xs.map((x) => {
+  const tools = plain ? [] : xs.map((x) => {
     blk(root, c.accent, 0.1, 0.1, edge + 0.3, x, 2.42, railZ + (edge + 0.3) / 2, 0.02);
     const tg = new THREE.Group();
     tg.position.set(x, 2.0, 0.15);
@@ -408,16 +415,19 @@ const buildManual: Builder = (c) => {
     cyl(tg, M.ink, 0.04, 0.22, 0, -0.22, 0, 10);
     return { tg, line };
   });
-  blk(root, M.greyDark, 0.06, 1.7, 0.06, L / 2 + 0.1, 0, edge + 1.1, 0.02);
-  const scr = panel(root, L / 2 + 0.1, 1.6, edge + 1.1);
-  const lamp = andon(root, L / 2 - 0.05, 2.62, railZ);
+  let scr: ReturnType<typeof panel> | null = null;
+  if (!plain) {
+    blk(root, M.greyDark, 0.06, 1.7, 0.06, L / 2 + 0.1, 0, edge + 1.1, 0.02);
+    scr = panel(root, L / 2 + 0.1, 1.6, edge + 1.1);
+  }
+  const lamp = plain ? andon(root, L / 2 - 0.25, 1.05, rz) : andon(root, L / 2 - 0.05, 2.62, railZ);
   const ops = xs.map((x) => operator(root, x, edge + 0.5, Math.PI, '#5b8cff'));
   let reach = 0;
   return {
-    root, tint: [c.body], top: 2.9,
+    root, tint: [c.body], top: plain ? 2.2 : 2.9,
     update(a, dt, t) {
       lamp.set(a.state, t);
-      setScreen(scr, a.state);
+      if (scr) setScreen(scr, a.state);
       const run = a.state === 'running';
       reach = follow(reach, run ? 1 : 0, dt, 4);
       ops.forEach((o, i) => {
@@ -687,14 +697,16 @@ const buildRoller: Builder = (c) => {
 const buildFrame: Builder = (c) => {
   const root = new THREE.Group();
   const [L, D, H] = c.size;
-  blk(root, M.greyDark, L, 0.12, D, 0, 0, 0, 0.04);
-  const scr = panel(root, L / 2 - 0.3, 1.0, D / 2 - 0.05, 0.44, 0.3);
+  const plain = c.look.style === 'plain';
+  // plain: a low deck in the body colour (a wooden platform, a pitch), no operator panel
+  blk(root, plain ? c.body : M.greyDark, L, plain ? 0.04 : 0.12, D, 0, 0, 0, plain ? 0.02 : 0.04);
+  const scr = plain ? null : panel(root, L / 2 - 0.3, 1.0, D / 2 - 0.05, 0.44, 0.3);
   const lamp = andon(root, L / 2 - 0.2, Math.max(1.4, H * 0.6), -D / 2 + 0.2);
   return {
     root, tint: [c.body], top: H + 0.4,
     update(a, _dt, t) {
       lamp.set(a.state, t);
-      setScreen(scr, a.state);
+      if (scr) setScreen(scr, a.state);
     },
   };
 };

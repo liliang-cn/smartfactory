@@ -72,6 +72,9 @@ export interface PlantLayout {
   industry: IndustryCfg;
   unit: string;
   qualityLabel: string;
+  site: 'hall' | 'outdoor';
+  flow: 'belt' | 'walk';
+  terms: IndustryCfg['terms'];
   lines: LineLayout[];
   box: { x0: number; x1: number; z0: number; z1: number };
   warehouse: Zone;
@@ -196,8 +199,10 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     const input = cfg.input ?? product.order[0];
     if (!product.stages[input]) throw new Error(`${name}：产品 ${product.name} 没有工序状态 ${input}`);
     const max = product.max;
-    const beltW = r1(Math.max(0.9, max.d + 0.3));
-    const beltY = cfg.beltHeight ?? (max.h > 1.2 ? 0.5 : 0.9);
+    const walk = industry.flow === 'walk';
+    // a walkway is a strip of ground wide enough for the group walking along it
+    const beltW = r1(Math.max(0.9, max.d + (walk ? 0.8 : 0.3)));
+    const beltY = cfg.beltHeight ?? (walk ? 0.05 : max.h > 1.2 ? 0.5 : 0.9);
     const gap = r1(max.l + 0.4);
     const speed = cfg.speed ?? (gap > 2 ? 0.9 : 0.55);
 
@@ -315,6 +320,9 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     industry,
     unit: industry.unit,
     qualityLabel: industry.qualityLabel,
+    site: plant.site,
+    flow: industry.flow,
+    terms: industry.terms,
     lines,
     box,
     warehouse,

@@ -19,6 +19,35 @@
       "default": "一次合格率",
       "type": "string"
     },
+    "flow": {
+      "default": "belt",
+      "type": "string",
+      "enum": [
+        "belt",
+        "walk"
+      ]
+    },
+    "terms": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "oee": {
+          "type": "string"
+        },
+        "throughput": {
+          "type": "string"
+        },
+        "power": {
+          "type": "string"
+        },
+        "line": {
+          "type": "string"
+        },
+        "vehicle": {
+          "type": "string"
+        }
+      }
+    },
     "products": {
       "type": "object",
       "propertyNames": {
@@ -304,6 +333,13 @@
               },
               "fluid": {
                 "type": "string"
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "industrial",
+                  "plain"
+                ]
               },
               "parts": {
                 "default": [],

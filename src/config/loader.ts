@@ -51,17 +51,40 @@ function parseCompanies(raws: [string, unknown][]): CompanyEntry[] {
   return all.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-const industriesOf = (c: CompanyCfg) => [...new Set(c.plants.map((p) => p.industry ?? c.industry))];
+export const industriesOf = (c: CompanyCfg) => [...new Set(c.plants.map((p) => p.industry ?? c.industry))];
 
-function bundle(picked: CompanyEntry, all: CompanyEntry[], industries: Map<string, IndustryCfg>): CompanyBundle {
-  const company = picked.cfg!;
-  const plants = company.plants.map((p, i) => {
+/** Validates an industry pack from anywhere (a file, the server, an MCP client). */
+export const validateIndustry = (raw: unknown, source = '行业包') => parse(Industry, raw, source);
+
+/** Validates a company config from anywhere. */
+export const validateCompany = (raw: unknown, source = '公司配置') => parse(Company, raw, source);
+
+/** Lays out every plant of a company; a ConfigError names the plant that does not fit. */
+export function layoutCompany(company: CompanyCfg, industries: Map<string, IndustryCfg>, source = '公司配置'): PlantLayout[] {
+  const missing = industriesOf(company).filter((id) => !industries.has(id));
+  if (missing.length) throw new ConfigError(source, [`找不到行业包 ${missing.join('、')}，先创建行业包`]);
+  return company.plants.map((p, i) => {
     try {
       return layoutPlant(company, p, industries.get(p.industry ?? company.industry)!, i);
     } catch (e) {
-      throw new ConfigError(picked.path, [`工厂 ${p.name}：${(e as Error).message}`]);
+      throw new ConfigError(source, [`工厂 ${p.name}：${(e as Error).message}`]);
     }
   });
+}
+
+/** Companies created on the server at run time (MCP), when the app is served by it. */
+async function serverDirectory(): Promise<{ id: string; name: string; short: string }[]> {
+  try {
+    const r = await fetch('/api/config/directory');
+    return r.ok ? await r.json() : [];
+  } catch {
+    return [];
+  }
+}
+
+function bundle(picked: CompanyEntry, all: CompanyEntry[], industries: Map<string, IndustryCfg>): CompanyBundle {
+  const company = picked.cfg!;
+  const plants = layoutCompany(company, industries, picked.path);
   return { company, plants, directory: all.map((c) => ({ id: c.id, name: c.cfg ? c.name : `${c.name}（配置有误）`, short: c.short })) };
 }
 
@@ -69,11 +92,27 @@ export async function loadCompany(wanted: string | null): Promise<CompanyBundle>
   // A broken file only blocks its own company; the others stay loadable from the switcher.
   const all = parseCompanies(await Promise.all(Object.entries(companyFiles).map(async ([path, load]) => [path, (await load()).default] as [string, unknown])));
   if (!all.length) throw new ConfigError('src/config/companies', ['没有任何公司配置，至少放一个 JSON 文件']);
+  const runtime = await serverDirectory();
+  const directory = [...all.map((c) => ({ id: c.id, name: c.cfg ? c.name : `${c.name}（配置有误）`, short: c.short })), ...runtime.filter((r) => !all.some((c) => c.id === r.id))];
+
+  // A company created on the server: its config (and any industry packs it brings) come from there.
+  if (wanted && !all.some((c) => c.id === wanted) && runtime.some((r) => r.id === wanted)) {
+    const r = await fetch(`/api/config/company/${encodeURIComponent(wanted)}`);
+    if (r.ok) {
+      const d: { company: unknown; industries: Record<string, unknown> } = await r.json();
+      const company = validateCompany(d.company, `服务器上的公司 ${wanted}`);
+      const industries = new Map<string, IndustryCfg>();
+      for (const [id, raw] of Object.entries(d.industries)) industries.set(id, validateIndustry(raw, `行业包 ${id}`));
+      for (const id of industriesOf(company)) if (!industries.has(id)) industries.set(id, await loadIndustry(id));
+      return { company, plants: layoutCompany(company, industries, `服务器上的公司 ${wanted}`), directory };
+    }
+  }
+
   const picked = all.find((c) => c.id === wanted) ?? all.find((c) => c.cfg) ?? all[0];
   if (!picked.cfg) parse(Company, (await companyFiles[picked.path]()).default, picked.path);
   const industries = new Map<string, IndustryCfg>();
   for (const id of industriesOf(picked.cfg!)) industries.set(id, await loadIndustry(id));
-  return bundle(picked, all, industries);
+  return { ...bundle(picked, all, industries), directory };
 }
 
 /**
