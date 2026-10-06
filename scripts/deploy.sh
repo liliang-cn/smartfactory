@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
-# Build and publish the static site to dell VM 105 (apps).
+# Build the single binary and roll it out.
 #
-#   https://factory.superleo.cn  →  aliyun Caddy (TLS)  →  tailnet 100.104.134.33:44719
-#   →  apps Caddy file_server  →  /var/www/smartfactory
+#   scripts/deploy.sh          twin server on dell VM 105 apps
+#                              https://factory.superleo.cn → aliyun Caddy → tailnet → apps Caddy :44719 → 127.0.0.1:44720
+#   scripts/deploy.sh edge     protocol gateway on dell VM 104 infra (MQTT / Modbus TCP / OPC UA in front of
+#                              the dell host's real sensors, scraped from node_exporter on 192.168.123.98:9100)
 #
-# Usage: scripts/deploy.sh
+# Configs live next to the binary (/opt/smartfactory/*.json, 0600) and are not in the repo; see server/examples.
 set -euo pipefail
-
-HOST=${HOST:-ops@192.168.123.65}
-DEST=/var/www/smartfactory
-
+target=${1:-server}
 cd "$(dirname "$0")/.."
-npm run build
 
-ssh "$HOST" "sudo mkdir -p $DEST && sudo chown ops:ops $DEST"
-# Hashed assets first, index.html last, so a visitor never gets a page whose chunks are missing.
-rsync -az --exclude index.html dist/ "$HOST:$DEST/"
-rsync -az dist/index.html "$HOST:$DEST/index.html"
-rsync -az --delete dist/ "$HOST:$DEST/"
+case $target in
+  server) host=ops@192.168.123.65 unit=smartfactory ;;
+  edge) host=ops@192.168.123.64 unit=smartfactory-edge ;;
+  *) echo "usage: $0 [server|edge]" >&2; exit 2 ;;
+esac
 
-curl -fsS -o /dev/null -w 'apps :44719 %{http_code}\n' http://192.168.123.65:44719/
+GOOS=linux GOARCH=amd64 scripts/build.sh
+bin=server/bin/smartfactory-linux-amd64
+sum=$(shasum -a 256 "$bin" | cut -d' ' -f1)
+scp -q "$bin" "$host:/tmp/smartfactory.new"
+ssh "$host" "set -e
+  echo '$sum  /tmp/smartfactory.new' | sha256sum -c --quiet
+  [ -f /opt/smartfactory/bin/smartfactory ] && sudo cp /opt/smartfactory/bin/smartfactory /opt/smartfactory/bin/smartfactory.bak
+  sudo install -m 755 /tmp/smartfactory.new /opt/smartfactory/bin/smartfactory && rm /tmp/smartfactory.new
+  sudo systemctl restart $unit && sleep 2 && systemctl is-active $unit"
+
+if [ "$target" = server ]; then
+  curl -fsS http://192.168.123.65:44719/api/health | head -c 400; echo
+fi

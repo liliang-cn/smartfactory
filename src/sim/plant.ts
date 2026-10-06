@@ -5,7 +5,7 @@
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, Kpis, Line, LineKpi, LogEntry, MachineSpec,
+  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
   ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -30,6 +30,20 @@ const machineSpec = (m: MachineCfg): MachineSpec => ({
 export const isMachineSpec = (s: TypeSpec | undefined): s is MachineSpec => s?.runRise !== undefined;
 
 const HIST_LEN = 240;
+/** How long a value from equipment stays authoritative after it arrives. */
+const LIVE_TTL_MS = 20_000;
+
+/** Live field values of an asset if its equipment reported recently. */
+export const liveFields = (a: Asset): LiveValues['f'] | null =>
+  a.live && Date.now() - a.live.at < LIVE_TTL_MS ? a.live.f : null;
+
+const truthy = (v: unknown) => v === true || v === 1 || (typeof v === 'string' && /^(1|true|on|yes|run|running)$/i.test(v));
+const falsy = (v: unknown) => v === false || v === 0 || (typeof v === 'string' && /^(0|false|off|no|stop|stopped|)$/i.test(v));
+const hhmm = (sec: number) => {
+  const m = Math.floor(sec / 60) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+};
+const r2 = (v: number) => Math.round(v * 100) / 100;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -178,7 +192,12 @@ export class PlantSim {
     const gauss = Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
     let dev = gauss * m.sigma * (1 + wear * 2.5) + m.drift * wear * m.sigma * 4 + (a.speed - 1) * (m.speedBias ?? 0);
     if (m.abs) dev = Math.abs(dev);
-    const v = m.target + dev;
+    return this.record(a, m.target + dev, quiet);
+  }
+
+  /** Records one measured unit (simulated, or reported by the equipment) and checks for drift. */
+  private record(a: Asset, v: number, quiet = false): boolean {
+    const m = a.measure!;
     const ok = (m.lo === undefined || v >= m.lo) && (m.hi === undefined || v <= m.hi);
     const h = a.hist.meas;
     h.push(v);
@@ -543,6 +562,13 @@ export class PlantSim {
       ? s.vib * (0.7 + 0.3 * a.speed) * (1 + (1 - a.health) * 2.5) * rand(0.9, 1.1)
       : on ? s.vib * 0.06 * rand(0.8, 1.2) : 0;
     a.power = on ? (s.pIdle + (running ? s.pRun * a.speed : 0)) * rand(0.96, 1.04) : a.maint > 0 ? 0 : 0.1;
+    // Measured values win over the model; alarms and wear below then run on the real numbers.
+    const lv = liveFields(a);
+    if (lv) {
+      if (typeof lv.temp === 'number') a.temp = lv.temp;
+      if (typeof lv.power === 'number') a.power = lv.power;
+      if (typeof lv.vib === 'number') a.vib = lv.vib;
+    }
     a.util += ((running ? 1 : 0) - a.util) * ema(dt, 300);
     a.avail += ((on ? 1 : 0) - a.avail) * ema(dt, 600);
 
@@ -667,6 +693,77 @@ export class PlantSim {
         a.count = 0;
         return { ok: true, msg: '成品已发运' };
     }
+  }
+
+  // ---------- values from equipment (MQTT / Modbus TCP / OPC UA via the server) ----------
+
+  /**
+   * Applies one field reported by real equipment. Continuous values (temp, power, vib) replace
+   * the simulated ones while fresh; state changes go through the same paths operators use.
+   */
+  ingest(id: string, field: string, value: number | string | boolean, src: string): boolean {
+    const a = this.assets.get(id);
+    if (!a) return false;
+    a.live ??= { src, at: 0, f: {} };
+    a.live.src = src;
+    a.live.at = Date.now();
+    a.live.f[field] = value;
+    const num = typeof value === 'number' ? value : Number(value);
+    switch (field) {
+      case 'running':
+      case 'state':
+        if (value === 'fault') this.trip(a, `设备上报故障（${src}）`);
+        else if (value === 'maint') a.maint = Math.max(a.maint, 30);
+        else if (truthy(value)) a.enabled = true;
+        else if (falsy(value)) a.enabled = false;
+        break;
+      case 'fault':
+        if (falsy(value)) {
+          if (a.fault) { a.fault = null; this.clear(a, 'fault'); this.note(a, `设备故障已解除（${src}）`); }
+        } else {
+          this.trip(a, typeof value === 'string' ? value : `设备上报故障（${src}）`);
+        }
+        break;
+      case 'speed':
+        if (Number.isFinite(num)) a.speed = clamp(num > 5 ? num / 100 : num, 0.5, 1.5);
+        break;
+      case 'measure':
+        if (a.measure && Number.isFinite(num)) this.record(a, num);
+        break;
+      case 'stock':
+        if (Number.isFinite(num)) a.stock = num;
+        break;
+      case 'count':
+        if (Number.isFinite(num)) a.count = num;
+        break;
+      case 'battery':
+        if (Number.isFinite(num)) a.battery = num;
+        break;
+    }
+    return true;
+  }
+
+  /** A compact picture of the plant for the server (MCP tools read it). */
+  snapshot() {
+    const k = this.kpis();
+    const L = this.layout;
+    return {
+      id: L.id, name: L.name, hall: L.hall, unit: L.unit,
+      kpis: {
+        oee: r2(k.oee), avail: r2(k.avail), perf: r2(k.perf), quality: r2(k.quality),
+        throughputPerHour: k.tp, good: k.good, scrap: k.scrap, powerKW: r2(k.power), energyKWh: r2(k.energy), clock: hhmm(this.clock),
+      },
+      lines: this.lines.map((l, i) => ({
+        id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: k.lines[i].tp,
+        good: l.good, scrap: l.scrap,
+      })),
+      alarms: this.alarms.slice(0, 60).map((x) => ({ asset: x.asset, text: x.text, prio: x.prio, at: hhmm(x.at), active: x.active, acked: x.acked })),
+      assets: [...this.assets.values()].map((a) => ({
+        id: a.id, name: a.name, type: a.type, line: a.line?.name, state: a.fault ? 'fault' : a.state, fault: a.fault?.text,
+        temp: r2(a.temp), power: r2(a.power), vib: r2(a.vib), health: r2(a.health), util: r2(a.util), speed: r2(a.speed),
+        live: liveFields(a) ? a.live!.src : undefined,
+      })),
+    };
   }
 
   // ---------- derived ----------

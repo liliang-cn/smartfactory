@@ -1,11 +1,12 @@
 // Details of the selected asset: status, live tiles, trend/SPC chart, controls, recent log.
 // Desktop: a card on the right. Phone: a bottom sheet that can collapse to its header.
 import { useEffect, useState } from 'react';
-import { CrosshairIcon, NavigationIcon, XIcon } from 'lucide-react';
+import { CrosshairIcon, NavigationIcon, RadioTowerIcon, XIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { liveFields } from '@/sim/plant';
 import type { Asset } from '@/sim/types';
 import { usePlant, useTick, useUI } from '@/state/store';
 import { fgCapacity } from '@/three/logistics';
@@ -206,7 +207,15 @@ export function Inspector() {
 
       <div className="mt-3.5 mb-3 flex items-center gap-2.5 text-[12.5px] text-muted-foreground">
         <span className={cn('rounded-lg px-2.5 py-1 text-[12.5px] font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
-        <span className="tabular-nums">{note}</span>
+        {liveFields(a) && (
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-brand-soft px-2 py-1 text-[12px] font-bold text-primary"
+            title={`来自设备的实时数据：${Object.entries(a.live!.f).map(([k, v]) => `${k}=${typeof v === 'number' ? +v.toFixed(2) : v}`).join('，')}`}
+          >
+            <RadioTowerIcon className="size-3.5" />实时 · {a.live!.src}
+          </span>
+        )}
+        <span className="truncate tabular-nums">{note}</span>
       </div>
 
       <div className={cn(peek && 'max-md:hidden')}>

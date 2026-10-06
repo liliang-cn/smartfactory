@@ -119,6 +119,16 @@ export interface Asset {
   kind?: 'in' | 'out';
   agv?: AgvState;
   truck?: TruckState;
+  /** values read from equipment (MQTT / Modbus TCP / OPC UA); while fresh they replace the simulated ones */
+  live?: LiveValues;
+}
+
+export interface LiveValues {
+  /** adapter name, e.g. broker, plc-1 */
+  src: string;
+  /** wall-clock ms of the last value */
+  at: number;
+  f: Record<string, number | string | boolean>;
 }
 
 export interface Line {

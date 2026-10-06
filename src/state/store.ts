@@ -3,6 +3,7 @@
 // bumps a few times a second.
 import { create } from 'zustand';
 import { toast } from 'sonner';
+import { sendCommand } from '@/live/client';
 import type { CompanyBundle } from '@/config/loader';
 import type { PlantLayout } from '@/core/layout';
 import { PlantSim } from '@/sim/plant';
@@ -122,6 +123,7 @@ export const useUI = create<UIState>()((set, get) => ({
     const r = currentSim().command(id, cmd, arg);
     if (r.ok) toast.success(r.msg);
     else toast.error(r.msg);
+    if (r.ok) sendCommand(get().plantId, id, cmd, arg);
     get().bump();
   },
   setFleetTab(fleetTab, open) {

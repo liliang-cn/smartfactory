@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { ConfigError, loadCompany } from '@/config/loader';
 import { initRuntime, useUI } from '@/state/store';
+import { startLive } from '@/live/client';
 
 const root = createRoot(document.getElementById('root')!);
 
@@ -29,6 +30,7 @@ loadCompany(params.get('company'))
     const rt = initRuntime(bundle);
     const plant = rt.byId[params.get('plant') ?? ''] ?? rt.plants[0];
     useUI.getState().setPlant(plant.layout.id);
+    startLive();
     const { default: App } = await import('./App');
     root.render(<StrictMode><App /></StrictMode>);
   })

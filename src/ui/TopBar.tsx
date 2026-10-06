@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BellIcon, CheckIcon, ChevronDownIcon, PauseIcon, SearchIcon } from 'lucide-react';
+import { BellIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -10,6 +10,7 @@ import {
 import { Kbd } from '@/components/ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { useLive } from '@/live/client';
 import { groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
 import { CHIP, STATE_LABEL, hhmm } from './status';
 
@@ -201,6 +202,38 @@ function LiveClock() {
   );
 }
 
+const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcua: 'OPC UA' };
+
+/** Shown when the app is served by the SmartFactory server: which protocol links are up. */
+function LiveLinks() {
+  const { status, sources, fields } = useLive();
+  if (status !== 'on' || !sources.length) return null;
+  const up = sources.filter((s) => s.connected);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="h-[34px] gap-1.5 rounded-[10px] bg-brand-soft px-2.5 text-[13px] font-bold text-primary hover:bg-brand-soft/80 max-md:hidden" aria-label="数据源">
+          <RadioTowerIcon className="size-4" />
+          <span className="max-lg:hidden">实时</span>
+          <span className="tabular-nums">{up.length}/{sources.length}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[300px] rounded-2xl p-2 shadow-float">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">设备数据源 · 已接入 {fields} 个点位</DropdownMenuLabel>
+        {sources.map((s) => (
+          <div key={s.name} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+            <span className={cn('size-2 shrink-0 rounded-full', s.connected ? 'bg-success' : 'bg-destructive')} />
+            <span className="grid min-w-0 flex-1 leading-tight">
+              <b className="truncate text-[13px]">{s.name} <span className="font-semibold text-muted-foreground">{PROTO[s.type] ?? s.type}</span></b>
+              <small className="truncate text-[11.5px] text-muted-foreground">{s.connected ? `${s.url} · 收到 ${s.received} 条` : s.error || '未连接'}</small>
+            </span>
+          </div>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function AlarmBell() {
   useTick();
   const { sim } = usePlant();
@@ -225,6 +258,7 @@ export function TopBar() {
       <SiteSwitcher />
       <div className="flex-1 max-md:hidden" />
       <SpeedToggle />
+      <LiveLinks />
       <LiveClock />
       <AlarmBell />
       <div className="flex items-center gap-2.5 max-lg:hidden">

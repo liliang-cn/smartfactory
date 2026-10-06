@@ -1,0 +1,43 @@
+{
+  "http": "127.0.0.1:44720",
+  "token": "set-a-long-random-token-or-use-SF_TOKEN",
+  "mqtt": { "listen": ":41883", "prefix": "sf", "users": { "edge": "change-me" } },
+  "sources": [
+    {
+      "name": "dell-plc",
+      "type": "modbus",
+      "url": "tcp://192.168.123.64:41502",
+      "unit": 1,
+      "poll": "2s",
+      "points": [
+        { "register": "holding", "address": 0, "kind": "int16", "scale": 0.1, "company": "huaduan", "plant": "p1", "asset": "HP-201", "field": "temp" }
+      ],
+      "commands": [
+        { "company": "huaduan", "plant": "p1", "asset": "HP-201", "cmd": "stop", "register": "coil", "address": 0, "value": 1 },
+        { "company": "huaduan", "plant": "p1", "asset": "HP-201", "cmd": "start", "register": "coil", "address": 0, "value": 0 }
+      ]
+    },
+    {
+      "name": "dell-scada",
+      "type": "opcua",
+      "url": "opc.tcp://192.168.123.64:41840",
+      "poll": "2s",
+      "points": [
+        { "node": "ns=1;s=dell.nvme.temp", "company": "huaduan", "plant": "p1", "asset": "RF-101", "field": "temp" }
+      ]
+    },
+    {
+      "name": "plant-broker",
+      "type": "mqtt",
+      "url": "tcp://10.0.0.5:1883",
+      "convention": "sf",
+      "points": [
+        { "topic": "factory/+/press/+/status", "json": "data.temperature", "company": "huaduan", "plant": "p1", "asset": "HP-{1}0{2}", "field": "temp" },
+        { "topic": "factory/+/press/+/state", "map": { "0": "stopped", "1": "running", "2": "fault" }, "company": "huaduan", "plant": "p1", "asset": "HP-{1}0{2}", "field": "state" }
+      ],
+      "commands": [
+        { "asset": "HP-101", "cmd": "*", "topic": "factory/line1/press/1/cmd", "payload": "{\"action\":\"{cmd}\",\"arg\":\"{arg}\"}" }
+      ]
+    }
+  ]
+}
