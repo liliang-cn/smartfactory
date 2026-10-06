@@ -4,7 +4,7 @@
 // so they are logged the same way whether the twin simulates a machine or the equipment reports
 // its own state. Times are local (Asia/Shanghai) wall-clock strings: the database stores them
 // without a zone, and every bucket boundary is a local hour.
-import type { Asset, AssetState, Line, Product } from './types';
+import type { Asset, AssetState, Job, Line, Product } from './types';
 import type { PlantSim } from './plant';
 
 const TZ_MS = 8 * 3600_000;
@@ -13,6 +13,9 @@ const HOUR = 3600_000;
 /** "2026-10-06 14:00:00" in local time */
 export const localTime = (ms: number) => new Date(ms + TZ_MS).toISOString().slice(0, 19).replace('T', ' ');
 const hourOf = (ms: number) => Math.floor(ms / HOUR) * HOUR;
+
+/** a part number's row in the parts table: the family, or family:part number */
+export const partId = (line: Line, j?: Job) => (j ? `${line.layout.product.key}:${j.partNo}` : line.layout.product.key);
 
 const DOWN: Partial<Record<AssetState, string>> = { fault: '设备故障', maint: '计划维护', changeover: '换模换型', stopped: '人为停机' };
 
@@ -36,9 +39,9 @@ interface StockHour { item: string; label: string; hour: string; min: number; en
 interface Downtime { machine: string; line: string; start: string; end: string; category: string; reason: string }
 interface ToolChange { machine: string; line: string; tool: string; start: string; end: string; hits: number; life: number; limit: number; trigger: string }
 interface Defect { machine: string; line: string; at: string; type: string; feature: string; value: number | null; disposition: string; order: string; heat: string; supplier: string }
-interface LotRow { heat: string; supplier: string; line: string; part: string; first: string; last: string; produced: number; good: number; rework: number; scrap: number }
+interface LotRow { heat: string; supplier: string; line: string; part: string; partName: string; first: string; last: string; produced: number; good: number; rework: number; scrap: number }
 export interface WorkOrder {
-  no: string; line: string; part: string; customer: string; heat: string; supplier: string; qty: number;
+  no: string; line: string; part: string; partName: string; customer: string; heat: string; supplier: string; qty: number;
   issued: string; due: string; completed: string | null; good: number; scrap: number;
 }
 
@@ -55,12 +58,10 @@ export interface HistoryBatch {
 }
 
 interface Open { state: AssetState; since: number; short: boolean; reason: string; hits: number; life: number; limit: number; trigger: string }
-interface OrderRun { o: WorkOrder; seq: number }
 
 export class History {
   private sim: PlantSim;
   private plant: string;
-  private plantNo: number;
   private t0: number;
   private hour = 0;
   private mh = new Map<string, MachineHour>();
@@ -68,7 +69,6 @@ export class History {
   private qh = new Map<string, QualityHour>();
   private sh = new Map<string, StockHour>();
   private open = new Map<string, Open>();
-  private orders = new Map<string, OrderRun>();
   /** lots touched since the last drain */
   private lots = new Map<string, LotRow>();
   private out: HistoryBatch = History.empty();
@@ -76,14 +76,12 @@ export class History {
   only?: Set<string>;
 
   /** `t0` is the wall-clock time (ms) the plant's `elapsed` counts from */
-  constructor(sim: PlantSim, plant: string, plantNo: number, t0: number) {
+  constructor(sim: PlantSim, plant: string, _plantNo: number, t0: number) {
     this.sim = sim;
     this.plant = plant;
-    this.plantNo = plantNo;
     this.t0 = t0;
     this.hour = hourOf(this.now());
     sim.epoch = t0;
-    for (const line of sim.lines) this.issue(line, 1);
   }
 
   static empty(): HistoryBatch {
@@ -142,7 +140,7 @@ export class History {
         state: a.state, since: now, short: a.state === 'fault' && /^短停：/.test(a.fault?.text ?? ''),
         reason: a.state === 'fault' ? (a.fault?.text ?? '设备故障').replace(/^短停：/, '') : a.state === 'changeover' ? `更换${t?.label ?? '工装'}` : a.state === 'maint' ? '保养维护' : '停机',
         hits: t?.used ?? 0, life: t?.life ?? 0, limit: t?.limit ?? 1,
-        trigger: !t ? '' : share >= 1 ? '到寿命' : share >= (t.limit ?? 1) - 1e-9 ? '计划更换' : '指令更换',
+        trigger: !t ? '' : a.changeReason ? a.changeReason : share >= 1 ? '到寿命' : share >= (t.limit ?? 1) - 1e-9 ? '计划更换' : '指令更换',
       });
     } else {
       this.open.delete(a.id);
@@ -173,25 +171,14 @@ export class History {
       if (p.rework) lr.rework++;
       else lr.good++;
     }
-    const prod = line.layout.product;
-    lh.goodKg += prod.weight ?? 0;
-    const r = this.orders.get(line.id);
-    if (r) {
-      r.o.good++;
-      if (r.o.good >= r.o.qty) {
-        r.o.completed = localTime(this.now());
-        this.out.orders.push({ ...r.o });
-        this.issue(line, r.seq + 1);
-      }
-    }
+    lh.goodKg += line.job?.weight ?? line.layout.product.weight ?? 0;
   }
 
   /** a unit failed a check: scrapped, or reworked and kept on the line */
   defect(line: Line, a: Asset, type: string, feature: string, value: number | null, rework: boolean, p?: Product) {
     const at = localTime(this.now());
-    const r = this.orders.get(line.id);
     this.out.defects.push({
-      machine: this.id(a), line: this.id(line), at, type, feature, value, disposition: rework ? '返修' : '报废', order: r?.o.no ?? '',
+      machine: this.id(a), line: this.id(line), at, type, feature, value, disposition: rework ? '返修' : '报废', order: line.job?.no ?? '',
       heat: p?.lot ?? '', supplier: p?.sup ?? '',
     });
     const lr = p && !rework ? this.lot(line, p) : null;
@@ -207,7 +194,6 @@ export class History {
       mh.scrap++;
       lh.scrap++;
       lh.produced++;
-      if (r) r.o.scrap++;
     }
   }
 
@@ -232,7 +218,11 @@ export class History {
     const at = localTime(this.now());
     let r = this.lots.get(p.lot);
     if (!r) {
-      r = { heat: p.lot, supplier: p.sup ?? '', line: this.id(line), part: line.layout.product.key, first: at, last: at, produced: 0, good: 0, rework: 0, scrap: 0 };
+      const j = line.job;
+      r = {
+        heat: p.lot, supplier: p.sup ?? '', line: this.id(line), part: partId(line, j), partName: j?.name ?? line.layout.product.name,
+        first: at, last: at, produced: 0, good: 0, rework: 0, scrap: 0,
+      };
       this.lots.set(p.lot, r);
     }
     r.last = at;
@@ -266,7 +256,7 @@ export class History {
   released(line: Line) {
     const lh = this.lineHour(line);
     lh.started++;
-    lh.inputKg += line.layout.product.input ?? 0;
+    lh.inputKg += line.job?.input ?? line.layout.product.input ?? 0;
   }
 
   private roll(next: number) {
@@ -295,23 +285,18 @@ export class History {
 
   // ---------- work orders ----------
 
-  private issue(line: Line, seq: number) {
-    const L = line.layout;
-    const prod = L.product;
-    const now = this.now();
-    const d = localTime(now);
-    const ymd = d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
-    const qty = L.order.qty;
-    // the customer's due date: planned at 82 % of the bottleneck's rate with four hours' slack, so a
-    // bad day (a breakdown, no spare die, a bad heat) makes an order late
-    const due = now + (qty * this.neck(line).cycle) / 0.82 * 1000 + 4 * HOUR;
-    const heat = line.lot?.no ?? '';
-    const o: WorkOrder = {
-      no: `${(L.order.no.split('-')[0] || 'MO')}-${ymd}-${this.plantNo}${String(L.no).padStart(2, '0')}${String(seq % 100).padStart(2, '0')}`,
-      line: this.id(line), part: prod.key, customer: prod.customer ?? '', heat, supplier: line.lot?.supplier ?? '', qty,
-      issued: d, due: localTime(due), completed: null, good: 0, scrap: 0,
+  /** A work order as the database keeps it. */
+  private order(line: Line, j: Job): WorkOrder {
+    const prod = line.layout.product;
+    return {
+      no: j.no, line: this.id(line), part: partId(line, j), partName: j.name, customer: prod.customer ?? '', heat: j.heat, supplier: j.supplier,
+      qty: j.qty, issued: localTime(j.issued), due: localTime(j.due), completed: j.done ? localTime(j.done) : null, good: j.good, scrap: j.scrap,
     };
-    this.orders.set(line.id, { o, seq });
+  }
+
+  /** a work order the plant finished */
+  jobDone(line: Line, j: Job) {
+    this.out.orders.push(this.order(line, j));
   }
 
   /**
@@ -324,7 +309,7 @@ export class History {
     const b = this.out;
     b.lots.push(...this.lots.values());
     this.lots.clear();
-    for (const r of this.orders.values()) b.orders.push({ ...r.o });
+    for (const line of this.sim.lines) if (line.job) b.orders.push(this.order(line, line.job));
     this.out = History.empty();
     return b;
   }

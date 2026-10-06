@@ -315,6 +315,29 @@
           "bad": 0.15,
           "factor": 10
         }
+      ],
+      "variants": [
+        {
+          "partNo": "QZ-B15-4",
+          "name": "1.5L 四缸曲轴",
+          "weight": 17.8,
+          "input": 22.6,
+          "share": 0.35
+        },
+        {
+          "partNo": "QZ-B20-4",
+          "name": "2.0T 四缸曲轴",
+          "weight": 21.6,
+          "input": 27.4,
+          "share": 0.45
+        },
+        {
+          "partNo": "QZ-V30-6",
+          "name": "3.0T V6 曲轴",
+          "weight": 28.4,
+          "input": 35.9,
+          "share": 0.2
+        }
       ]
     },
     "conrod": {
@@ -583,6 +606,29 @@
           "bad": 0.15,
           "factor": 10
         }
+      ],
+      "variants": [
+        {
+          "partNo": "LG-B15",
+          "name": "1.5L 连杆",
+          "weight": 0.52,
+          "input": 0.62,
+          "share": 0.4
+        },
+        {
+          "partNo": "LG-B20",
+          "name": "2.0T 连杆",
+          "weight": 0.62,
+          "input": 0.74,
+          "share": 0.45
+        },
+        {
+          "partNo": "LG-V30",
+          "name": "3.0T 连杆",
+          "weight": 0.71,
+          "input": 0.85,
+          "share": 0.15
+        }
       ]
     },
     "flange": {
@@ -704,6 +750,22 @@
           "share": 0.3,
           "bad": 0.15,
           "factor": 8
+        }
+      ],
+      "variants": [
+        {
+          "partNo": "FL-1200-Q355",
+          "name": "Φ1200 风电塔筒法兰",
+          "weight": 312,
+          "input": 356,
+          "share": 0.6
+        },
+        {
+          "partNo": "FL-1150-Q355",
+          "name": "Φ1150 风电塔筒法兰",
+          "weight": 286,
+          "input": 327,
+          "share": 0.4
         }
       ]
     },
@@ -836,6 +898,22 @@
           "share": 0.2,
           "bad": 0.15,
           "factor": 10
+        }
+      ],
+      "variants": [
+        {
+          "partNo": "TQ-320-W",
+          "name": "Φ320 外圈",
+          "weight": 12.8,
+          "input": 14.1,
+          "share": 0.5
+        },
+        {
+          "partNo": "TQ-300-N",
+          "name": "Φ300 内圈",
+          "weight": 10.9,
+          "input": 12.0,
+          "share": 0.5
         }
       ]
     },

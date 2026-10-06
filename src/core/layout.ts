@@ -25,6 +25,7 @@ export interface ProductInfo {
   input?: number;
   customer?: string;
   suppliers?: ProductCfg['suppliers'];
+  variants?: ProductCfg['variants'];
 }
 
 export interface StationLayout {
@@ -160,7 +161,7 @@ function productInfo(industry: IndustryCfg, key: string, needsPacked: boolean): 
     dims.packed = stageDims(stages.packed);
     max = { l: Math.max(max.l, dims.packed.l), h: Math.max(max.h, dims.packed.h), d: Math.max(max.d, dims.packed.d) };
   }
-  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer, suppliers: p.suppliers };
+  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer, suppliers: p.suppliers, variants: p.variants };
 }
 
 // ---------- plant ----------

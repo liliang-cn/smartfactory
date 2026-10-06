@@ -192,6 +192,10 @@ CREATE TABLE IF NOT EXISTS lots (
 ALTER TABLE defects ADD COLUMN IF NOT EXISTS heat_no text NOT NULL DEFAULT '';
 ALTER TABLE defects ADD COLUMN IF NOT EXISTS supplier text NOT NULL DEFAULT '';
 ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS supplier text NOT NULL DEFAULT '';
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS part_name text NOT NULL DEFAULT '';
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS part_name text NOT NULL DEFAULT '';
+-- a family (the line's product) and each of its part numbers are rows here; family names the family
+ALTER TABLE parts ADD COLUMN IF NOT EXISTS family text NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS machine_hours_hour ON machine_hours (hour);
 CREATE INDEX IF NOT EXISTS line_hours_hour ON line_hours (hour);

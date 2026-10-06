@@ -286,9 +286,16 @@ function historyDims(c: string): string {
   const parts = new Map<string, object>();
   const plants = co.plants.map((p) => {
     const L = p.layout;
-    for (const l of L.lines) {
+    for (const [li, l] of L.lines.entries()) {
       const pr = l.product;
-      parts.set(pr.key, { id: pr.key, name: pr.name, partNo: pr.partNo ?? '', material: pr.material ?? '', weight: pr.weight ?? null, input: pr.input ?? null, customer: pr.customer ?? '' });
+      parts.set(pr.key, { id: pr.key, name: pr.name, family: pr.name, partNo: pr.partNo ?? '', material: pr.material ?? '', weight: pr.weight ?? null, input: pr.input ?? null, customer: pr.customer ?? '' });
+      // each part number the family runs, as work orders and lots refer to it
+      for (const v of p.variants(p.lines[li])) {
+        parts.set(`${pr.key}:${v.partNo}`, {
+          id: `${pr.key}:${v.partNo}`, name: v.name, family: pr.name, partNo: v.partNo, material: pr.material ?? '',
+          weight: v.weight ?? pr.weight ?? null, input: v.input ?? pr.input ?? null, customer: pr.customer ?? '',
+        });
+      }
     }
     return {
       id: L.id, name: L.name, hall: L.hall,

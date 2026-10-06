@@ -6,7 +6,7 @@ import type { History } from './history';
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
+  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -87,7 +87,7 @@ export interface PlantState {
     verdict: Asset['verdict'] | null;
     live: LiveValues | null;
   })[];
-  lines: { id: string; spawnT: number; pid: number; good: number; scrap: number; tp: number; products: ProductTuple[]; lot?: [string, string] }[];
+  lines: { id: string; spawnT: number; pid: number; good: number; scrap: number; tp: number; products: ProductTuple[]; lot?: [string, string]; job?: [string, string, number, number, number] }[];
   agvs: Pick<AgvState, 'idx' | 'x' | 'z' | 'heading' | 'cargo' | 'mode' | 'dwell' | 'waiting' | 'waitedT' | 'task'>[] & { id: string }[];
   trucks: (Pick<TruckState, 'idx' | 'x' | 'z' | 'heading' | 'phase' | 'wait' | 'dock' | 'load'> & { id: string })[];
   alarms: Alarm[];
@@ -275,6 +275,74 @@ export class PlantSim {
     }
   }
 
+  // ---------- work orders and part numbers ----------
+
+  /** The part numbers a line can run (one, when the product names none). */
+  variants(line: Line) {
+    const p = line.layout.product;
+    return p.variants?.length ? p.variants : [{ partNo: p.partNo ?? p.key, name: p.name, weight: p.weight, input: p.input, share: 1 }];
+  }
+
+  /**
+   * The next work order: about a day's output of one part number. Orders often repeat the part
+   * that is running; a different one means changing over to that part's own tools first.
+   */
+  private newJob(line: Line) {
+    const vs = this.variants(line);
+    const prev = line.job;
+    let v = prev ? prev.variant : 0;
+    if (!prev || (vs.length > 1 && Math.random() > 0.35)) {
+      let r = Math.random() * vs.reduce((s, x) => s + (x.share ?? 1), 0);
+      v = Math.max(0, vs.findIndex((x) => (r -= x.share ?? 1) <= 0));
+    }
+    const L = line.layout;
+    const neck = Math.max(...line.stations.map((a) => a.cycle));
+    const base = L.order.qty;
+    const qty = base >= 100 ? Math.max(50, Math.round((base * rand(0.6, 1.4)) / 10) * 10) : Math.max(1, Math.round(base * rand(0.6, 1.4)));
+    const now = this.wall();
+    const d = new Date(now + 8 * 3600_000).toISOString();
+    const ymd = d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
+    const seq = (prev?.seq ?? 0) + 1;
+    const parts = L.order.no.split('-');
+    line.job = {
+      no: `${parts[0] || 'MO'}-${ymd}-${parts[parts.length - 1]}${String(seq % 100).padStart(2, '0')}`, seq, variant: v,
+      partNo: vs[v].partNo, name: vs[v].name, weight: vs[v].weight ?? L.product.weight ?? 0, input: vs[v].input ?? L.product.input ?? 0, qty, good: 0, scrap: 0, issued: now,
+      // the customer's due date: planned at 82 % of the bottleneck's rate with four hours' slack,
+      // so a bad day (a breakdown, no spare die, a bad heat, a changeover) makes it late
+      due: now + ((qty * neck) / 0.82) * 1000 + 4 * 3600_000,
+      heat: line.lot?.no ?? '', supplier: line.lot?.supplier ?? '',
+    };
+    if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
+  }
+
+  /** Changes a line over to another part number: every tooled machine mounts that part's tools. */
+  private changeover(line: Line, from: Job, to: Job) {
+    for (const a of line.stations) {
+      const t = a.tool;
+      if (!t || liveFields(a)) continue;
+      a.dies ??= {};
+      a.dies[from.variant] = t.used;
+      // the other part's tools come out of storage as worn as they were put away
+      t.used = a.dies[to.variant] ?? Math.floor(t.life * rand(0.05, 0.7));
+      a.changeReason = '换型';
+      a.changing = Math.max(a.changing, t.change);
+      a.setupLeft = t.setup ?? 0;
+      a.sinceChange = 0;
+    }
+    this.note(line.stations[0], `${line.name}换型：${from.name} → ${to.name}（工单 ${to.no}）`, 'op');
+  }
+
+  private jobOutput(line: Line) {
+    const j = line.job;
+    if (!j) return;
+    j.good++;
+    if (j.good >= j.qty) {
+      j.done = this.wall();
+      this.history?.jobDone(line, j);
+      this.newJob(line);
+    }
+  }
+
   /** A new material lot (one steel heat) for a line, drawn from the product's suppliers. */
   private newLot(line: Line) {
     const prod = line.layout.product;
@@ -423,11 +491,13 @@ export class PlantSim {
     const p = line.products[i];
     this.giveInv(p);
     line.scrap++;
+    if (line.job) line.job.scrap++;
     this.events.push({ type: 'reject', line: line.id, asset: a.id, x: line.x0 + p.s, z: line.z, kind: p.kind });
     line.products.splice(i, 1);
   }
 
   private stepLine(line: Line, dt: number) {
+    if (!line.job && !this.follower) this.newJob(line);
     const cv = line.conveyor;
     const v = this.ready(cv) ? line.speed * cv.speed : 0;
     const st = line.stations;
@@ -557,6 +627,7 @@ export class PlantSim {
         line.good++;
         line.doneTimes.push(this.elapsed);
         this.history?.output(line, p);
+        this.jobOutput(line);
         this.giveInv(p);
         P.splice(i--, 1);
       }
@@ -949,8 +1020,13 @@ export class PlantSim {
       if (a.changing <= 0) {
         a.changing = 0;
         // the removed tool goes for reconditioning (a die is re-sunk) and comes back as a spare
-        if (t.spare && t.repair && Math.random() < t.repair.rate) this.repairs.push([t.spare, this.elapsed + t.repair.hours * 3600]);
-        t.used = 0;
+        if (a.changeReason) {
+          // a part-number change mounted that part's own tools: they keep their wear
+          a.changeReason = undefined;
+        } else {
+          if (t.spare && t.repair && Math.random() < t.repair.rate) this.repairs.push([t.spare, this.elapsed + t.repair.hours * 3600]);
+          t.used = 0;
+        }
         a.setupLeft = t.setup ?? 0;
         a.sinceChange = 0;
         a.health = Math.min(1, a.health + 0.05);
@@ -1365,6 +1441,7 @@ export class PlantSim {
       lines: this.lines.map((l) => ({
         id: l.id, spawnT: p3(l.spawnT), pid: l.pid, good: l.good, scrap: l.scrap, tp: l.doneTimes.length,
         lot: l.lot ? [l.lot.no, l.lot.supplier] as [string, string] : undefined,
+        job: l.job ? [l.job.no, l.job.name, l.job.qty, l.job.good, l.job.issued] as [string, string, number, number, number] : undefined,
         products: l.products.map((x) => [x.id, p3(x.s), x.done, x.proc, p3(x.t), x.kind, p3(x.stall), x.held ?? null] as ProductTuple),
       })),
       agvs: this.agvs.map((g) => ({
@@ -1456,6 +1533,8 @@ export class PlantSim {
       if (!l) continue;
       l.spawnT = x.spawnT;
       l.pid = x.pid;
+      // a follower shows the order the server is running; the server keeps its own
+      if (x.job && this.follower) l.job = { ...(l.job ?? ({} as Job)), no: x.job[0], name: x.job[1], qty: x.job[2], good: x.job[3], issued: x.job[4] };
       if (x.lot) l.lot = { no: x.lot[0], supplier: x.lot[1], factor: l.lot?.factor ?? 1, left: l.lot?.no === x.lot[0] ? l.lot.left : 0 };
       l.good = x.good;
       l.scrap = x.scrap;

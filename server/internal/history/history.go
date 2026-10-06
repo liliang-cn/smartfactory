@@ -93,6 +93,7 @@ type Dims struct {
 		Weight   *float64 `json:"weight"`
 		Input    *float64 `json:"input"`
 		Customer string   `json:"customer"`
+		Family   string   `json:"family"`
 	} `json:"parts"`
 }
 
@@ -104,8 +105,9 @@ func (s *Store) WriteDims(ctx context.Context, raw string) error {
 	}
 	b := &pgx.Batch{}
 	for _, p := range d.Parts {
-		b.Queue(`INSERT INTO parts VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (part_id) DO UPDATE SET part_no=$2, name=$3, material=$4, weight_kg=$5, input_kg=$6, customer=$7`,
-			p.ID, p.PartNo, p.Name, p.Material, p.Weight, p.Input, p.Customer)
+		b.Queue(`INSERT INTO parts (part_id, part_no, name, material, weight_kg, input_kg, customer, family) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			ON CONFLICT (part_id) DO UPDATE SET part_no=$2, name=$3, material=$4, weight_kg=$5, input_kg=$6, customer=$7, family=$8`,
+			p.ID, p.PartNo, p.Name, p.Material, p.Weight, p.Input, p.Customer, p.Family)
 	}
 	for _, p := range d.Plants {
 		b.Queue(`INSERT INTO plants VALUES ($1,$2,$3) ON CONFLICT (plant_id) DO UPDATE SET name=$2, hall=$3`, p.ID, p.Name, p.Hall)
@@ -162,15 +164,15 @@ type batch struct {
 		Heat, Supplier                   string
 	} `json:"defects"`
 	Orders []struct {
-		No, Line, Part, Customer, Heat, Supplier string
-		Qty                                      int
-		Issued, Due                              string
-		Completed                                *string
-		Good, Scrap                              int
+		No, Line, Part, PartName, Customer, Heat, Supplier string
+		Qty                                                int
+		Issued, Due                                        string
+		Completed                                          *string
+		Good, Scrap                                        int
 	} `json:"orders"`
 	Lots []struct {
-		Heat, Supplier, Line, Part, First, Last string
-		Produced, Good, Rework, Scrap           int
+		Heat, Supplier, Line, Part, PartName, First, Last string
+		Produced, Good, Rework, Scrap                     int
 	} `json:"lots"`
 }
 
@@ -274,17 +276,17 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 			} else if now.After(due) {
 				status = "已逾期"
 			}
-			b.Queue(`INSERT INTO work_orders (order_no, line_id, part_id, customer, heat_no, qty, good, scrap, issued_at, due_at, completed_at, hour, status, completed, on_time, supplier)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			b.Queue(`INSERT INTO work_orders (order_no, line_id, part_id, customer, heat_no, qty, good, scrap, issued_at, due_at, completed_at, hour, status, completed, on_time, supplier, part_name)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 				ON CONFLICT (order_no) DO UPDATE SET good=$7, scrap=$8, completed_at=$11, hour=$12, status=$13, completed=$14, on_time=$15`,
-				r.No, r.Line, r.Part, r.Customer, r.Heat, r.Qty, r.Good, r.Scrap, parse(r.Issued), due, done, cal(when), status, completed, onTime, r.Supplier)
+				r.No, r.Line, r.Part, r.Customer, r.Heat, r.Qty, r.Good, r.Scrap, parse(r.Issued), due, done, cal(when), status, completed, onTime, r.Supplier, r.PartName)
 		}
 		for _, r := range x.Lots {
 			// a lot arrives in pieces (one per drain): add them up
-			b.Queue(`INSERT INTO lots VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			b.Queue(`INSERT INTO lots (heat_no, supplier, line_id, part_id, first_at, last_at, hour, produced, good, rework, scrap, part_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 				ON CONFLICT (heat_no) DO UPDATE SET last_at=greatest(lots.last_at, $6), produced=lots.produced+$8,
 				good=lots.good+$9, rework=lots.rework+$10, scrap=lots.scrap+$11`,
-				r.Heat, r.Supplier, r.Line, r.Part, parse(r.First), parse(r.Last), cal(r.First), r.Produced, r.Good, r.Rework, r.Scrap)
+				r.Heat, r.Supplier, r.Line, r.Part, parse(r.First), parse(r.Last), cal(r.First), r.Produced, r.Good, r.Rework, r.Scrap, r.PartName)
 		}
 	}
 	rows = b.Len()

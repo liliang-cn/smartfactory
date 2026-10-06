@@ -63,6 +63,9 @@ dimensions:
   - {name: defect_type,   entity: defect,      column: defect_type, type: categorical, synonyms: [缺陷类型, 不良类型, 不良项]}
   - {name: disposition,   entity: defect,      column: disposition, type: categorical, synonyms: [处置, 处置方式, 报废还是返修]}
   - {name: order_status,  entity: work_order,  column: status,      type: categorical, synonyms: [工单状态]}
+  - {name: part_family,   entity: part,        column: family,      type: categorical, synonyms: [产品族, 产品大类]}
+  - {name: order_part,    entity: work_order,  column: part_name,   type: categorical, synonyms: [工单型号, 零件型号]}
+  - {name: lot_part,      entity: lot,         column: part_name,   type: categorical, synonyms: [炉批型号]}
   - {name: supplier,      entity: lot,         column: supplier,    type: categorical, synonyms: [钢厂, 原材料供应商, 供应商]}
   - {name: heat_no,       entity: lot,         column: heat_no,     type: categorical, synonyms: [炉号, 炉批号, 材料批次]}
   - {name: defect_supplier, entity: defect,    column: supplier,    type: categorical, synonyms: [缺陷件的钢厂]}

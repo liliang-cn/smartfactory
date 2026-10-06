@@ -11,9 +11,11 @@ import { CHIP, STATE_LABEL, hhmm, pct } from './status';
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 
 function orderProgress(sim: PlantSim, line: Line) {
-  const o = line.layout.order;
+  // the work order the plant is running (part number, quantity); the layout's sample order otherwise
+  const j = line.job;
+  const o = j ? { ...line.layout.order, no: j.no, part: j.name, qty: j.qty, issued: hhmm(((j.issued + 8 * 3600_000) % 86_400_000) / 1000) } : line.layout.order;
   const k = sim.lineKpi(line);
-  const done = Math.min(o.qty, line.good);
+  const done = Math.min(o.qty, j ? j.good : line.good);
   const eta = k.tp > 0 ? sim.clock + ((o.qty - done) / k.tp) * 3600 : null;
   return { o, k, done, eta, finished: done >= o.qty };
 }

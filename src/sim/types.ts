@@ -140,6 +140,10 @@ export interface Asset {
   /** units still to scrap while setting up a new tool, and units made since the change */
   setupLeft?: number;
   sinceChange?: number;
+  /** the tools of the part numbers not running now: units made with each */
+  dies?: Record<number, number>;
+  /** why the current change happened, when it is not wear (a part-number change) */
+  changeReason?: string;
   reading?: { v: number; ok: boolean; at: number };
   rejects: number;
   verdict?: { ok: boolean; at: number };
@@ -169,6 +173,12 @@ export interface LiveValues {
   f: Record<string, number | string | boolean>;
 }
 
+/** A work order a line is running: one part number, a quantity, a due date. */
+export interface Job {
+  no: string; seq: number; variant: number; partNo: string; name: string; weight: number; input: number;
+  qty: number; good: number; scrap: number; issued: number; due: number; heat: string; supplier: string; done?: number;
+}
+
 /** A material lot (one steel heat) feeding a line. */
 export interface Lot { no: string; supplier: string; factor: number; left: number }
 
@@ -180,6 +190,8 @@ export interface Line {
   lot?: Lot;
   /** the week its planned maintenance last ran */
   pmWeek?: number;
+  /** the work order being run */
+  job?: Job;
   layout: LineLayout;
   z: number;
   x0: number;

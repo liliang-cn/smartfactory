@@ -91,6 +91,14 @@ export const Product = z.object({
   input: z.number().positive().optional(),
   customer: z.string().optional(),
   /**
+   * part numbers of the family a line can run (a 1.5 L and a 2.0 T crankshaft): each work order is
+   * one of them, by `share`, and switching to another means changing to that part's own tools
+   */
+  variants: z.array(z.object({
+    partNo: z.string(), name: z.string(), weight: z.number().positive().optional(), input: z.number().positive().optional(),
+    share: z.number().positive().default(1),
+  })).optional(),
+  /**
    * where the material comes from: each lot (a steel heat) is drawn from a supplier by `share`;
    * a `bad` share of a supplier's lots carries `factor` times the material-borne flaws
    */
