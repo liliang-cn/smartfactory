@@ -45,6 +45,28 @@
         },
         "vehicle": {
           "type": "string"
+        },
+        "order": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "steps": {
+              "minItems": 6,
+              "maxItems": 6,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },
@@ -643,12 +665,106 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1
+          },
+          "tooling": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "life": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "change": {
+                "default": 600,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "spare": {
+                "type": "string"
+              },
+              "drift": {
+                "default": 3,
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "label",
+              "life"
+            ]
+          },
+          "take": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "give": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
           "label",
           "code",
           "look"
+        ]
+      }
+    },
+    "inventory": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "unit": {
+            "default": "件",
+            "type": "string"
+          },
+          "kind": {
+            "default": "lend",
+            "type": "string",
+            "enum": [
+              "lend",
+              "consume"
+            ]
+          },
+          "capacity": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "low": {
+            "default": 0.1,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "refill": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "label",
+          "capacity"
         ]
       }
     },
@@ -738,6 +854,23 @@
                     "target",
                     "sigma"
                   ]
+                },
+                "take": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "give": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "required": [

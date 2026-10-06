@@ -24,12 +24,13 @@ export function Tracker() {
   const lineId = useUI((s) => s.trackerLine);
   const line = sim.lineById[lineId] ?? sim.lines[0];
   const { o, k, done, eta, finished } = orderProgress(sim, line);
+  const w = layout.terms.order?.steps ?? ['工单下达', '物料齐套', '生产中', '生产完成', '质检入库', '发运'];
   const steps: [React.ReactNode, string, string, 'done' | 'now' | ''][] = [
-    [<FileTextIcon key="1" />, '工单下达', o.issued, 'done'],
-    [<BoxIcon key="2" />, '物料齐套', o.kitted, 'done'],
-    [<SettingsIcon key="3" />, finished ? '生产完成' : '生产中', `${done} / ${o.qty}`, finished ? 'done' : 'now'],
-    [<CheckIcon key="4" />, '质检入库', finished ? '已完成' : eta ? `预计 ${hhmm(eta)}` : '待定', finished ? 'now' : ''],
-    [<TruckIcon key="5" />, '发运', `${layout.qualityLabel} ${pct(k.quality, 1)}`, ''],
+    [<FileTextIcon key="1" />, w[0], o.issued, 'done'],
+    [<BoxIcon key="2" />, w[1], o.kitted, 'done'],
+    [<SettingsIcon key="3" />, finished ? w[3] : w[2], `${done} / ${o.qty}`, finished ? 'done' : 'now'],
+    [<CheckIcon key="4" />, w[4], finished ? '已完成' : eta ? `预计 ${hhmm(eta)}` : '待定', finished ? 'now' : ''],
+    [<TruckIcon key="5" />, w[5], `${layout.qualityLabel} ${pct(k.quality, 1)}`, ''],
   ];
   const t = sim.trucks.find((x) => x.kind === 'out')!;
   const ta = t.asset;
@@ -38,7 +39,7 @@ export function Tracker() {
       <div>
         <div className="mb-3.5 flex items-center gap-2.5">
           <span className="grid size-[22px] place-items-center rounded-md bg-primary text-primary-foreground"><ClipboardListIcon className="size-3.5" /></span>
-          <h3 className="shrink-0 whitespace-nowrap text-[15px] font-extrabold">工单跟踪</h3>
+          <h3 className="shrink-0 whitespace-nowrap text-[15px] font-extrabold">{layout.terms.order?.title ?? '工单跟踪'}</h3>
           <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{line.name}  {o.no}  {o.part}</span>
           <div className="ml-auto flex max-w-[50%] shrink-0 gap-0.5 overflow-x-auto rounded-lg bg-muted p-[3px] [scrollbar-width:none]">
             {sim.lines.map((l) => (
@@ -109,11 +110,37 @@ const MiniBar = ({ label, value, danger }: { label: string; value: number; dange
 
 const TABS = [
   ['machines', '设备'],
+  ['stock', '库存'],
   ['vehicles', '车辆'],
   ['alarms', '报警'],
   ['log', '事件'],
   ['orders', '工单'],
 ] as const;
+
+/** Inventory of the plant: lent items as in use / total, consumables as left / capacity. */
+export function InventoryList({ sim }: { sim: PlantSim }) {
+  return (
+    <>
+      {sim.inventory.map((it) => {
+        const lend = it.kind === 'lend';
+        const used = it.cap - it.avail;
+        const low = it.avail <= Math.floor(it.cap * it.low);
+        return (
+          <div key={it.key} className="grid grid-cols-[1fr_auto_88px] items-center gap-2.5 rounded-xl px-1.5 py-1.5">
+            <span className="grid min-w-0 leading-tight">
+              <b className="truncate text-[13px]">{it.label}</b>
+              <small className="text-[11.5px] text-muted-foreground">{lend ? '借用，会归还' : '消耗，靠补货'}</small>
+            </span>
+            <span className={cn('text-[12.5px] tabular-nums', low ? 'font-bold text-destructive' : 'text-muted-foreground')}>
+              {lend ? `在用 ${used} / 共 ${it.cap} ${it.unit}` : `剩 ${it.avail} / ${it.cap} ${it.unit}`}
+            </span>
+            <MiniBar label={lend ? `可用 ${it.avail}` : `${Math.round((it.avail / Math.max(1, it.cap)) * 100)}%`} value={((lend ? used : it.avail) / Math.max(1, it.cap)) * 100} danger={low} />
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export function Fleet() {
   useTick();
@@ -131,6 +158,9 @@ export function Fleet() {
     vehicles: `${vehicles.filter((a) => a.state === 'moving' || a.state === 'handling').length}/${vehicles.length}`,
     alarms: `${alarms.length}`,
   };
+  const lowStock = sim.inventory.filter((i) => i.avail <= Math.floor(i.cap * i.low)).length;
+  if (sim.inventory.length) counts.stock = lowStock ? `${lowStock} 低` : `${sim.inventory.length}`;
+  const tabs = TABS.filter(([id]) => id !== 'stock' || sim.inventory.length);
   const unacked = alarms.some((x) => !x.acked);
   const pick = (t: string) => {
     const s = useUI.getState();
@@ -151,7 +181,9 @@ export function Fleet() {
       <div className="flex items-center gap-2.5">
         <span className="grid size-[22px] shrink-0 place-items-center rounded-md bg-primary text-primary-foreground max-md:hidden"><ListIcon className="size-3.5" /></span>
         <div role="tablist" className="flex gap-0.5 rounded-[10px] bg-muted p-[3px] max-md:flex-1 max-md:overflow-x-auto max-md:[scrollbar-width:none]">
-          {TABS.map(([id, label]) => (
+          {tabs.map(([id, defaultLabel]) => {
+            const label = id === 'orders' ? layout.terms.order?.tab ?? defaultLabel : defaultLabel;
+            return (
             <button
               key={id}
               type="button"
@@ -165,9 +197,10 @@ export function Fleet() {
               )}
             >
               {label}
-              {counts[id] && <b className={cn('ml-1 font-semibold text-muted-foreground/70', id === 'alarms' && unacked && 'font-extrabold text-destructive')}>{counts[id]}</b>}
+              {counts[id] && <b className={cn('ml-1 font-semibold text-muted-foreground/70', ((id === 'alarms' && unacked) || (id === 'stock' && lowStock > 0)) && 'font-extrabold text-destructive')}>{counts[id]}</b>}
             </button>
-          ))}
+            );
+          })}
         </div>
         {tab === 'alarms' && unacked && (
           <Button variant="link" size="sm" className="ml-auto px-1 font-bold max-md:hidden" onClick={() => { sim.ackAll(); useUI.getState().bump(); }}>全部确认</Button>
@@ -185,6 +218,7 @@ export function Fleet() {
             <MiniBar label={`稼动 ${(a.util * 100).toFixed(0)}%`} value={a.util * 100} />
           </Row>
         ))}
+        {tab === 'stock' && <InventoryList sim={sim} />}
         {tab === 'vehicles' && vehicles.map((a) => (
           <Row key={a.id} a={a}>
             <IdCell id={a.id} sub={a.type === 'agv' ? a.name : a.carrier ?? ''} />

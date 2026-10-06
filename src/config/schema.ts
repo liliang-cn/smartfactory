@@ -105,6 +105,26 @@ export const Look = z.object({
 });
 export type LookCfg = z.infer<typeof Look>;
 
+/** Units of inventory a step lends out (or uses up): {tent: 1, sleepingBag: 3}. */
+const Take = z.record(z.string(), z.number().int().positive());
+
+/**
+ * Something the site keeps a count of: lent to units and returned (tents, tables, tableware)
+ * or used up and restocked by deliveries (charcoal, meat sets, firewood).
+ */
+export const InventoryItem = z.object({
+  label: z.string(),
+  unit: z.string().default('件'),
+  kind: z.enum(['lend', 'consume']).default('lend'),
+  /** how many the site owns / can store; a plant can override it */
+  capacity: z.number().int().positive(),
+  /** alarm when the available share drops below this */
+  low: z.number().min(0).max(1).default(0.1),
+  /** consume: amount each supply delivery brings (default half the capacity) */
+  refill: z.number().int().positive().optional(),
+});
+export type InventoryItemCfg = z.infer<typeof InventoryItem>;
+
 export const Machine = z.object({
   label: z.string(),
   /** id prefix, e.g. CNC -> CNC-101 */
@@ -126,6 +146,24 @@ export const Machine = z.object({
   measure: Measure.optional(),
   /** inspection without a measured value: base probability a unit is rejected */
   rejectRate: z.number().min(0).max(1).optional(),
+  /**
+   * A wearing tool counted in units it has made: forging die, trim die, cutter, punch, mould.
+   * Near the end of its life measurements drift towards the limits; at the end the machine stops
+   * for a change, which uses one spare from inventory when `spare` names an item.
+   */
+  tooling: z.object({
+    label: z.string(),
+    life: z.number().int().positive(),
+    /** seconds a change takes */
+    change: z.number().positive().default(600),
+    /** inventory key of the spare a change uses up */
+    spare: z.string().optional(),
+    /** how far wear pushes measurements at end of life, in sigmas (0 = no effect) */
+    drift: z.number().min(0).default(3),
+  }).optional(),
+  /** default inventory this machine lends / takes back (a step can override) */
+  take: Take.optional(),
+  give: z.array(z.string()).optional(),
 }).refine((m) => m.thermal.warn >= 22 + m.thermal.run + 6 && m.thermal.trip > m.thermal.warn, {
   // `idle`/`run` are rises over 22 °C ambient; `warn`/`trip` are absolute temperatures.
   message: 'thermal.warn 应至少比运行温度（22°C + run）高 6°C，trip 应高于 warn',
@@ -142,6 +180,10 @@ export const Step = z.union([
     cycle: z.number().positive().optional(),
     makes: z.string().optional(),
     measure: Measure.optional(),
+    /** inventory lent out (or used up) when a unit finishes this step; the unit waits if there is not enough */
+    take: Take.optional(),
+    /** lent inventory the unit hands back at this step (anything still held is returned when it leaves) */
+    give: z.array(z.string()).optional(),
   }),
 ]);
 export type StepCfg = z.infer<typeof Step>;
@@ -167,9 +209,22 @@ export const Industry = z.object({
     line: z.string().optional(),
     /** what the logistics vehicles are, default AGV 小车 (e.g. 送餐车) */
     vehicle: z.string().optional(),
+    /** the order tracker: a factory work order by default, a booking for a venue */
+    order: z.object({
+      /** default 工单跟踪 */
+      title: z.string().optional(),
+      /** tab name, default 工单 */
+      tab: z.string().optional(),
+      /** order number prefix, default MO */
+      prefix: z.string().optional(),
+      /** issued, kitted, in progress, completed, checked, delivered — default 工单下达 物料齐套 生产中 生产完成 质检入库 发运 */
+      steps: z.array(z.string()).length(6).optional(),
+    }).optional(),
   }).default({}),
   products: z.record(z.string(), Product),
   machines: z.record(z.string(), Machine),
+  /** what the site keeps a count of (tents, tables, charcoal …), shown as in use / available / capacity */
+  inventory: z.record(z.string(), InventoryItem).default({}),
   /** reusable routings, referenced by lines as `route` */
   routes: z.record(z.string(), z.array(Step).min(1)).default({}),
 });
@@ -210,6 +265,8 @@ export const PlantCfg = z.object({
   industry: z.string().optional(),
   lines: z.array(LineCfg).min(1),
   warehouse: z.string().default('原料立体库'),
+  /** this site's inventory: only these items, with these capacities ({tent: 20}); default every item of the industry */
+  inventory: z.record(z.string(), z.number().int().nonnegative()).optional(),
   finishedGoods: z.string().default('成品库'),
   carriers: z.tuple([z.string(), z.string()]).default(['顺达物流', '远航货运']),
 });

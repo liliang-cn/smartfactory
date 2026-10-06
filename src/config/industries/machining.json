@@ -154,7 +154,13 @@
         "主轴过载",
         "刀具寿命到限",
         "冷却液压力低"
-      ]
+      ],
+      "tooling": {
+        "label": "刀具",
+        "life": 600,
+        "change": 120,
+        "spare": "cutter"
+      }
     },
     "cnc2": {
       "label": "数控加工中心",
@@ -178,7 +184,13 @@
       "faults": [
         "主轴过载",
         "刀具寿命到限"
-      ]
+      ],
+      "tooling": {
+        "label": "刀具",
+        "life": 600,
+        "change": 120,
+        "spare": "cutter"
+      }
     },
     "robot": {
       "label": "装配机器人",
@@ -346,5 +358,15 @@
       "vision",
       "packer"
     ]
+  },
+  "inventory": {
+    "cutter": {
+      "label": "刀具",
+      "unit": "把",
+      "kind": "consume",
+      "capacity": 120,
+      "refill": 60,
+      "low": 0.15
+    }
   }
 }

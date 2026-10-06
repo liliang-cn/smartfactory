@@ -5,7 +5,7 @@
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
+  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -50,13 +50,13 @@ const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 const ema = (dt: number, tau: number) => 1 - Math.exp(-dt / tau);
 
 export const STATE_LABEL: Record<AssetState, string> = {
-  running: '运行', idle: '待料', blocked: '阻塞', stopped: '停机', fault: '故障', maint: '维护',
+  running: '运行', idle: '待料', blocked: '阻塞', stopped: '停机', fault: '故障', maint: '维护', changeover: '换模',
   moving: '行驶', waiting: '等待', handling: '装卸', away: '在途', ok: '正常', empty: '缺料', low: '低位', full: '满载',
 };
 
 type AssetInit = Partial<Asset> & Pick<Asset, 'id' | 'name' | 'type'>;
 
-type ProductTuple = [id: string, s: number, done: number, proc: number, t: number, kind: string, stall: number];
+type ProductTuple = [id: string, s: number, done: number, proc: number, t: number, kind: string, stall: number, held?: Record<string, number> | null];
 
 /** A plant as written to disk by the server. */
 export interface SavedPlant {
@@ -76,6 +76,8 @@ export interface PlantState {
   power: number;
   alarmSeq: number;
   assets: (Pick<Asset, 'id' | 'enabled' | 'speed' | 'fault' | 'maint' | 'state' | 'temp' | 'vib' | 'power' | 'health' | 'util' | 'avail' | 'cycles' | 'progress' | 'rejects' | 'stock' | 'count' | 'battery' | 'vel' | 'task'> & {
+    toolUsed?: number;
+    changing?: number;
     busy: string | null;
     reading: Asset['reading'] | null;
     verdict: Asset['verdict'] | null;
@@ -86,6 +88,8 @@ export interface PlantState {
   trucks: (Pick<TruckState, 'idx' | 'x' | 'z' | 'heading' | 'phase' | 'wait' | 'dock' | 'load'> & { id: string })[];
   alarms: Alarm[];
   log: LogEntry[];
+  /** [key, available, capacity] */
+  inventory?: [string, number, number][];
   events: SimEvent[];
 }
 
@@ -113,6 +117,8 @@ export class PlantSim {
    * arrive from the server.
    */
   follower = false;
+  /** what the site keeps a count of (tents, charcoal …) */
+  inventory: InventoryState[] = [];
   /** false until a follower has received its first state from the server */
   synced = true;
 
@@ -130,7 +136,7 @@ export class PlantSim {
       group: 'WH', s: 0, cycle: 0, stock: 0, cap: 0, count: 0, battery: 0, vel: 0, task: '', rejects: 0, arch: def.type,
       ...def,
       spec,
-      enabled: true, speed: 1, fault: null, maint: 0, state: 'idle',
+      enabled: true, speed: 1, fault: null, maint: 0, changing: 0, state: 'idle',
       temp: AMBIENT, vib: 0, power: 0, health: rand(0.74, 0.97), util: 0.7, avail: 0.97,
       cycles: Math.floor(rand(1200, 5200)), progress: 0, busy: null,
       hist: { temp: [], power: [], vib: [], level: [], meas: [] },
@@ -148,6 +154,8 @@ export class PlantSim {
 
   private build() {
     const L = this.layout;
+    // lent items start all on the shelf; consumables start mostly stocked
+    this.inventory = L.inventory.map((it) => ({ ...it, avail: it.kind === 'lend' ? it.cap : Math.round(it.cap * 0.8) }));
     for (const ll of L.lines) {
       const line = {
         id: ll.id, name: ll.name, note: ll.note, layout: ll, z: ll.z, x0: ll.x0, x1: ll.x1, len: ll.x1 - ll.x0,
@@ -159,7 +167,9 @@ export class PlantSim {
       line.outfeed = this.asset({ id: ll.outfeed.id, name: ll.outfeed.name, cap: ll.outfeed.cap, type: 'outfeed', group: ll.id, line, count: Math.min(7, ll.outfeed.cap - 1) });
       line.stations = ll.stations.map((st) => this.asset({
         id: st.id, name: st.name, type: 'station', arch: st.machine.look.archetype, machine: st.machine, group: ll.id, line,
-        s: st.x - ll.x0, cycle: st.cycle, makes: st.makes, measure: st.measure,
+        s: st.x - ll.x0, cycle: st.cycle, makes: st.makes, measure: st.measure, take: st.take, give: st.give,
+        // tools are part-way through their life when the shift starts
+        tool: st.machine.tooling ? { ...st.machine.tooling, used: Math.floor(st.machine.tooling.life * rand(0.05, 0.97)) } : undefined,
       }));
       // Warm start: pretend the line has been running for the last hour.
       const ideal = 3600 / Math.max(...line.stations.map((s) => s.cycle));
@@ -223,6 +233,7 @@ export class PlantSim {
     if (this.histAcc >= 1) {
       this.histAcc -= 1;
       for (const a of this.assets.values()) this.pushHist(a);
+      this.checkInventory();
     }
   }
 
@@ -236,7 +247,9 @@ export class PlantSim {
     const m = a.measure!;
     const wear = 1 - a.health;
     const gauss = Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
-    let dev = gauss * m.sigma * (1 + wear * 2.5) + m.drift * wear * m.sigma * 4 + (a.speed - 1) * (m.speedBias ?? 0);
+    // a worn tool pushes readings towards the limit over the last 40 % of its life
+    const toolWear = a.tool ? Math.max(0, (a.tool.used / a.tool.life - 0.6) / 0.4) : 0;
+    let dev = gauss * m.sigma * (1 + wear * 2.5) + m.drift * wear * m.sigma * 4 + m.drift * toolWear * toolWear * m.sigma * (a.tool?.drift ?? 0) + (a.speed - 1) * (m.speedBias ?? 0);
     if (m.abs) dev = Math.abs(dev);
     return this.record(a, m.target + dev, quiet);
   }
@@ -284,11 +297,12 @@ export class PlantSim {
   }
 
   private ready(a: Asset) {
-    return a.enabled && !a.fault && a.maint <= 0;
+    return a.enabled && !a.fault && a.maint <= 0 && a.changing <= 0 && !(a.tool && a.tool.used >= a.tool.life);
   }
 
   private reject(line: Line, a: Asset, i: number) {
     const p = line.products[i];
+    this.giveInv(p);
     line.scrap++;
     this.events.push({ type: 'reject', line: line.id, asset: a.id, x: line.x0 + p.s, z: line.z, kind: p.kind });
     line.products.splice(i, 1);
@@ -318,6 +332,25 @@ export class PlantSim {
         p.t += dt * a.speed;
         a.progress = Math.min(1, p.t / a.cycle);
         if (p.t < a.cycle) continue;
+        // inventory this step lends out: the unit waits here until there is enough
+        if (a.take && !this.follower) {
+          const short = this.shortOf(a.take);
+          if (short) {
+            p.t = a.cycle;
+            if (a.waitFor !== short.label) {
+              a.waitFor = short.label;
+              this.raise(a, 'inv', 3, `${short.label}不足，等待中`);
+            }
+            continue;
+          }
+          this.takeInv(p, a.take);
+        }
+        if (a.waitFor) {
+          a.waitFor = undefined;
+          this.clear(a, 'inv');
+        }
+        if (a.give) this.giveInv(p, a.give);
+        if (a.tool) a.tool.used++;
         p.done = p.proc;
         p.proc = -1;
         p.stall = 0;
@@ -360,15 +393,18 @@ export class PlantSim {
         line.outfeed.count++;
         line.good++;
         line.doneTimes.push(this.elapsed);
+        this.giveInv(p);
         P.splice(i--, 1);
       }
     }
 
     st.forEach((a, idx) => {
       if (a.fault) a.state = 'fault';
+      else if (a.changing > 0) a.state = 'changeover';
+      else if (a.tool && a.tool.used >= a.tool.life && a.waitFor) a.state = 'blocked';
       else if (a.maint > 0) a.state = 'maint';
       else if (!a.enabled) a.state = 'stopped';
-      else if (a.busy) a.state = 'running';
+      else if (a.busy) a.state = a.waitFor ? 'blocked' : 'running';
       else {
         const stuck = P.some((p) => p.done === idx && Math.abs(p.s - a.s) < 0.02 && p.stall > 0.6);
         a.state = stuck ? 'blocked' : 'idle';
@@ -393,6 +429,21 @@ export class PlantSim {
     const a = g.asset;
     const spec = a.spec!;
     a.vel = 0;
+    // A located vehicle (GPS / UWB / the fleet system) drives to where it was reported.
+    const lv = liveFields(a);
+    if (lv && typeof lv.x === 'number' && typeof lv.z === 'number') {
+      const dx = lv.x - g.x;
+      const dz = lv.z - g.z;
+      const dist = Math.hypot(dx, dz);
+      const k = 1 - Math.exp(-dt * 2.5);
+      g.x += dx * k;
+      g.z += dz * k;
+      if (dist > 0.05) g.heading = typeof lv.heading === 'number' ? lv.heading : Math.atan2(dz, dx);
+      a.vel = (dist * k) / Math.max(dt, 1e-3);
+      a.state = a.vel > 0.1 ? 'moving' : 'waiting';
+      a.power = a.vel > 0.1 ? spec.pRun! : spec.pIdle!;
+      return;
+    }
     if (!this.ready(a)) {
       a.state = a.fault ? 'fault' : a.maint > 0 ? 'maint' : 'stopped';
       a.power = a.maint > 0 ? 0 : 0.05;
@@ -481,7 +532,10 @@ export class PlantSim {
         this.wh.stock += n;
         t.load -= n;
         a.task = `卸货入库，剩余 ${t.load} 件`;
-        if (t.load <= 0 || t.dock > 30) this.truckDone(t, '卸货完成，原料入库');
+        if (t.load <= 0 || t.dock > 30) {
+          this.truckDone(t, '卸货完成，原料入库');
+          this.refill(t.asset);
+        }
       } else {
         const n = Math.min(this.fg.count, Math.ceil((120 / 22) * dt), 120 - t.load);
         this.fg.count -= n;
@@ -580,6 +634,7 @@ export class PlantSim {
 
   private stepTelemetry(a: Asset, dt: number) {
     this.crew(a);
+    if (a.tool) this.stepTool(a, dt);
     const s = a.spec;
     if (a.maint > 0) {
       a.maint -= dt;
@@ -639,6 +694,109 @@ export class PlantSim {
       const rate = (1 / 12000) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
       if (Math.random() < rate * dt) this.trip(a, pick(s.faults));
     }
+  }
+
+  // ---------- inventory ----------
+
+  private inv(key: string) {
+    return this.inventory.find((i) => i.key === key);
+  }
+
+  /** The first item there is not enough of, if any. */
+  private shortOf(take: Record<string, number>) {
+    for (const [k, n] of Object.entries(take)) {
+      const it = this.inv(k);
+      if (it && it.avail < n) return it;
+    }
+    return null;
+  }
+
+  private takeInv(p: Product, take: Record<string, number>) {
+    for (const [k, n] of Object.entries(take)) {
+      const it = this.inv(k);
+      if (!it) continue;
+      it.avail -= n;
+      if (it.kind === 'lend') {
+        p.held ??= {};
+        p.held[k] = (p.held[k] ?? 0) + n;
+      }
+    }
+  }
+
+  /** Returns what a unit was lent: the listed keys, or everything it still holds. */
+  private giveInv(p: Product, keys?: string[]) {
+    if (!p.held) return;
+    for (const k of keys ?? Object.keys(p.held)) {
+      const n = p.held[k];
+      const it = this.inv(k);
+      if (!n || !it) continue;
+      it.avail = Math.min(it.cap, it.avail + n);
+      delete p.held[k];
+    }
+  }
+
+  private refill(truck: Asset) {
+    const got: string[] = [];
+    for (const it of this.inventory) {
+      if (it.kind !== 'consume' || it.avail >= it.cap) continue;
+      const n = Math.min(it.refill, it.cap - it.avail);
+      it.avail += n;
+      got.push(`${it.label} +${n} ${it.unit}`);
+    }
+    if (got.length) this.note(truck, `补货：${got.join('，')}`, 'info');
+  }
+
+  private checkInventory() {
+    for (const it of this.inventory) {
+      const code = `inv-${it.key}`;
+      if (it.avail <= Math.floor(it.cap * it.low)) this.raise(this.wh, code, 3, `${it.label}可用只剩 ${it.avail} ${it.unit}（共 ${it.cap}）`);
+      else this.clear(this.wh, code);
+    }
+  }
+
+  // ---------- tooling (dies, cutters …) ----------
+
+  private stepTool(a: Asset, dt: number) {
+    const t = a.tool!;
+    if (a.changing > 0) {
+      a.changing -= dt;
+      if (a.changing <= 0) {
+        a.changing = 0;
+        t.used = 0;
+        a.health = Math.min(1, a.health + 0.05);
+        this.clear(a, 'tool');
+        this.note(a, `${t.label}更换完成，寿命计数清零`, 'op');
+      }
+      return;
+    }
+    // equipment that reports its tool counter decides when to change it
+    if (this.follower || liveFields(a)?.toolUsed !== undefined) return;
+    const share = t.used / t.life;
+    if (share >= 0.9) this.raise(a, 'tool', 3, `${t.label}寿命 ${Math.round(share * 100)}%，准备更换（${t.used}/${t.life} 次）`);
+    // a worn-out tool is changed as soon as the machine is free, with a spare from stock
+    if (t.used >= t.life && !a.busy && !a.fault) this.startChange(a);
+  }
+
+  private startChange(a: Asset): boolean {
+    const t = a.tool!;
+    if (t.spare) {
+      const it = this.inv(t.spare);
+      if (it && it.avail < 1) {
+        if (a.waitFor !== it.label) {
+          a.waitFor = it.label;
+          this.raise(a, 'tool-spare', 2, `缺${it.label}，${t.label}到寿命无法更换`);
+        }
+        return false;
+      }
+      if (it) it.avail -= 1;
+    }
+    if (a.waitFor) {
+      a.waitFor = undefined;
+      this.clear(a, 'tool-spare');
+    }
+    a.changing = t.change;
+    this.note(a, `开始更换${t.label}（已用 ${t.used} 次），约 ${Math.round(t.change / 60)} 分钟`, 'op');
+    return true;
   }
 
   // ---------- shift crew ----------
@@ -768,6 +926,11 @@ export class PlantSim {
         if (!a.spec?.faults) return { ok: false, msg: `${id} 不支持故障演练` };
         this.trip(a, `${pick(a.spec.faults)}（模拟）`);
         return { ok: true, msg: `已向 ${id} 注入故障` };
+      case 'retool':
+        if (!a.tool) return { ok: false, msg: `${id} 没有可更换的工装` };
+        if (a.changing > 0) return { ok: false, msg: `${id} 正在更换${a.tool.label}` };
+        if (a.busy) return { ok: false, msg: `${id} 正在加工，等这一件完成再换` };
+        return this.startChange(a) ? { ok: true, msg: `${id} 开始更换${a.tool.label}` } : { ok: false, msg: `${id} 缺备件，无法更换${a.tool.label}` };
       case 'restock':
         a.stock = Math.min(a.cap, a.stock + 400);
         this.note(a, '原料入库 400 件', 'op');
@@ -794,6 +957,21 @@ export class PlantSim {
     a.live.at = Date.now();
     a.live.f[field] = value;
     const num = typeof value === 'number' ? value : Number(value);
+    // inventory counts from a stock / booking system: inv.<key> available, cap.<key> capacity
+    if (field.startsWith('inv.') || field.startsWith('cap.')) {
+      const it = this.inv(field.slice(4));
+      if (it && Number.isFinite(num)) {
+        if (field.startsWith('inv.')) it.avail = Math.max(0, Math.round(num));
+        else it.cap = Math.max(0, Math.round(num));
+      }
+      return true;
+    }
+    // vehicles report position and task; their state words are not machine states
+    if (a.type === 'agv' || a.type === 'truck') {
+      if (field === 'battery' && Number.isFinite(num)) a.battery = num;
+      if (field === 'task' && typeof value === 'string') a.task = value;
+      return true;
+    }
     switch (field) {
       case 'running':
         if (truthy(value)) a.enabled = true;
@@ -812,6 +990,12 @@ export class PlantSim {
         break;
       case 'health':
         if (Number.isFinite(num)) a.health = clamp(num, 0, 1);
+        break;
+      case 'toolUsed':
+        if (a.tool && Number.isFinite(num)) a.tool.used = Math.max(0, Math.round(num));
+        break;
+      case 'toolLife':
+        if (a.tool && num > 0) a.tool.life = Math.round(num);
         break;
       case 'speed':
         if (Number.isFinite(num)) a.speed = clamp(num > 5 ? num / 100 : num, 0.5, 1.5);
@@ -848,6 +1032,11 @@ export class PlantSim {
       return;
     }
     this.deviceRecovered(a, src);
+    if (v === 'changeover') {
+      // the machine is changing its tool; keep the twin in changeover while it says so
+      a.changing = Math.max(a.changing, 5);
+      return;
+    }
     if (v === 'maint') a.maint = Math.max(a.maint, 5);
     else a.maint = 0;
     if (v === 'stopped') a.enabled = false;
@@ -893,10 +1082,20 @@ export class PlantSim {
         id: a.id, state: a.fault ? 'fault' : a.state, fault: a.fault?.text ?? '', faultCode: code,
         temp: r(a.temp, 10), power: r(a.power, 10), vib: r(a.vib), speed: r(a.speed), health: r(a.health, 1000),
         mcount: this.mcount.get(a.id) ?? 0, lastMeasure: a.reading?.v ?? 0, measured: !!a.measure,
+        toolUsed: a.tool?.used ?? 0, toolLife: a.tool?.life ?? 0,
       };
     });
     const readings = this.readings ? this.readings.splice(0) : [];
-    return { machines, readings };
+    const vehicles = this.agvs.map((g) => ({
+      id: g.asset.id, x: r(g.x), z: r(g.z), heading: r(g.heading, 1000), battery: r(g.asset.battery, 10), task: g.asset.task, state: g.asset.state,
+    }));
+    const inventory = this.inventory.map((i) => ({ key: i.key, avail: i.avail, cap: i.cap }));
+    return { machines, readings, vehicles, inventory };
+  }
+
+  /** Vehicles in protocol order. */
+  vehicles(): Asset[] {
+    return this.agvs.map((g) => g.asset);
   }
 
   /** A compact picture of the plant for the server (MCP tools read it). */
@@ -914,10 +1113,15 @@ export class PlantSim {
         good: l.good, scrap: l.scrap,
       })),
       alarms: this.alarms.slice(0, 60).map((x) => ({ asset: x.asset, text: x.text, prio: x.prio, at: hhmm(x.at), active: x.active, acked: x.acked })),
+      inventory: this.inventory.map((i) => ({
+        key: i.key, label: i.label, unit: i.unit, kind: i.kind === 'lend' ? '借用（会归还）' : '消耗（需补货）',
+        capacity: i.cap, available: i.avail, inUse: i.kind === 'lend' ? i.cap - i.avail : undefined,
+      })),
       assets: [...this.assets.values()].map((a) => ({
         id: a.id, name: a.name, type: a.type, line: a.line?.name, state: a.fault ? 'fault' : a.state, fault: a.fault?.text,
         temp: r2(a.temp), power: r2(a.power), vib: r2(a.vib), health: r2(a.health), util: r2(a.util), speed: r2(a.speed),
         live: liveFields(a) ? a.live!.src : undefined,
+        tool: a.tool ? `${a.tool.label} ${a.tool.used}/${a.tool.life} 次（${Math.round((a.tool.used / a.tool.life) * 100)}%）${a.changing > 0 ? '，更换中' : ''}` : undefined,
       })),
     };
   }
@@ -934,10 +1138,11 @@ export class PlantSim {
         temp: p3(a.temp), vib: p3(a.vib), power: p3(a.power), health: p3(a.health), util: p3(a.util), avail: p3(a.avail),
         cycles: a.cycles, progress: p3(a.progress), busy: a.busy?.id ?? null, reading: a.reading ?? null, rejects: a.rejects,
         verdict: a.verdict ?? null, stock: a.stock, count: a.count, battery: p3(a.battery), vel: p3(a.vel), task: a.task, live: a.live ?? null,
+        toolUsed: a.tool?.used, changing: a.changing ? p3(a.changing) : undefined,
       })),
       lines: this.lines.map((l) => ({
         id: l.id, spawnT: p3(l.spawnT), pid: l.pid, good: l.good, scrap: l.scrap, tp: l.doneTimes.length,
-        products: l.products.map((x) => [x.id, p3(x.s), x.done, x.proc, p3(x.t), x.kind, p3(x.stall)] as ProductTuple),
+        products: l.products.map((x) => [x.id, p3(x.s), x.done, x.proc, p3(x.t), x.kind, p3(x.stall), x.held ?? null] as ProductTuple),
       })),
       agvs: this.agvs.map((g) => ({
         id: g.asset.id, idx: g.idx, x: p3(g.x), z: p3(g.z), heading: p3(g.heading), cargo: g.cargo, mode: g.mode,
@@ -948,6 +1153,7 @@ export class PlantSim {
       })),
       alarms: this.alarms.slice(0, 80),
       log: this.log.slice(0, 60),
+      inventory: this.inventory.map((i) => [i.key, i.avail, i.cap] as [string, number, number]),
       events: drain ? this.events.splice(0) : [],
     };
   }
@@ -1011,8 +1217,9 @@ export class PlantSim {
         enabled: x.enabled, speed: x.speed, fault: x.fault, maint: x.maint, state: x.state, temp: x.temp, vib: x.vib, power: x.power,
         health: x.health, util: x.util, avail: x.avail, cycles: x.cycles, progress: x.progress, reading: x.reading ?? undefined,
         rejects: x.rejects, verdict: x.verdict ?? undefined, stock: x.stock, count: x.count, battery: x.battery, vel: x.vel, task: x.task,
-        live: x.live ?? undefined, busy: null,
+        live: x.live ?? undefined, busy: null, changing: x.changing ?? 0,
       });
+      if (a.tool && x.toolUsed !== undefined) a.tool.used = x.toolUsed;
       if (x.busy) busy.push([a, x.busy]);
     }
     const byId = new Map<string, Product>();
@@ -1025,8 +1232,8 @@ export class PlantSim {
       l.scrap = x.scrap;
       // Only the count of the last hour's completions matters locally (throughput KPI).
       if (l.doneTimes.length !== x.tp) l.doneTimes = new Array(x.tp).fill(this.elapsed);
-      l.products = x.products.map(([id, ps, done, proc, t, kind, stall]) => {
-        const p: Product = { id, s: ps, done, proc, t, kind, stall };
+      l.products = x.products.map(([id, ps, done, proc, t, kind, stall, held]) => {
+        const p: Product = { id, s: ps, done, proc, t, kind, stall, held: held ?? undefined };
         byId.set(id, p);
         return p;
       });
@@ -1042,6 +1249,10 @@ export class PlantSim {
     }
     this.alarms = s.alarms;
     this.log = s.log;
+    for (const [k, avail, cap] of s.inventory ?? []) {
+      const it = this.inv(k);
+      if (it) Object.assign(it, { avail, cap });
+    }
     this.events.push(...s.events);
     this.synced = true;
   }

@@ -13,6 +13,7 @@ import { fgCapacity } from '@/three/logistics';
 import { AssetIcon } from './icons';
 import { CHIP, STATE_LABEL, hhmm } from './status';
 import { TrendChart, spcStats, type Metric } from './TrendChart';
+import { InventoryList } from './Panels';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 const isVehicle = (a: Asset) => a.type === 'agv' || a.type === 'truck';
@@ -70,6 +71,17 @@ function Tiles({ a }: { a: Asset }) {
           {a.cycle ? <>{(a.cycle / a.speed).toFixed(1)}<Unit>秒</Unit></> : <>{(0.55 * a.speed).toFixed(2)}<Unit>m/s</Unit></>}
         </Tile>
         <Tile label="累计循环">{a.cycles.toLocaleString()}<Unit>次</Unit></Tile>
+        {a.tool && (() => {
+          const t = a.tool;
+          const used = t.used / t.life;
+          return (
+            <Tile label={`${t.label}寿命`} wide bar={a.changing > 0 ? 0 : 1 - used} tone={used >= 0.9 ? 'bad' : used >= 0.75 ? 'warn' : 'ok'}>
+              {a.changing > 0
+                ? <>更换中<Unit>约 {Math.ceil(a.changing / 60)} 分钟</Unit></>
+                : <>{Math.max(0, Math.round((1 - used) * 100))}<Unit>% 剩余，{t.used.toLocaleString()} / {t.life.toLocaleString()} 次</Unit></>}
+            </Tile>
+          );
+        })()}
       </>
     );
   }
@@ -134,6 +146,7 @@ function Controls({ a }: { a: Asset }) {
         {a.type !== 'truck' && (
           <Button variant="outline" className="h-9 px-3.5 max-md:h-10" onClick={() => command(a.id, 'maint')}>{a.maint > 0 ? '结束维护' : '维护'}</Button>
         )}
+        {a.tool && <Button variant="outline" className="h-9 px-3.5 max-md:h-10" disabled={a.changing > 0} onClick={() => command(a.id, 'retool')}>换{a.tool.label}</Button>}
         <Button variant="outline" className="h-9 px-3.5 max-md:h-10" disabled={!a.fault} onClick={() => command(a.id, 'reset')}>复位</Button>
         <Button variant="destructive" className="h-9 px-3.5 max-md:h-10" disabled={!!a.fault} onClick={() => command(a.id, 'fault')}>模拟故障</Button>
       </div>
@@ -226,6 +239,12 @@ export function Inspector() {
           </div>
         )}
         <div className="grid grid-cols-3 gap-2"><Tiles a={a} /></div>
+        {a.type === 'warehouse' && sim.inventory.length > 0 && (
+          <div className="mt-3">
+            <h3 className="mb-1 text-[13px] font-extrabold">库存</h3>
+            <InventoryList sim={sim} />
+          </div>
+        )}
 
         <div className="mt-3">
           <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

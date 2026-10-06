@@ -21,8 +21,27 @@ const guide = `# 用配置搭一个新的数字孪生场景
 - industry.flow: "walk" —— 单元是人或车，沿步道走，不是传送带。
 - plant.site: "outdoor" —— 草地、木栅栏、没有车间墙。
 - industry.unit：单元量词（组、桌、位、辆）。qualityLabel：比如 "顾客满意度"。
-- industry.terms：看板用词 {oee: "营地运营效率", throughput: "每小时接待", power: "实时用电", line: "个营区", vehicle: "送餐车"}。
+- industry.terms：看板用词 {oee: "营地运营效率", throughput: "每小时接待", power: "实时用电", line: "个营区", vehicle: "送餐车",
+  order: {title: "接待跟踪", tab: "预订", prefix: "BK", steps: [下达, 齐套, 进行中, 完成, 检验, 交付 六个阶段名]}}。
 - 用 measure 表达评分（例如结账时的满意度 1–5 分，lo: 4 以下算投诉被剔除）。
+
+## 库存与容量（帐篷 20 顶在用 18 这种）
+- industry.inventory.<key> = { label, unit, kind: "lend"（借出会还：帐篷、桌椅、餐具）| "consume"（用掉要补：木炭、食材、木柴）, capacity, low?（低于这个比例报警，默认 0.1）, refill?（每次进货补多少） }
+- 工位（或路线里的步骤）上写 take: {tent: 1}（单元在这里拿走），give: ["tent"]（在这里还回来）；不够时单元在工位等，并报「帐篷不足」。离开时没还的自动归还。
+- plant.inventory: {tent: 20, lantern: 25}：这个场地只有这些库存项、用这些容量（不写就是行业包里的全部）。
+- 看板「库存」页显示 在用/可用/总数；MCP plant_status 也返回。
+
+## 工装寿命（锻模、切边模、刀具、模具……）
+- 设备上写 tooling: { label: "锻模", life: 5000（次）, change: 900（换模秒数）, spare?: "库存key"（换模消耗一副备件）, drift?: 3 }
+- 每加工一件计一次；寿命后 40% 测量值往公差边漂（drift 个 sigma），90% 报「准备更换」，到寿命自动停机换模（状态「换模」），没有备件就等并报「缺备用锻模」。
+- 指令 retool 可提前换模；数据源可发 toolUsed / toolLife 覆盖计数。
+
+## 接真实数据（任何场景）
+数据源按约定 topic sf/{公司}/{厂}/{设备id}/{字段} 发：
+- 工位：state、fault、temp、power、vib、speed、health、measure（每单元一次）、toolUsed、toolLife
+- 库存：发到仓库（id 一般是 WH）字段 inv.<key>（可用数）、cap.<key>（总数）——预订系统、库存系统
+- 车辆定位：车辆 id（AGV-01A…）字段 x、z（米，场地坐标）、heading、battery、task——GPS/UWB/车队系统
+Modbus / OPC UA 用 "convention": "sf" 自动生成点位（工位、车辆、库存都在内）。
 
 ## 产品（单元）
 products.<key> = { name, stages: { <阶段>: { parts: [...] } } }，第一个阶段是入场时的样子；工位 makes 指向后面的阶段。

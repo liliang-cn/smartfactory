@@ -32,7 +32,11 @@ export interface StationLayout {
   cycle: number;
   makes?: string;
   measure?: MeasureCfg;
+  take?: Record<string, number>;
+  give?: string[];
 }
+
+export interface InventoryLayout { key: string; label: string; unit: string; kind: 'lend' | 'consume'; cap: number; low: number; refill: number }
 
 export interface Waypoint { x: number; z: number; act?: 'load' | 'drop' | 'pick' | 'deliver' | 'dock'; line?: string }
 export interface Zone { id: string; name: string; x0: number; x1: number; z0: number; z1: number; cap: number }
@@ -75,6 +79,7 @@ export interface PlantLayout {
   site: 'hall' | 'outdoor';
   flow: 'belt' | 'walk';
   terms: IndustryCfg['terms'];
+  inventory: InventoryLayout[];
   lines: LineLayout[];
   box: { x0: number; x1: number; z0: number; z1: number };
   warehouse: Zone;
@@ -220,6 +225,9 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       const x = cursor + len / 2;
       cursor += len + 1.4;
       const makes = st.makes ?? machine.makes ?? (arch === 'packer' && product.stages.packed ? 'packed' : undefined);
+      for (const k of [...Object.keys(('take' in st ? st.take : undefined) ?? machine.take ?? {}), ...(('give' in st ? st.give : undefined) ?? machine.give ?? []), ...(machine.tooling?.spare ? [machine.tooling.spare] : [])]) {
+        if (!industry.inventory[k]) throw new Error(`${name}：${st.name ?? machine.label} 用到的库存 ${k} 没有在行业包 inventory 里定义`);
+      }
       if (makes && !product.stages[makes]) throw new Error(`${name}：产品 ${product.name} 没有工序状态 ${makes}`);
       return {
         id: `${machine.code}-${n}${pad2(seq[machine.code])}`,
@@ -230,6 +238,8 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
         len,
         size,
         cycle: st.cycle ?? machine.cycle,
+        take: ('take' in st ? st.take : undefined) ?? machine.take,
+        give: ('give' in st ? st.give : undefined) ?? machine.give,
         makes,
         measure: st.measure ?? machine.measure,
       };
@@ -250,7 +260,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       outfeed: { id: `OF-${n}`, name: `${name}成品托盘`, cap: max.l > 1.5 ? 6 : 18, x: x1 + 1.6, z },
       lane: z + beltW / 2 + 3.2,
       order: {
-        no: cfg.order?.no ?? `MO-261005-${plantIndex + 1}${pad2(n)}`,
+        no: cfg.order?.no ?? `${industry.terms.order?.prefix ?? 'MO'}-261005-${plantIndex + 1}${pad2(n)}`,
         part: cfg.order?.part ?? product.name,
         qty: cfg.order?.qty ?? qty,
         issued: `05:${pad2(30 + (n % 10))}`,
@@ -323,6 +333,11 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     site: plant.site,
     flow: industry.flow,
     terms: industry.terms,
+    // a plant that lists its inventory keeps only those items (a BBQ site has no tents)
+    inventory: Object.entries(industry.inventory).filter(([key]) => !plant.inventory || key in plant.inventory).map(([key, it]) => {
+      const cap = plant.inventory?.[key] ?? it.capacity;
+      return { key, label: it.label, unit: it.unit, kind: it.kind, cap, low: it.low, refill: it.refill ?? Math.ceil(cap / 2) };
+    }),
     lines,
     box,
     warehouse,

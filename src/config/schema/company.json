@@ -153,6 +153,23 @@
                               "target",
                               "sigma"
                             ]
+                          },
+                          "take": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "give": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           }
                         },
                         "required": [
@@ -202,6 +219,17 @@
           "warehouse": {
             "default": "原料立体库",
             "type": "string"
+          },
+          "inventory": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
           },
           "finishedGoods": {
             "default": "成品库",

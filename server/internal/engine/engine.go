@@ -89,7 +89,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{})}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -458,12 +458,41 @@ type MachineState struct {
 	MCount      int     `json:"mcount"`
 	LastMeasure float64 `json:"lastMeasure"`
 	Measured    bool    `json:"measured"`
+	ToolUsed    int     `json:"toolUsed"`
+	ToolLife    int     `json:"toolLife"`
+}
+
+// VehicleState is where a vehicle is and what it is doing.
+type VehicleState struct {
+	ID      string  `json:"id"`
+	X       float64 `json:"x"`
+	Z       float64 `json:"z"`
+	Heading float64 `json:"heading"`
+	Battery float64 `json:"battery"`
+	Task    string  `json:"task"`
+	State   string  `json:"state"`
+}
+
+// InventoryState is one inventory item's count.
+type InventoryState struct {
+	Key   string `json:"key"`
+	Avail int    `json:"avail"`
+	Cap   int    `json:"cap"`
 }
 
 // Telemetry is a plant's equipment state plus units measured since the last call.
 type Telemetry struct {
-	Machines []MachineState `json:"machines"`
-	Readings [][2]any       `json:"readings"`
+	Machines  []MachineState   `json:"machines"`
+	Readings  [][2]any         `json:"readings"`
+	Vehicles  []VehicleState   `json:"vehicles"`
+	Inventory []InventoryState `json:"inventory"`
+}
+
+// Fleet lists a plant's vehicles and inventory items in protocol order.
+func (e *Engine) Fleet(company, plant string) sfconv.Fleet {
+	var f sfconv.Fleet
+	json.Unmarshal([]byte(e.str("fleet", company, plant)), &f)
+	return f
 }
 
 func (e *Engine) Telemetry(company, plant string) (Telemetry, error) {

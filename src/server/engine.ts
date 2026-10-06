@@ -226,7 +226,18 @@ function restore(c: string, json: string): string {
 function machines(c: string, plant: string): string {
   const p = get(c)?.byId[plant];
   if (!p) return 'null';
-  return JSON.stringify(p.machines().map((a) => ({ id: a.id, name: a.name, faults: a.spec?.faults ?? [], measured: !!a.measure })));
+  return JSON.stringify(p.machines().map((a) => ({ id: a.id, name: a.name, faults: a.spec?.faults ?? [], measured: !!a.measure, tooling: !!a.tool })));
+}
+
+/** A plant's vehicles and inventory items, in protocol order. */
+function fleet(c: string, plant: string): string {
+  const p = get(c)?.byId[plant];
+  if (!p) return 'null';
+  return JSON.stringify({
+    vehicles: p.vehicles().map((a) => ({ id: a.id, name: a.name })),
+    inventory: p.inventory.map((i) => ({ key: i.key, label: i.label, unit: i.unit })),
+    warehouse: p.wh.id,
+  });
 }
 
 /** Equipment mode (device emulator): every plant queues its measured units for publishing. */
@@ -248,6 +259,6 @@ function list(): string {
 }
 
 (globalThis as Record<string, unknown>).SF = {
-  init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, playEquipment, telemetry,
+  init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, removeCompany, industryList, industry, schema,
 };

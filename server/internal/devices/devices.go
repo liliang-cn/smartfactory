@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"os"
 	"slices"
 	"strconv"
@@ -30,8 +31,10 @@ import (
 
 type Config struct {
 	// How often equipment publishes / refreshes its registers and nodes (default 2s).
-	Every  config.Duration `json:"every"`
-	Plants []Plant         `json:"plants"`
+	Every config.Duration `json:"every"`
+	// Twin server to fetch companies created at run time (MCP) from, e.g. http://192.168.123.65:44719
+	ConfigFrom string  `json:"configFrom"`
+	Plants     []Plant `json:"plants"`
 }
 
 type Plant struct {
@@ -75,12 +78,17 @@ func Run(ctx context.Context, cfg Config, eng *engine.Engine, log *slog.Logger) 
 	go eng.Run(ctx)
 	eng.PlayEquipment() // goes through the loop, so after it has started
 
+	if cfg.ConfigFrom != "" {
+		fetchRuntime(cfg, eng, log)
+	}
+
 	var eps []struct {
 		p  Plant
 		ep endpoint
 	}
 	for _, p := range cfg.Plants {
 		machines := eng.Machines(p.Company, p.Plant)
+		fleet := eng.Fleet(p.Company, p.Plant)
 		if len(machines) == 0 {
 			return fmt.Errorf("%s/%s: no such plant, or it has no machines", p.Company, p.Plant)
 		}
@@ -92,11 +100,11 @@ func Run(ctx context.Context, cfg Config, eng *engine.Engine, log *slog.Logger) 
 		var err error
 		switch p.Protocol {
 		case "mqtt":
-			ep, err = newMQTT(p, command, log)
+			ep, err = newMQTT(p, fleet.Warehouse, command, log)
 		case "modbus":
-			ep, err = newModbus(p, machines, command)
+			ep, err = newModbus(p, machines, fleet, command)
 		case "opcua":
-			ep, err = newOPCUA(ctx, p, machines, command, log)
+			ep, err = newOPCUA(ctx, p, machines, fleet, command, log)
 		default:
 			err = fmt.Errorf("unknown protocol %q", p.Protocol)
 		}
@@ -108,7 +116,8 @@ func Run(ctx context.Context, cfg Config, eng *engine.Engine, log *slog.Logger) 
 			p  Plant
 			ep endpoint
 		}{p, ep})
-		log.Info("equipment up", "plant", p.Company+"/"+p.Plant, "protocol", p.Protocol, "machines", len(machines), "at", where(p))
+		log.Info("equipment up", "plant", p.Company+"/"+p.Plant, "protocol", p.Protocol, "machines", len(machines),
+			"vehicles", len(fleet.Vehicles), "inventory", len(fleet.Inventory), "at", where(p))
 	}
 
 	tick := time.NewTicker(cfg.Every.Or(2 * time.Second))
@@ -128,6 +137,45 @@ func Run(ctx context.Context, cfg Config, eng *engine.Engine, log *slog.Logger) 
 			return nil
 		case <-tick.C:
 		}
+	}
+}
+
+// fetchRuntime loads companies the twin server has but this binary does not (created over MCP).
+func fetchRuntime(cfg Config, eng *engine.Engine, log *slog.Logger) {
+	have := map[string]bool{}
+	for _, c := range eng.CompanyIDs() {
+		have[c] = true
+	}
+	for _, p := range cfg.Plants {
+		if have[p.Company] {
+			continue
+		}
+		resp, err := http.Get(strings.TrimRight(cfg.ConfigFrom, "/") + "/api/config/company/" + p.Company)
+		if err != nil {
+			log.Error("fetch company", "company", p.Company, "err", err)
+			continue
+		}
+		var d struct {
+			Company    json.RawMessage            `json:"company"`
+			Industries map[string]json.RawMessage `json:"industries"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&d)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != http.StatusOK {
+			log.Error("fetch company", "company", p.Company, "status", resp.Status, "err", err)
+			continue
+		}
+		for id, raw := range d.Industries {
+			if r := eng.CreateIndustry(raw); !r.OK {
+				log.Error("industry from server", "id", id, "errors", r.Errors)
+			}
+		}
+		if r := eng.CreateCompany(d.Company); !r.OK {
+			log.Error("company from server", "company", p.Company, "errors", r.Errors)
+			continue
+		}
+		have[p.Company] = true
+		log.Info("company fetched from the twin server", "company", p.Company)
 	}
 }
 
@@ -177,11 +225,12 @@ func parseArg(v any) *float64 {
 // ---------- MQTT: one client per plant ----------
 
 type mqttEP struct {
-	p      Plant
-	client paho.Client
+	p         Plant
+	client    paho.Client
+	warehouse string
 }
 
-func newMQTT(p Plant, command func(string, string, *float64), log *slog.Logger) (*mqttEP, error) {
+func newMQTT(p Plant, warehouse string, command func(string, string, *float64), log *slog.Logger) (*mqttEP, error) {
 	if p.Prefix == "" {
 		p.Prefix = "sf"
 	}
@@ -204,7 +253,7 @@ func newMQTT(p Plant, command func(string, string, *float64), log *slog.Logger) 
 		SetConnectionLostHandler(func(_ paho.Client, err error) { log.Warn("mqtt lost", "plant", p.Plant, "err", err) })
 	c := paho.NewClient(opts)
 	c.Connect()
-	return &mqttEP{p: p, client: c}, nil
+	return &mqttEP{p: p, client: c, warehouse: warehouse}, nil
 }
 
 func (e *mqttEP) update(t engine.Telemetry) {
@@ -214,6 +263,9 @@ func (e *mqttEP) update(t engine.Telemetry) {
 	base := fmt.Sprintf("%s/%s/%s/", e.p.Prefix, e.p.Company, e.p.Plant)
 	for _, m := range t.Machines {
 		body := map[string]any{"state": m.State, "fault": m.Fault, "speed": m.Speed, "health": m.Health}
+		if m.ToolLife > 0 {
+			body["toolUsed"], body["toolLife"] = m.ToolUsed, m.ToolLife
+		}
 		for k, v := range map[string]float64{"temp": m.Temp, "power": m.Power, "vib": m.Vib} {
 			if !math.IsNaN(v) {
 				body[k] = v
@@ -227,6 +279,19 @@ func (e *mqttEP) update(t engine.Telemetry) {
 		v, _ := r[1].(float64)
 		e.client.Publish(base+id+"/measure", 0, false, strconv.FormatFloat(v, 'f', -1, 64))
 	}
+	for _, v := range t.Vehicles {
+		b, _ := json.Marshal(map[string]any{"x": v.X, "z": v.Z, "heading": v.Heading, "battery": v.Battery, "task": v.Task})
+		e.client.Publish(base+v.ID, 0, false, b)
+	}
+	if len(t.Inventory) > 0 && e.warehouse != "" {
+		inv := map[string]any{}
+		for _, it := range t.Inventory {
+			inv["cap."+it.Key] = it.Cap
+			inv["inv."+it.Key] = it.Avail
+		}
+		b, _ := json.Marshal(inv)
+		e.client.Publish(base+e.warehouse, 0, false, b)
+	}
 }
 
 func (e *mqttEP) close() { e.client.Disconnect(250) }
@@ -238,11 +303,13 @@ type modbusEP struct {
 	mu       sync.Mutex
 	regs     []uint16
 	machines []sfconv.Machine
+	fleet    sfconv.Fleet
 	command  func(string, string, *float64)
 }
 
-func newModbus(p Plant, machines []sfconv.Machine, command func(string, string, *float64)) (*modbusEP, error) {
-	e := &modbusEP{regs: make([]uint16, len(machines)*sfconv.Regs), machines: machines, command: command}
+func newModbus(p Plant, machines []sfconv.Machine, fleet sfconv.Fleet, command func(string, string, *float64)) (*modbusEP, error) {
+	n := int(sfconv.InventoryBase(len(machines), len(fleet.Vehicles))) + 2*len(fleet.Inventory)
+	e := &modbusEP{regs: make([]uint16, n), machines: machines, fleet: fleet, command: command}
 	srv, err := modbus.NewServer(&modbus.ServerConfiguration{URL: "tcp://" + p.Listen, MaxClients: 8, Timeout: 60 * time.Second}, e)
 	if err != nil {
 		return nil, err
@@ -279,6 +346,24 @@ func (e *modbusEP) update(t engine.Telemetry) {
 		r[sfconv.OffMeasure], r[sfconv.OffMeasure+1] = uint16(bits>>16), uint16(bits)
 		r[sfconv.OffMCount] = uint16(m.MCount)
 		r[sfconv.OffFault] = uint16(m.FaultCode)
+		r[sfconv.OffToolUsed] = uint16(min(m.ToolUsed, 65535))
+		r[sfconv.OffToolLife] = uint16(min(m.ToolLife, 65535))
+	}
+	vb := int(sfconv.VehicleBase(len(e.machines)))
+	for i, v := range t.Vehicles {
+		if i >= len(e.fleet.Vehicles) {
+			break
+		}
+		r := e.regs[vb+i*sfconv.VRegs:]
+		r[0], r[1], r[2] = scaled(v.X, 10), scaled(v.Z, 10), scaled(v.Heading, 1000)
+		r[3] = uint16(math.Round(v.Battery * 10))
+	}
+	ib := int(sfconv.InventoryBase(len(e.machines), len(e.fleet.Vehicles)))
+	for i, it := range t.Inventory {
+		if i >= len(e.fleet.Inventory) {
+			break
+		}
+		e.regs[ib+i*2], e.regs[ib+i*2+1] = uint16(max(0, it.Avail)), uint16(max(0, it.Cap))
 	}
 }
 
@@ -302,7 +387,7 @@ func (e *modbusEP) HandleHoldingRegisters(req *modbus.HoldingRegistersRequest) (
 			addr := int(req.Addr) + k
 			e.regs[addr] = v
 			i, off := addr/sfconv.Regs, addr%sfconv.Regs
-			if off == sfconv.OffCmd && v != 0 && int(v) < len(sfconv.Commands) && i < len(e.machines) {
+			if i < len(e.machines) && off == sfconv.OffCmd && v != 0 && int(v) < len(sfconv.Commands) {
 				arg := float64(int16(e.regs[i*sfconv.Regs+sfconv.OffArg])) / 100
 				asset, cmd := e.machines[i].ID, sfconv.Commands[v]
 				var a *float64
@@ -341,11 +426,12 @@ func (e *modbusEP) close() { e.srv.Stop() }
 // ---------- OPC UA: one server per plant ----------
 
 type opcuaEP struct {
-	srv *server.Server
-	ns  *sfconv.LockedNamespace
+	srv       *server.Server
+	ns        *sfconv.LockedNamespace
+	warehouse string
 }
 
-func newOPCUA(ctx context.Context, p Plant, machines []sfconv.Machine, command func(string, string, *float64), log *slog.Logger) (*opcuaEP, error) {
+func newOPCUA(ctx context.Context, p Plant, machines []sfconv.Machine, fleet sfconv.Fleet, command func(string, string, *float64), log *slog.Logger) (*opcuaEP, error) {
 	srv := server.New(
 		server.EndPoint(p.Host, p.Port),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
@@ -356,10 +442,20 @@ func newOPCUA(ctx context.Context, p Plant, machines []sfconv.Machine, command f
 		for _, f := range []string{"state", "fault"} {
 			ns.Data[sfconv.Key(m.ID, f)] = ""
 		}
-		for _, f := range []string{"temp", "power", "vib", "speed", "health", "faultCode", "lastMeasure", "mcount", "arg"} {
+		for _, f := range []string{"temp", "power", "vib", "speed", "health", "faultCode", "lastMeasure", "mcount", "toolUsed", "toolLife", "arg"} {
 			ns.Data[sfconv.Key(m.ID, f)] = 0.0
 		}
 		ns.Data[sfconv.Key(m.ID, "cmd")] = ""
+	}
+	for _, v := range fleet.Vehicles {
+		for _, f := range []string{"x", "z", "heading", "battery"} {
+			ns.Data[sfconv.Key(v.ID, f)] = 0.0
+		}
+		ns.Data[sfconv.Key(v.ID, "task")] = ""
+	}
+	for _, it := range fleet.Inventory {
+		ns.Data[sfconv.Key(fleet.Warehouse, "inv."+it.Key)] = 0.0
+		ns.Data[sfconv.Key(fleet.Warehouse, "cap."+it.Key)] = 0.0
 	}
 	if err := srv.Start(ctx); err != nil {
 		return nil, err
@@ -391,7 +487,7 @@ func newOPCUA(ctx context.Context, p Plant, machines []sfconv.Machine, command f
 		}
 	}()
 	log.Debug("opc ua namespace", "plant", p.Plant, "ns", ns.ID())
-	return &opcuaEP{srv: srv, ns: ns}, nil
+	return &opcuaEP{srv: srv, ns: ns, warehouse: fleet.Warehouse}, nil
 }
 
 func (e *opcuaEP) update(t engine.Telemetry) {
@@ -412,6 +508,19 @@ func (e *opcuaEP) update(t engine.Telemetry) {
 		set(m.ID, "faultCode", float64(m.FaultCode))
 		set(m.ID, "lastMeasure", m.LastMeasure)
 		set(m.ID, "mcount", float64(m.MCount))
+		set(m.ID, "toolUsed", float64(m.ToolUsed))
+		set(m.ID, "toolLife", float64(m.ToolLife))
+	}
+	for _, v := range t.Vehicles {
+		set(v.ID, "x", v.X)
+		set(v.ID, "z", v.Z)
+		set(v.ID, "heading", v.Heading)
+		set(v.ID, "battery", v.Battery)
+		set(v.ID, "task", v.Task)
+	}
+	for _, it := range t.Inventory {
+		set(e.warehouse, "inv."+it.Key, float64(it.Avail))
+		set(e.warehouse, "cap."+it.Key, float64(it.Cap))
 	}
 }
 

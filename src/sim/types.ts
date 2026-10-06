@@ -5,7 +5,7 @@ import type { LineLayout, Waypoint } from '@/core/layout';
 export type AssetType = 'station' | 'conveyor' | 'buffer' | 'outfeed' | 'warehouse' | 'fgzone' | 'agv' | 'truck';
 
 export type AssetState =
-  | 'running' | 'idle' | 'blocked' | 'stopped' | 'fault' | 'maint'
+  | 'running' | 'idle' | 'blocked' | 'stopped' | 'fault' | 'maint' | 'changeover'
   | 'moving' | 'waiting' | 'handling' | 'away'
   | 'ok' | 'empty' | 'low' | 'full';
 
@@ -41,6 +41,20 @@ export interface Product {
   t: number;
   kind: ProductKind;
   stall: number;
+  /** inventory this unit has been lent (tents, tableware …), by key */
+  held?: Record<string, number>;
+}
+
+/** Live count of one inventory item of the plant. */
+export interface InventoryState {
+  key: string;
+  label: string;
+  unit: string;
+  kind: 'lend' | 'consume';
+  cap: number;
+  avail: number;
+  low: number;
+  refill: number;
 }
 
 export interface Cargo { kind: 'raw' | 'fg'; n: number }
@@ -104,6 +118,15 @@ export interface Asset {
   cycle: number;
   makes?: ProductKind;
   measure?: Measure;
+  /** inventory lent / used when a unit finishes here, and returned here */
+  take?: Record<string, number>;
+  give?: string[];
+  /** label of the inventory item this station is waiting for */
+  waitFor?: string;
+  /** wearing tool (die, cutter …): units made with the current one */
+  tool?: { label: string; life: number; used: number; change: number; spare?: string; drift: number };
+  /** seconds left of a tool change */
+  changing: number;
   reading?: { v: number; ok: boolean; at: number };
   rejects: number;
   verdict?: { ok: boolean; at: number };
@@ -175,7 +198,7 @@ export type SimEvent =
   | { type: 'reject'; line: string; asset: string; x: number; z: number; kind: ProductKind }
   | { type: 'fault'; asset: string };
 
-export type Command = 'start' | 'stop' | 'speed' | 'reset' | 'maint' | 'fault' | 'restock' | 'ship';
+export type Command = 'start' | 'stop' | 'speed' | 'reset' | 'maint' | 'fault' | 'restock' | 'ship' | 'retool';
 export interface CommandResult { ok: boolean; msg: string }
 
 export interface LineKpi { tp: number; perf: number; avail: number; quality: number; oee: number; good: number; scrap: number }

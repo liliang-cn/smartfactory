@@ -14,6 +14,7 @@ export const CHIP: Record<AssetState, string> = {
   full: 'bg-orange-100 text-orange-700',
   fault: 'bg-danger-soft text-destructive',
   maint: 'bg-maint-soft text-maint',
+  changeover: 'bg-maint-soft text-maint',
   stopped: 'bg-muted text-muted-foreground',
   away: 'bg-muted text-muted-foreground',
   moving: 'bg-brand-soft text-primary',
@@ -31,13 +32,14 @@ export const DOT: Record<AssetState, string> = {
   full: 'bg-warning',
   fault: 'bg-destructive',
   maint: 'bg-maint',
+  changeover: 'bg-maint',
   stopped: 'bg-slate-400',
   away: 'bg-slate-400',
   moving: 'bg-primary',
   handling: 'bg-primary',
 };
 
-export const ALERT_STATES = new Set<AssetState>(['fault', 'blocked', 'empty', 'full', 'maint']);
+export const ALERT_STATES = new Set<AssetState>(['fault', 'blocked', 'empty', 'full', 'maint', 'changeover']);
 
 export const pct = (v: number, d = 0) => `${(v * 100).toFixed(d)}%`;
 

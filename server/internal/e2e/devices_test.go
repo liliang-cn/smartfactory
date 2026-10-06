@@ -64,7 +64,7 @@ func TestDeviceFleet(t *testing.T) {
 		{Name: "cell-plc", Type: "modbus", URL: fmt.Sprintf("tcp://127.0.0.1:%d", modbusPort), Convention: "sf", Company: "ruineng", Plant: "cell", Public: true, Poll: config.Duration{Duration: 300 * time.Millisecond}},
 		{Name: "paint-scada", Type: "opcua", URL: fmt.Sprintf("opc.tcp://127.0.0.1:%d", opcPort), Convention: "sf", Company: "yuanlan", Plant: "paint", Public: true, Poll: config.Duration{Duration: 300 * time.Millisecond}},
 	} {
-		src = sfconv.Expand(src, twin.Machines(src.Company, src.Plant))
+		src = sfconv.Expand(src, twin.Machines(src.Company, src.Plant), twin.Fleet(src.Company, src.Plant))
 		if src.Type == "modbus" {
 			go adapters.RunModbus(ctx, src, hub, log)
 		} else {
@@ -94,6 +94,29 @@ func TestDeviceFleet(t *testing.T) {
 			}
 			if time.Now().After(deadline) {
 				t.Fatalf("%s/%s: %d/%d machines fed, %d states; sources %+v", pl.c, pl.p, len(fed), want, states, hub.Sources())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
+	// Vehicle positions arrive over every protocol too.
+	for _, pl := range plants {
+		veh := twin.Fleet(pl.c, pl.p).Vehicles
+		if len(veh) == 0 {
+			t.Fatalf("%s/%s has no vehicles", pl.c, pl.p)
+		}
+		for {
+			n := 0
+			for _, tg := range hub.Last(pl.c, pl.p, veh[0].ID) {
+				if tg.Field == "x" || tg.Field == "z" {
+					n++
+				}
+			}
+			if n == 2 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s/%s: no position for %s", pl.c, pl.p, veh[0].ID)
 			}
 			time.Sleep(200 * time.Millisecond)
 		}

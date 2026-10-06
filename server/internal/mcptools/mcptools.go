@@ -26,14 +26,15 @@ type snapshot struct {
 }
 
 type plant struct {
-	ID     string           `json:"id"`
-	Name   string           `json:"name"`
-	Hall   string           `json:"hall"`
-	Unit   string           `json:"unit"`
-	Kpis   map[string]any   `json:"kpis"`
-	Lines  []map[string]any `json:"lines"`
-	Alarms []alarm          `json:"alarms"`
-	Assets []asset          `json:"assets"`
+	ID        string           `json:"id"`
+	Name      string           `json:"name"`
+	Hall      string           `json:"hall"`
+	Unit      string           `json:"unit"`
+	Kpis      map[string]any   `json:"kpis"`
+	Lines     []map[string]any `json:"lines"`
+	Alarms    []alarm          `json:"alarms"`
+	Assets    []asset          `json:"assets"`
+	Inventory []map[string]any `json:"inventory"`
 }
 
 type alarm struct {
@@ -59,6 +60,7 @@ type asset struct {
 	Util   float64 `json:"util,omitempty"`
 	Speed  float64 `json:"speed,omitempty"`
 	Live   string  `json:"live,omitempty"`
+	Tool   string  `json:"tool,omitempty"`
 }
 
 func load(eng *engine.Engine, company string) (*snapshot, error) {
@@ -115,6 +117,7 @@ type plantOut struct {
 	ActiveAlarm int              `json:"activeAlarms"`
 	Faulted     []asset          `json:"faulted"`
 	LiveAssets  []asset          `json:"liveAssets"`
+	Inventory   []map[string]any `json:"inventory"`
 }
 
 type alarmsIn struct {
@@ -162,14 +165,14 @@ type cmdIn struct {
 	Company string   `json:"company" jsonschema:"company id"`
 	Plant   string   `json:"plant" jsonschema:"plant id"`
 	Asset   string   `json:"asset" jsonschema:"asset id"`
-	Command string   `json:"command" jsonschema:"one of start, stop, reset, maint, speed, fault, restock, ship"`
+	Command string   `json:"command" jsonschema:"one of start, stop, reset, maint, speed, fault, restock, ship, retool (change a worn die / cutter)"`
 	Arg     *float64 `json:"arg,omitempty" jsonschema:"for speed: 0.5 to 1.5 (fraction of nominal)"`
 }
 type cmdOut struct {
 	Sent string `json:"sent"`
 }
 
-var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship"}
+var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship", "retool"}
 
 // New builds the MCP server.
 func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
@@ -197,7 +200,7 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 			return nil, out, nil
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "plant_status", Description: "KPIs (OEE, throughput, quality), per-line figures, active alarm count, faulted machines and machines fed by live protocol data for one plant."},
+	mcp.AddTool(s, &mcp.Tool{Name: "plant_status", Description: "KPIs (OEE, throughput, quality), per-line figures, inventory (in use / available / capacity), active alarm count, faulted machines and machines fed by live protocol data for one plant."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in plantIn) (*mcp.CallToolResult, plantOut, error) {
 			snap, err := load(eng, in.Company)
 			if err != nil {
@@ -207,7 +210,7 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 			if err != nil {
 				return nil, plantOut{}, err
 			}
-			out := plantOut{Plant: p.Name + " " + p.Hall, Kpis: p.Kpis, Lines: p.Lines, Faulted: []asset{}, LiveAssets: []asset{}}
+			out := plantOut{Plant: p.Name + " " + p.Hall, Kpis: p.Kpis, Lines: p.Lines, Faulted: []asset{}, LiveAssets: []asset{}, Inventory: p.Inventory}
 			for _, a := range p.Alarms {
 				if a.Active {
 					out.ActiveAlarm++

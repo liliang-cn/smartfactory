@@ -114,7 +114,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 				log.Error("source skipped: no such plant", "source", src.Name, "plant", src.Company+"/"+src.Plant)
 				continue
 			}
-			src = sfconv.Expand(src, ms)
+			src = sfconv.Expand(src, ms, eng.Fleet(src.Company, src.Plant))
 		}
 		switch src.Type {
 		case "mqtt":

@@ -1165,7 +1165,13 @@
       "faults": [
         "辊锻模具磨损",
         "主电机过载"
-      ]
+      ],
+      "tooling": {
+        "label": "辊锻模",
+        "life": 8000,
+        "change": 600,
+        "spare": "rollDie"
+      }
     },
     "die-press": {
       "label": "热模锻压力机",
@@ -1206,6 +1212,12 @@
         "drift": 1,
         "digits": 1,
         "speedBias": 4
+      },
+      "tooling": {
+        "label": "锻模",
+        "life": 5000,
+        "change": 900,
+        "spare": "forgeDie"
       }
     },
     "trim-press": {
@@ -1235,7 +1247,13 @@
       "faults": [
         "切边模崩刃",
         "废料卡滞"
-      ]
+      ],
+      "tooling": {
+        "label": "切边模",
+        "life": 12000,
+        "change": 480,
+        "spare": "trimDie"
+      }
     },
     "pierce-press": {
       "label": "冲孔压力机",
@@ -1264,7 +1282,13 @@
       "faults": [
         "冲头断裂",
         "定位偏差"
-      ]
+      ],
+      "tooling": {
+        "label": "冲孔冲头",
+        "life": 9000,
+        "change": 300,
+        "spare": "punch"
+      }
     },
     "ring-roller": {
       "label": "数控辗环机",
@@ -1304,6 +1328,12 @@
         "sigma": 0.8,
         "drift": 1,
         "digits": 1
+      },
+      "tooling": {
+        "label": "轧辊",
+        "life": 20000,
+        "change": 1200,
+        "spare": "roll"
       }
     },
     "open-press": {
@@ -1591,6 +1621,12 @@
         "sigma": 0.01,
         "drift": 1,
         "digits": 3
+      },
+      "tooling": {
+        "label": "车刀片",
+        "life": 800,
+        "change": 90,
+        "spare": "insert"
       }
     },
     "vision": {
@@ -1731,5 +1767,55 @@
       "ut",
       "cnc-turn"
     ]
+  },
+  "inventory": {
+    "forgeDie": {
+      "label": "备用锻模",
+      "unit": "副",
+      "kind": "consume",
+      "capacity": 12,
+      "refill": 6,
+      "low": 0.2
+    },
+    "rollDie": {
+      "label": "备用辊锻模",
+      "unit": "副",
+      "kind": "consume",
+      "capacity": 8,
+      "refill": 4,
+      "low": 0.2
+    },
+    "trimDie": {
+      "label": "备用切边模",
+      "unit": "副",
+      "kind": "consume",
+      "capacity": 10,
+      "refill": 5,
+      "low": 0.2
+    },
+    "punch": {
+      "label": "备用冲头",
+      "unit": "个",
+      "kind": "consume",
+      "capacity": 30,
+      "refill": 15,
+      "low": 0.2
+    },
+    "roll": {
+      "label": "备用轧辊",
+      "unit": "对",
+      "kind": "consume",
+      "capacity": 6,
+      "refill": 3,
+      "low": 0.2
+    },
+    "insert": {
+      "label": "车刀片",
+      "unit": "片",
+      "kind": "consume",
+      "capacity": 400,
+      "refill": 200,
+      "low": 0.15
+    }
   }
 }
