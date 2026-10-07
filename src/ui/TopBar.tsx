@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BarChart3Icon, BellIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
+import { BarChart3Icon, BellIcon, BoxIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -229,15 +229,26 @@ function BusinessEntry() {
   }, [company]);
   if (!has) return null;
   return (
-    <Button
-      variant="outline"
-      aria-pressed={open}
-      onClick={() => useBiz.getState().setOpen(!open)}
-      className={cn('h-9 gap-1.5 rounded-xl px-3 font-bold max-md:size-[38px] max-md:p-0', open && 'border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground')}
+    <ToggleGroup
+      type="single"
+      value={open ? 'biz' : 'twin'}
+      onValueChange={(v) => v && useBiz.getState().setOpen(v === 'biz')}
+      className="rounded-xl bg-muted p-[3px]"
+      spacing={0}
+      aria-label="视图"
     >
-      <BarChart3Icon className="size-4" />
-      <span className="max-md:hidden">经营</span>
-    </Button>
+      {([['twin', <BoxIcon key="t" className="size-4" />, '孪生'], ['biz', <BarChart3Icon key="b" className="size-4" />, '经营']] as const).map(([v, icon, label]) => (
+        <ToggleGroupItem
+          key={v}
+          value={v}
+          aria-label={label}
+          className="h-[30px] gap-1.5 rounded-lg px-3 text-[12.5px] font-bold text-muted-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm max-md:h-7 max-md:px-2"
+        >
+          {icon}
+          <span className="max-md:hidden">{label}</span>
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }
 

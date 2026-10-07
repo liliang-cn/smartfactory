@@ -1,6 +1,5 @@
 // 经营: the company's business view over the twin — figures, the advisor agent, the consulting record.
-import { BarChart3Icon, ClipboardCheckIcon, SparklesIcon, XIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { BarChart3Icon, ClipboardCheckIcon, SparklesIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { runtime } from '@/state/store';
 import { Board } from './Board';
@@ -44,10 +43,6 @@ export default function Business() {
                 <Filters className="max-md:hidden" />
               </div>
             )}
-            <Button variant="outline" size="icon" className={cn('size-10 shrink-0 rounded-xl bg-card shadow-float max-md:size-[42px]', tab !== 'data' && 'ml-auto')} aria-label="返回现场" title="返回现场"
-              onClick={() => useBiz.getState().setOpen(false)}>
-              <XIcon className="size-[18px]" />
-            </Button>
           </div>
         </div>
         <div className={cn('mx-auto max-w-[1480px] px-5 pb-6 max-md:px-2.5 max-md:pb-4', tab === 'ask' && 'pb-0 max-md:pb-0')}>
