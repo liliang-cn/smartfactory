@@ -284,16 +284,18 @@ function historyDims(c: string): string {
   const co = get(c);
   if (!co) return 'null';
   const parts = new Map<string, object>();
+  const customers = new Map<string, object>();
   const plants = co.plants.map((p) => {
     const L = p.layout;
     for (const [li, l] of L.lines.entries()) {
       const pr = l.product;
+      for (const cu of pr.customers ?? []) customers.set(cu.name, { name: cu.name, transit: cu.transit ?? 24 });
       parts.set(pr.key, { id: pr.key, name: pr.name, family: pr.name, partNo: pr.partNo ?? '', material: pr.material ?? '', weight: pr.weight ?? null, input: pr.input ?? null, customer: pr.customer ?? '' });
       // each part number the family runs, as work orders and lots refer to it
       for (const v of p.variants(p.lines[li])) {
         parts.set(`${pr.key}:${v.partNo}`, {
           id: `${pr.key}:${v.partNo}`, name: v.name, family: pr.name, partNo: v.partNo, material: pr.material ?? '',
-          weight: v.weight ?? pr.weight ?? null, input: v.input ?? pr.input ?? null, customer: pr.customer ?? '',
+          weight: v.weight ?? pr.weight ?? null, input: v.input ?? pr.input ?? null, customer: pr.customer ?? '', price: v.price ?? pr.price ?? null,
         });
       }
     }
@@ -310,7 +312,7 @@ function historyDims(c: string): string {
       inventory: p.inventory.map((i) => ({ key: i.key, label: i.label, unit: i.unit, cap: i.cap })),
     };
   });
-  return JSON.stringify({ company: { id: c, name: co.bundle.company.name }, plants, parts: [...parts.values()] });
+  return JSON.stringify({ company: { id: c, name: co.bundle.company.name }, plants, parts: [...parts.values()], customers: [...customers.values()] });
 }
 
 /** Sets a company's plants' wall clock: `ms` is where they are now (a backfill starts in the past). */

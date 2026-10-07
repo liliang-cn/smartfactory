@@ -199,6 +199,84 @@ ALTER TABLE parts ADD COLUMN IF NOT EXISTS family text NOT NULL DEFAULT '';
 -- units the line's bottleneck machine finished in the hour (what performance is counted on)
 ALTER TABLE line_hours ADD COLUMN IF NOT EXISTS neck_cycles integer NOT NULL DEFAULT 0;
 
+-- ---- the business around the plant: customers, shipments, complaints, purchasing, costs ----
+
+CREATE TABLE IF NOT EXISTS customers (
+  name      text PRIMARY KEY,
+  transit_h double precision NOT NULL DEFAULT 24
+);
+
+ALTER TABLE parts ADD COLUMN IF NOT EXISTS price double precision;
+ALTER TABLE machine_hours ADD COLUMN IF NOT EXISTS power_cost double precision NOT NULL DEFAULT 0;
+ALTER TABLE machine_hours ADD COLUMN IF NOT EXISTS fuel_cost double precision NOT NULL DEFAULT 0;
+ALTER TABLE tool_changes ADD COLUMN IF NOT EXISTS cost double precision NOT NULL DEFAULT 0;
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS price double precision NOT NULL DEFAULT 0;
+ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS promise_at timestamp;
+
+-- one steel heat bought: ordered, promised, received, inspected on arrival
+CREATE TABLE IF NOT EXISTS purchases (
+  po_no       text PRIMARY KEY,
+  heat_no     text NOT NULL,
+  supplier    text NOT NULL,
+  material    text NOT NULL,
+  line_id     text NOT NULL REFERENCES lines,
+  part_id     text NOT NULL REFERENCES parts,
+  tonnes      double precision NOT NULL,
+  price       double precision NOT NULL,
+  amount      double precision NOT NULL,
+  ordered_at  timestamp NOT NULL,
+  promised_at timestamp NOT NULL,
+  received_at timestamp NOT NULL,
+  -- the hour it arrived
+  hour        timestamp NOT NULL REFERENCES calendar,
+  late        integer NOT NULL,
+  result      text NOT NULL,
+  reason      text NOT NULL
+);
+
+-- one work order's goods on the road to the customer
+CREATE TABLE IF NOT EXISTS shipments (
+  shipment_no  text PRIMARY KEY,
+  order_no     text NOT NULL,
+  line_id      text NOT NULL REFERENCES lines,
+  customer     text NOT NULL,
+  part_id      text NOT NULL REFERENCES parts,
+  part_name    text NOT NULL,
+  units        integer NOT NULL,
+  tonnes       double precision NOT NULL,
+  trucks       integer NOT NULL,
+  carrier      text NOT NULL,
+  departed_at  timestamp NOT NULL,
+  eta_at       timestamp NOT NULL,
+  promise_at   timestamp NOT NULL,
+  delivered_at timestamp,
+  -- the hour it left
+  hour         timestamp NOT NULL REFERENCES calendar,
+  revenue      double precision NOT NULL,
+  transit_h    double precision,
+  delivered    integer NOT NULL,
+  on_time      integer NOT NULL,
+  status       text NOT NULL
+);
+
+-- a customer finding flawed parts that got past final inspection
+CREATE TABLE IF NOT EXISTS complaints (
+  complaint_no text PRIMARY KEY,
+  customer     text NOT NULL,
+  order_no     text NOT NULL,
+  shipment_no  text NOT NULL,
+  line_id      text NOT NULL REFERENCES lines,
+  part_id      text NOT NULL REFERENCES parts,
+  part_name    text NOT NULL,
+  defect_type  text NOT NULL,
+  qty          integer NOT NULL,
+  opened_at    timestamp NOT NULL,
+  closed_at    timestamp,
+  -- the hour it was opened
+  hour         timestamp NOT NULL REFERENCES calendar,
+  status       text NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS machine_hours_hour ON machine_hours (hour);
 CREATE INDEX IF NOT EXISTS line_hours_hour ON line_hours (hour);
 CREATE INDEX IF NOT EXISTS downtime_hour ON downtime (hour);

@@ -26,6 +26,8 @@ interface MachineHour {
   machine: string; hour: string;
   run: number; idle: number; blocked: number; fault: number; maint: number; changeover: number; stopped: number;
   cycles: number; scrap: number; rework: number; kwh: number; fuel: number;
+  /** 元: electricity at the hour's tariff, and fuel */
+  powerCost: number; fuelCost: number;
 }
 interface LineHour {
   line: string; hour: string; planned: number; run: number;
@@ -39,13 +41,15 @@ interface QualityHour {
 }
 interface StockHour { item: string; label: string; hour: string; min: number; end: number; cap: number }
 interface Downtime { machine: string; line: string; start: string; end: string; category: string; reason: string }
-interface ToolChange { machine: string; line: string; tool: string; start: string; end: string; hits: number; life: number; limit: number; trigger: string }
+interface ToolChange { machine: string; line: string; tool: string; start: string; end: string; hits: number; life: number; limit: number; trigger: string; cost: number }
 interface Defect { machine: string; line: string; at: string; type: string; feature: string; value: number | null; disposition: string; order: string; heat: string; supplier: string }
 interface LotRow { heat: string; supplier: string; line: string; part: string; partName: string; first: string; last: string; produced: number; good: number; rework: number; scrap: number }
 export interface WorkOrder {
-  no: string; line: string; part: string; partName: string; customer: string; heat: string; supplier: string; qty: number;
+  no: string; line: string; part: string; partName: string; customer: string; heat: string; supplier: string; qty: number; price: number; promise: string;
   issued: string; due: string; completed: string | null; good: number; scrap: number;
 }
+
+type Row = Record<string, unknown>;
 
 export interface HistoryBatch {
   machineHours: MachineHour[];
@@ -57,6 +61,9 @@ export interface HistoryBatch {
   defects: Defect[];
   orders: WorkOrder[];
   lots: LotRow[];
+  purchases: Row[];
+  shipments: Row[];
+  complaints: Row[];
 }
 
 interface Open { state: AssetState; since: number; short: boolean; reason: string; hits: number; life: number; limit: number; trigger: string }
@@ -74,6 +81,8 @@ export class History {
   /** lots touched since the last drain */
   private lots = new Map<string, LotRow>();
   private out: HistoryBatch = History.empty();
+  /** 元/kWh in the current hour */
+  private price = 0;
   /** record only these lines (a what-if run of part of the plant) */
   only?: Set<string>;
 
@@ -84,10 +93,11 @@ export class History {
     this.t0 = t0;
     this.hour = hourOf(this.now());
     sim.epoch = t0;
+    this.price = this.tariff(this.hour);
   }
 
   static empty(): HistoryBatch {
-    return { machineHours: [], lineHours: [], quality: [], stock: [], downtime: [], toolChanges: [], defects: [], orders: [], lots: [] };
+    return { machineHours: [], lineHours: [], quality: [], stock: [], downtime: [], toolChanges: [], defects: [], orders: [], lots: [], purchases: [], shipments: [], complaints: [] };
   }
 
   now() { return this.t0 + this.sim.elapsed * 1000; }
@@ -126,10 +136,12 @@ export class History {
     const st = a.state === 'running' ? 'run' : a.state;
     if (STATES.has(st)) h[st as StateKey] += dt;
     h.kwh += (a.power * dt) / 3600;
+    h.powerCost += ((a.power * dt) / 3600) * this.price;
     const fuel = a.machine?.fuel;
     if (fuel) {
       const on = a.state === 'running' ? fuel.run : a.enabled && !a.fault && a.maint <= 0 ? fuel.idle : 0;
       h.fuel += (on * dt) / 3600;
+      h.fuelCost += ((on * dt) / 3600) * (this.sim.layout.tariff?.gas ?? 0);
     }
     // downtime and changeovers from state transitions
     const prev = this.open.get(a.id);
@@ -153,7 +165,8 @@ export class History {
     const ev = { machine: this.id(a), line: this.id(line), start: localTime(o.since), end: localTime(now) };
     this.out.downtime.push({ ...ev, category: o.short ? '短停机' : DOWN[o.state]!, reason: o.reason });
     if (o.state === 'changeover' && a.tool) {
-      this.out.toolChanges.push({ ...ev, machine: this.id(a), tool: a.tool.label, hits: o.hits, life: o.life, limit: o.limit, trigger: o.trigger });
+      // a part-number change mounts tools already paid for; a worn one costs a new or reconditioned tool
+      this.out.toolChanges.push({ ...ev, machine: this.id(a), tool: a.tool.label, hits: o.hits, life: o.life, limit: o.limit, trigger: o.trigger, cost: o.trigger === '换型' ? 0 : a.tool.cost ?? 0 });
     }
   }
 
@@ -240,7 +253,10 @@ export class History {
   private machineHour(a: Asset) {
     let h = this.mh.get(a.id);
     if (!h) {
-      h = { machine: this.id(a), hour: localTime(this.hour), run: 0, idle: 0, blocked: 0, fault: 0, maint: 0, changeover: 0, stopped: 0, cycles: 0, scrap: 0, rework: 0, kwh: 0, fuel: 0 };
+      h = {
+        machine: this.id(a), hour: localTime(this.hour), run: 0, idle: 0, blocked: 0, fault: 0, maint: 0, changeover: 0, stopped: 0,
+        cycles: 0, scrap: 0, rework: 0, kwh: 0, fuel: 0, powerCost: 0, fuelCost: 0,
+      };
       this.mh.set(a.id, h);
     }
     return h;
@@ -271,7 +287,7 @@ export class History {
     for (const h of this.mh.values()) {
       this.out.machineHours.push({
         ...h, run: r1(h.run), idle: r1(h.idle), blocked: r1(h.blocked), fault: r1(h.fault), maint: r1(h.maint),
-        changeover: r1(h.changeover), stopped: r1(h.stopped), kwh: r3(h.kwh), fuel: r3(h.fuel),
+        changeover: r1(h.changeover), stopped: r1(h.stopped), kwh: r3(h.kwh), fuel: r3(h.fuel), powerCost: r3(h.powerCost), fuelCost: r3(h.fuelCost),
       });
     }
     for (const h of this.lh.values()) this.out.lineHours.push({ ...h, planned: r1(h.planned), run: r1(h.run), goodKg: r3(h.goodKg), inputKg: r3(h.inputKg) });
@@ -287,6 +303,7 @@ export class History {
     this.qh.clear();
     this.sh.clear();
     this.hour = next;
+    this.price = this.tariff(next);
   }
 
   // ---------- work orders ----------
@@ -295,9 +312,40 @@ export class History {
   private order(line: Line, j: Job): WorkOrder {
     const prod = line.layout.product;
     return {
-      no: j.no, line: this.id(line), part: partId(line, j), partName: j.name, customer: prod.customer ?? '', heat: j.heat, supplier: j.supplier,
+      no: j.no, line: this.id(line), part: partId(line, j), partName: j.name, customer: j.customer || (prod.customer ?? ''), heat: j.heat, supplier: j.supplier,
+      price: j.price, promise: localTime(j.promise),
       qty: j.qty, issued: localTime(j.issued), due: localTime(j.due), completed: j.done ? localTime(j.done) : null, good: j.good, scrap: j.scrap,
     };
+  }
+
+  /** electricity price (元/kWh) of the local hour starting at `ms` */
+  private tariff(ms: number) {
+    const t = this.sim.layout.tariff;
+    if (!t) return 0;
+    const h = Math.floor((ms + TZ_MS) / HOUR) % 24;
+    return t.power.find((p) => h >= p.from && h < p.to)?.price ?? 0;
+  }
+
+  /** a material lot bought and inspected on arrival */
+  purchase(r: Row) {
+    this.out.purchases.push({
+      ...r, line: `${this.plant}-${r.line}`, ordered: localTime(r.ordered as number), promised: localTime(r.promised as number), received: localTime(r.received as number),
+    });
+  }
+
+  /** finished goods leaving (delivered null) and arriving (delivered set) */
+  shipment(line: Line, r: Row) {
+    this.out.shipments.push({
+      ...r, line: this.id(line), part: `${line.layout.product.key}:${r.part}`, departed: localTime(r.departed as number), eta: localTime(r.eta as number),
+      promise: localTime(r.promise as number), delivered: r.delivered ? localTime(r.delivered as number) : null,
+    });
+  }
+
+  /** a customer complaint, opened and later closed */
+  complaint(line: Line, r: Row) {
+    this.out.complaints.push({
+      ...r, line: this.id(line), part: `${line.layout.product.key}:${r.part}`, opened: localTime(r.opened as number), closed: r.closed ? localTime(r.closed as number) : null,
+    });
   }
 
   /** a work order the plant finished */

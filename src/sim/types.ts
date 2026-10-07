@@ -179,7 +179,14 @@ export interface LiveValues {
 export interface Job {
   no: string; seq: number; variant: number; partNo: string; name: string; weight: number; input: number;
   qty: number; good: number; scrap: number; issued: number; due: number; heat: string; supplier: string; done?: number;
+  /** who it is for, hours on the road to them, price per unit, the delivery date promised to them */
+  customer: string; transit: number; price: number; promise: number;
+  /** flawed units that got past final inspection, by flaw */
+  escapes?: Record<string, number>;
 }
+
+/** Something that happens later on its own: goods leave, arrive, a customer complains. */
+export interface Later { at: number; kind: 'ship' | 'deliver' | 'complain' | 'close'; data: Record<string, unknown> }
 
 /** A material lot (one steel heat) feeding a line. */
 export interface Lot { no: string; supplier: string; factor: number; left: number }

@@ -6,7 +6,7 @@ import type { History } from './history';
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
+  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -69,6 +69,8 @@ export interface SavedPlant {
   repair: [string, number][];
   /** tools out for reconditioning: [inventory key, elapsed when back] */
   recond?: [string, number, number?][];
+  /** shipments on their way, complaints still to come */
+  later?: Later[];
 }
 
 /** A plant's replicated state, as sent from the server to browsers. */
@@ -95,6 +97,13 @@ export interface PlantState {
   /** [key, available, capacity] */
   inventory?: [string, number, number][];
   events: SimEvent[];
+}
+
+/** One of several by their `share` (weight). */
+function pickShare<T extends { share?: number }>(xs: T[]): T | undefined {
+  if (!xs.length) return undefined;
+  let r = Math.random() * xs.reduce((s, x) => s + (x.share ?? 1), 0);
+  return xs.find((x) => (r -= x.share ?? 1) <= 0) ?? xs[xs.length - 1];
 }
 
 export class PlantSim {
@@ -232,6 +241,9 @@ export class PlantSim {
    * plant built now; set back for a history backfill). A follower takes the server's clock instead.
    */
   epoch = Date.now();
+  /** shipments, deliveries and complaints waiting for their time, earliest first */
+  later: Later[] = [];
+  private seq = 0;
   /** night shift now, and the hour of the week the calendar was last checked */
   private night = false;
   private calHour = -1;
@@ -246,6 +258,7 @@ export class PlantSim {
     }
     const local = this.wall() + 8 * 3600_000;
     this.clock = (local % 86_400_000) / 1000;
+    while (this.later.length && this.later[0].at <= this.wall()) this.happen(this.later.shift()!);
     const hour = Math.floor(local / 3_600_000);
     if (hour !== this.calHour) {
       this.calHour = hour;
@@ -304,6 +317,9 @@ export class PlantSim {
     const ymd = d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
     const seq = (prev?.seq ?? 0) + 1;
     const parts = L.order.no.split('-');
+    const pr = L.product;
+    const allowed = (pr.customers ?? []).filter((c) => !vs[v].customers || vs[v].customers!.includes(c.name));
+    const cust = pickShare(allowed.length ? allowed : (pr.customers ?? [])) ?? { name: pr.customer ?? '', transit: 24 };
     line.job = {
       no: `${parts[0] || 'MO'}-${ymd}-${parts[parts.length - 1]}${String(seq % 100).padStart(2, '0')}`, seq, variant: v,
       partNo: vs[v].partNo, name: vs[v].name, weight: vs[v].weight ?? L.product.weight ?? 0, input: vs[v].input ?? L.product.input ?? 0, qty, good: 0, scrap: 0, issued: now,
@@ -311,7 +327,10 @@ export class PlantSim {
       // a bad day (a breakdown, no spare die, a bad heat, a changeover) makes the order late
       due: now + ((qty * neck) / (line.planEff ?? 0.75)) * 1000 + 3 * 3600_000,
       heat: line.lot?.no ?? '', supplier: line.lot?.supplier ?? '',
+      customer: cust.name, transit: cust.transit ?? 24, price: vs[v].price ?? pr.price ?? 0, promise: 0,
     };
+    // the delivery date the customer is promised: done by the due date, on the road, a day's margin
+    line.job.promise = line.job.due + (line.job.transit + 24) * 3600_000;
     if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
   }
 
@@ -332,16 +351,23 @@ export class PlantSim {
     this.note(line.stations[0], `${line.name}换型：${from.name} → ${to.name}（工单 ${to.no}）`, 'op');
   }
 
-  private jobOutput(line: Line) {
+  private jobOutput(line: Line, p?: Product) {
     const j = line.job;
     if (!j) return;
     j.good++;
+    // a flaw final inspection did not catch goes to the customer
+    if (p?.flaw) {
+      j.escapes ??= {};
+      j.escapes[p.flaw] = (j.escapes[p.flaw] ?? 0) + 1;
+    }
     if (j.good >= j.qty) {
       j.done = this.wall();
       const neck = Math.max(...line.stations.map((a) => a.cycle));
       const ran = Math.min(1, Math.max(0.2, (j.qty * neck) / Math.max(1, (j.done - j.issued) / 1000)));
       line.planEff = 0.7 * (line.planEff ?? 0.75) + 0.3 * ran;
       this.history?.jobDone(line, j);
+      // packed and staged, it leaves with the next scheduled pickup
+      this.schedule({ at: j.done + rand(2, 16) * 3600_000, kind: 'ship', data: { line: line.id, job: { ...j, escapes: { ...(j.escapes ?? {}) } } } });
       this.newJob(line);
     }
   }
@@ -349,15 +375,85 @@ export class PlantSim {
   /** A new material lot (one steel heat) for a line, drawn from the product's suppliers. */
   private newLot(line: Line) {
     const prod = line.layout.product;
-    const sups = prod.suppliers?.length ? prod.suppliers : [{ name: '', share: 1, bad: 0, factor: 1 }];
-    let r = Math.random() * sups.reduce((s, x) => s + x.share, 0);
-    const s = sups.find((x) => (r -= x.share) <= 0) ?? sups[0];
-    const factor = (Math.random() < (s.bad ?? 0) ? (s.factor ?? 1) : 1) * rand(0.8, 1.25);
-    const d = new Date(this.wall() + 8 * 3600_000);
-    const no = `${String(d.getUTCFullYear()).slice(2)}${'ABCDEFGHJK'[Math.floor(Math.random() * 10)]}${String(Math.floor(Math.random() * 1e5)).padStart(5, '0')}`;
+    const sups = prod.suppliers?.length ? prod.suppliers : [{ name: '', share: 1, bad: 0, factor: 1, lead: 20, late: 0.1, price: undefined }];
     // a heat is around 40 t of steel
     const left = Math.max(1, Math.round(40_000 / (prod.input ?? 40)));
-    line.lot = { no, supplier: s.name, factor, left };
+    const tonnes = Math.round((left * (prod.input ?? 40)) / 100) / 10;
+    // incoming inspection catches some bad heats; those go back to the mill and another is drawn
+    for (let tries = 0; ; tries++) {
+      const s = pickShare(sups)!;
+      const bad = Math.random() < (s.bad ?? 0);
+      const factor = (bad ? (s.factor ?? 1) : 1) * rand(0.8, 1.25);
+      const d = new Date(this.wall() + 8 * 3600_000);
+      const no = `${String(d.getUTCFullYear()).slice(2)}${'ABCDEFGHJK'[Math.floor(Math.random() * 10)]}${String(Math.floor(Math.random() * 1e5)).padStart(5, '0')}`;
+      const caught = bad && tries < 3 && Math.random() < (this.layout.qa?.incoming ?? 0.3);
+      if (s.price) {
+        const received = this.wall() - rand(0.5, 6) * 86_400_000;
+        const late = Math.random() < (s.late ?? 0.1);
+        const promised = received - (late ? rand(1, 6) : -rand(0, 1.5)) * 86_400_000;
+        const price = Math.round(s.price * rand(0.98, 1.03));
+        this.history?.purchase({
+          po: `PO-${this.ymd(received)}-${String(++this.seq).padStart(4, '0')}`, heat: no, supplier: s.name, material: prod.material ?? '',
+          line: line.id, part: prod.key, tonnes, price, amount: Math.round(tonnes * price),
+          ordered: promised - (s.lead ?? 20) * 86_400_000, promised, received,
+          result: caught ? '拒收' : '合格', reason: caught ? pick(['超声探伤不合格', '低倍组织不合格', '非金属夹杂超标']) : '',
+        });
+      }
+      if (caught) continue;
+      line.lot = { no, supplier: s.name, factor, left };
+      return;
+    }
+  }
+
+  private ymd(ms: number) {
+    const d = new Date(ms + 8 * 3600_000).toISOString();
+    return d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
+  }
+
+  private schedule(e: Later) {
+    let i = this.later.length;
+    while (i > 0 && this.later[i - 1].at > e.at) i--;
+    this.later.splice(i, 0, e);
+  }
+
+  /** Goods leave for the customer, arrive, and sometimes come back as a complaint. */
+  private happen(e: Later) {
+    const line = this.lineById[e.data.line as string];
+    if (!line) return;
+    if (e.kind === 'ship') {
+      const j = e.data.job as Job;
+      const f = pickShare(this.layout.freight) ?? { carrier: '', late: 0.1, truck: 25 };
+      const tonnes = Math.round((j.good * j.weight) / 100) / 10;
+      const delayed = Math.random() < f.late;
+      const road = j.transit * rand(0.9, 1.15) + (delayed ? rand(8, 36) : 0);
+      const ship = {
+        no: `SH-${this.ymd(e.at)}-${String(++this.seq).padStart(4, '0')}`, order: j.no, line: line.id, customer: j.customer, part: j.partNo, partName: j.name,
+        units: j.good, tonnes, trucks: Math.max(1, Math.ceil(tonnes / f.truck)), carrier: f.carrier,
+        departed: e.at, eta: e.at + j.transit * 3600_000, delivered: null as number | null, promise: j.promise, revenue: Math.round(j.good * j.price),
+      };
+      this.history?.shipment(line, ship);
+      this.schedule({ at: e.at + road * 3600_000, kind: 'deliver', data: { line: line.id, ship, escapes: j.escapes ?? {} } });
+    } else if (e.kind === 'deliver') {
+      const ship = { ...(e.data.ship as Record<string, unknown>), delivered: e.at };
+      this.history?.shipment(line, ship);
+      // the customer finds some of the flawed units at incoming inspection or on their line
+      for (const [type, n] of Object.entries(e.data.escapes as Record<string, number>)) {
+        let found = 0;
+        for (let k = 0; k < n; k++) if (Math.random() < (this.layout.qa?.found ?? 0.6)) found++;
+        if (found) this.schedule({ at: e.at + rand(1, 12) * 86_400_000, kind: 'complain', data: { line: line.id, ship, type, qty: found } });
+      }
+    } else if (e.kind === 'complain') {
+      const ship = e.data.ship as Record<string, unknown>;
+      const cp = {
+        no: `CP-${this.ymd(e.at)}-${String(++this.seq).padStart(4, '0')}`, customer: ship.customer, order: ship.order, shipment: ship.no,
+        part: ship.part, partName: ship.partName, type: e.data.type, qty: e.data.qty, opened: e.at, closed: null as number | null,
+      };
+      this.history?.complaint(line, cp);
+      // the 8D report closes it some weeks later
+      this.schedule({ at: e.at + rand(10, 30) * 86_400_000, kind: 'close', data: { line: line.id, cp } });
+    } else {
+      this.history?.complaint(line, { ...(e.data.cp as Record<string, unknown>), closed: e.at });
+    }
   }
 
   step(dt: number) {
@@ -635,7 +731,7 @@ export class PlantSim {
         line.good++;
         line.doneTimes.push(this.elapsed);
         this.history?.output(line, p);
-        this.jobOutput(line);
+        this.jobOutput(line, p);
         this.giveInv(p);
         P.splice(i--, 1);
       }
@@ -1488,6 +1584,7 @@ export class PlantSim {
       meas: assets.filter((a) => a.hist.meas.length).map((a) => [a.id, a.hist.meas.map(r)]),
       repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
       recond: this.repairs,
+      later: this.later,
     };
   }
 
@@ -1505,6 +1602,7 @@ export class PlantSim {
       if (a) a.repairAt = t;
     }
     this.repairs = saved.recond ?? [];
+    this.later = saved.later ?? [];
     // carry on in the present: the plant's wall clock is now
     this.epoch = Date.now() - this.elapsed * 1000;
     return true;

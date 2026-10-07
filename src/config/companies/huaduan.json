@@ -26,6 +26,20 @@
           "route": "hot-die-conrod",
           "repeat": 2
         }
+      ],
+      "freight": [
+        {
+          "carrier": "顺达物流",
+          "share": 0.6,
+          "late": 0.08,
+          "truck": 25
+        },
+        {
+          "carrier": "远航货运",
+          "share": 0.4,
+          "late": 0.16,
+          "truck": 25
+        }
       ]
     },
     {
@@ -48,6 +62,20 @@
           "product": "bearing-ring",
           "route": "ring-bearing",
           "repeat": 2
+        }
+      ],
+      "freight": [
+        {
+          "carrier": "远航货运",
+          "share": 0.5,
+          "late": 0.16,
+          "truck": 28
+        },
+        {
+          "carrier": "通衢大件运输",
+          "share": 0.5,
+          "late": 0.1,
+          "truck": 30
         }
       ]
     },
@@ -74,7 +102,50 @@
           "route": "open-die-block",
           "repeat": 2
         }
+      ],
+      "freight": [
+        {
+          "carrier": "通衢大件运输",
+          "share": 1,
+          "late": 0.12,
+          "truck": 40
+        }
       ]
     }
-  ]
+  ],
+  "tariff": {
+    "power": [
+      {
+        "from": 0,
+        "to": 7,
+        "price": 0.31
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "price": 0.66
+      },
+      {
+        "from": 8,
+        "to": 11,
+        "price": 1.05
+      },
+      {
+        "from": 11,
+        "to": 18,
+        "price": 0.66
+      },
+      {
+        "from": 18,
+        "to": 23,
+        "price": 1.05
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "price": 0.31
+      }
+    ],
+    "gas": 3.65
+  }
 }

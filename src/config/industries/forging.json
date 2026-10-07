@@ -307,13 +307,19 @@
           "name": "华东特钢",
           "share": 0.6,
           "bad": 0.03,
-          "factor": 10
+          "factor": 10,
+          "price": 5200,
+          "lead": 20,
+          "late": 0.08
         },
         {
           "name": "西岭钢铁",
           "share": 0.4,
           "bad": 0.15,
-          "factor": 10
+          "factor": 10,
+          "price": 4950,
+          "lead": 15,
+          "late": 0.2
         }
       ],
       "variants": [
@@ -322,21 +328,48 @@
           "name": "1.5L 四缸曲轴",
           "weight": 17.8,
           "input": 22.6,
-          "share": 0.35
+          "share": 0.35,
+          "price": 420,
+          "customers": [
+            "远岳动力",
+            "衡川汽车"
+          ]
         },
         {
           "partNo": "QZ-B20-4",
           "name": "2.0T 四缸曲轴",
           "weight": 21.6,
           "input": 27.4,
-          "share": 0.45
+          "share": 0.45,
+          "price": 520
         },
         {
           "partNo": "QZ-V30-6",
           "name": "3.0T V6 曲轴",
           "weight": 28.4,
           "input": 35.9,
-          "share": 0.2
+          "share": 0.2,
+          "price": 860,
+          "customers": [
+            "江北重卡"
+          ]
+        }
+      ],
+      "customers": [
+        {
+          "name": "远岳动力",
+          "share": 0.5,
+          "transit": 30
+        },
+        {
+          "name": "衡川汽车",
+          "share": 0.3,
+          "transit": 18
+        },
+        {
+          "name": "江北重卡",
+          "share": 0.2,
+          "transit": 46
         }
       ]
     },
@@ -598,13 +631,19 @@
           "name": "华东特钢",
           "share": 0.6,
           "bad": 0.03,
-          "factor": 10
+          "factor": 10,
+          "price": 4700,
+          "lead": 20,
+          "late": 0.08
         },
         {
           "name": "西岭钢铁",
           "share": 0.4,
           "bad": 0.15,
-          "factor": 10
+          "factor": 10,
+          "price": 4480,
+          "lead": 15,
+          "late": 0.2
         }
       ],
       "variants": [
@@ -613,21 +652,48 @@
           "name": "1.5L 连杆",
           "weight": 0.52,
           "input": 0.62,
-          "share": 0.4
+          "share": 0.4,
+          "price": 46,
+          "customers": [
+            "远岳动力",
+            "衡川汽车"
+          ]
         },
         {
           "partNo": "LG-B20",
           "name": "2.0T 连杆",
           "weight": 0.62,
           "input": 0.74,
-          "share": 0.45
+          "share": 0.45,
+          "price": 55
         },
         {
           "partNo": "LG-V30",
           "name": "3.0T 连杆",
           "weight": 0.71,
           "input": 0.85,
-          "share": 0.15
+          "share": 0.15,
+          "price": 68,
+          "customers": [
+            "江北重卡"
+          ]
+        }
+      ],
+      "customers": [
+        {
+          "name": "远岳动力",
+          "share": 0.5,
+          "transit": 30
+        },
+        {
+          "name": "衡川汽车",
+          "share": 0.3,
+          "transit": 18
+        },
+        {
+          "name": "江北重卡",
+          "share": 0.2,
+          "transit": 46
         }
       ]
     },
@@ -743,13 +809,19 @@
           "name": "北方重钢",
           "share": 0.7,
           "bad": 0.04,
-          "factor": 8
+          "factor": 8,
+          "price": 4300,
+          "lead": 25,
+          "late": 0.1
         },
         {
           "name": "临江钢铁",
           "share": 0.3,
           "bad": 0.15,
-          "factor": 8
+          "factor": 8,
+          "price": 4120,
+          "lead": 18,
+          "late": 0.22
         }
       ],
       "variants": [
@@ -758,14 +830,28 @@
           "name": "Φ1200 风电塔筒法兰",
           "weight": 312,
           "input": 356,
-          "share": 0.6
+          "share": 0.6,
+          "price": 4600
         },
         {
           "partNo": "FL-1150-Q355",
           "name": "Φ1150 风电塔筒法兰",
           "weight": 286,
           "input": 327,
-          "share": 0.4
+          "share": 0.4,
+          "price": 4300
+        }
+      ],
+      "customers": [
+        {
+          "name": "北辰风电",
+          "share": 0.6,
+          "transit": 60
+        },
+        {
+          "name": "东海风能",
+          "share": 0.4,
+          "transit": 40
         }
       ]
     },
@@ -891,13 +977,19 @@
           "name": "兴华轴承钢",
           "share": 0.8,
           "bad": 0.03,
-          "factor": 10
+          "factor": 10,
+          "price": 6300,
+          "lead": 21,
+          "late": 0.06
         },
         {
           "name": "临江钢铁",
           "share": 0.2,
           "bad": 0.15,
-          "factor": 10
+          "factor": 10,
+          "price": 6000,
+          "lead": 18,
+          "late": 0.22
         }
       ],
       "variants": [
@@ -906,14 +998,28 @@
           "name": "Φ320 外圈",
           "weight": 12.8,
           "input": 14.1,
-          "share": 0.5
+          "share": 0.5,
+          "price": 128
         },
         {
           "partNo": "TQ-300-N",
           "name": "Φ300 内圈",
           "weight": 10.9,
           "input": 12.0,
-          "share": 0.5
+          "share": 0.5,
+          "price": 110
+        }
+      ],
+      "customers": [
+        {
+          "name": "凯沃轴承",
+          "share": 0.7,
+          "transit": 8
+        },
+        {
+          "name": "中原轴承",
+          "share": 0.3,
+          "transit": 24
         }
       ]
     },
@@ -1078,9 +1184,25 @@
           "name": "北方重钢",
           "share": 1,
           "bad": 0.08,
-          "factor": 3
+          "factor": 3,
+          "price": 6900,
+          "lead": 45,
+          "late": 0.15
         }
-      ]
+      ],
+      "customers": [
+        {
+          "name": "北辰风电",
+          "share": 0.7,
+          "transit": 60
+        },
+        {
+          "name": "东海风能",
+          "share": 0.3,
+          "transit": 40
+        }
+      ],
+      "price": 265000
     },
     "block": {
       "name": "模具模块",
@@ -1174,9 +1296,25 @@
           "name": "北方重钢",
           "share": 1,
           "bad": 0.08,
-          "factor": 3
+          "factor": 3,
+          "price": 11500,
+          "lead": 40,
+          "late": 0.15
         }
-      ]
+      ],
+      "customers": [
+        {
+          "name": "中力模具",
+          "share": 0.6,
+          "transit": 20
+        },
+        {
+          "name": "华南模具",
+          "share": 0.4,
+          "transit": 54
+        }
+      ],
+      "price": 78000
     }
   },
   "machines": {
@@ -1454,7 +1592,8 @@
         "repair": {
           "hours": 48,
           "rate": 0.7
-        }
+        },
+        "cost": 3000
       },
       "upkeep": {
         "mtbf": 100,
@@ -1545,7 +1684,8 @@
           "rate": 0.75
         },
         "setup": 4,
-        "warm": 80
+        "warm": 80,
+        "cost": 9000
       },
       "upkeep": {
         "mtbf": 30,
@@ -1621,7 +1761,8 @@
           "hours": 48,
           "rate": 0.8
         },
-        "setup": 2
+        "setup": 2,
+        "cost": 2000
       },
       "upkeep": {
         "mtbf": 120,
@@ -1690,7 +1831,8 @@
         "repair": {
           "hours": 24,
           "rate": 0.5
-        }
+        },
+        "cost": 400
       },
       "upkeep": {
         "mtbf": 160,
@@ -1769,7 +1911,8 @@
           "rate": 0.6
         },
         "setup": 1,
-        "warm": 10
+        "warm": 10,
+        "cost": 12000
       },
       "upkeep": {
         "mtbf": 120,
@@ -2262,7 +2405,8 @@
         "label": "车刀片",
         "life": 800,
         "change": 90,
-        "spare": "insert"
+        "spare": "insert",
+        "cost": 35
       },
       "upkeep": {
         "mtbf": 120,
@@ -2497,7 +2641,8 @@
         "tooling": {
           "life": 14000,
           "change": 3600,
-          "spare": "conrodDie"
+          "spare": "conrodDie",
+          "cost": 5000
         },
         "measure": {
           "label": "大头厚度（热态）",
@@ -2880,5 +3025,9 @@
       "start": 8
     }
   },
-  "pace": 0.05
+  "pace": 0.05,
+  "qa": {
+    "incoming": 0.35,
+    "found": 0.6
+  }
 }

@@ -33,6 +33,11 @@ func TestModelCompiles(t *testing.T) {
 		{"on-time by customer", semantic.Query{Metrics: []string{"on_time_rate", "orders_completed"}, GroupBy: []string{"customer"}}},
 		{"scrap rate by supplier", semantic.Query{Metrics: []string{"lot_scrap_rate", "lots_used"}, GroupBy: []string{"supplier"}}},
 		{"defects by heat", semantic.Query{Metrics: []string{"defects"}, GroupBy: []string{"defect_supplier", "defect_type"}}},
+		{"revenue and margin by plant", semantic.Query{Metrics: []string{"revenue", "gross_margin", "gross_margin_rate", "energy_cost_per_tonne"}, GroupBy: []string{"plant_name"}}},
+		{"delivery by customer and carrier", semantic.Query{Metrics: []string{"delivery_on_time_rate", "avg_transit_hours", "shipped_tonnes"}, GroupBy: []string{"customer", "carrier"}}},
+		{"ppm by customer", semantic.Query{Metrics: []string{"customer_ppm", "complaints"}, GroupBy: []string{"customer"}}},
+		{"incoming by supplier", semantic.Query{Metrics: []string{"incoming_reject_rate", "avg_steel_price", "supplier_on_time_rate"}, GroupBy: []string{"purchase_supplier"}}},
+		{"power price by shift", semantic.Query{Metrics: []string{"avg_power_price", "power_cost"}, GroupBy: []string{"shift"}}},
 		{"material yield by part and shift", semantic.Query{Metrics: []string{"material_yield", "good_tonnes"}, GroupBy: []string{"part_name", "shift"}}},
 	}
 	for _, c := range cases {

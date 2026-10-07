@@ -17,6 +17,10 @@ entities:
   - {name: defect,       table: defects,       primary_key: id}
   - {name: work_order,   table: work_orders,   primary_key: order_no}
   - {name: lot,          table: lots,          primary_key: heat_no}
+  - {name: customer,     table: customers,     primary_key: name}
+  - {name: shipment,     table: shipments,     primary_key: shipment_no}
+  - {name: complaint,    table: complaints,    primary_key: complaint_no}
+  - {name: purchase,     table: purchases,     primary_key: po_no}
 
 joins:
   - {from: line,         to: plant,    from_key: plant_id,   to_key: plant_id,   cardinality: many_to_one}
@@ -40,6 +44,15 @@ joins:
   - {from: work_order,   to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
   - {from: lot,          to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
   - {from: lot,          to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: shipment,     to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: shipment,     to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: shipment,     to: customer, from_key: customer,   to_key: name,       cardinality: many_to_one}
+  - {from: complaint,    to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: complaint,    to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
+  - {from: complaint,    to: customer, from_key: customer,   to_key: name,       cardinality: many_to_one}
+  - {from: work_order,   to: customer, from_key: customer,   to_key: name,       cardinality: many_to_one}
+  - {from: purchase,     to: line,     from_key: line_id,    to_key: line_id,    cardinality: many_to_one}
+  - {from: purchase,     to: calendar, from_key: hour,       to_key: hour,       cardinality: many_to_one}
 
 dimensions:
   - {name: time,          entity: calendar,    column: hour,        type: time,        synonyms: [时间, 日期, 每天, 每周, 每月, 小时]}
@@ -50,7 +63,6 @@ dimensions:
   - {name: part_name,     entity: part,        column: name,        type: categorical, synonyms: [产品, 零件, 锻件]}
   - {name: part_no,       entity: part,        column: part_no,     type: categorical, synonyms: [图号, 零件号]}
   - {name: material,      entity: part,        column: material,    type: categorical, synonyms: [材质, 钢号, 材料牌号]}
-  - {name: customer,      entity: part,        column: customer,    type: categorical, synonyms: [客户, 主机厂]}
   - {name: machine,       entity: machine,     column: label,       type: categorical, synonyms: [设备, 机台, 设备编号]}
   - {name: machine_name,  entity: machine,     column: name,        type: categorical, synonyms: [工序, 工位]}
   - {name: machine_kind,  entity: machine,     column: kind,        type: categorical, synonyms: [设备类型, 设备种类]}
@@ -66,6 +78,16 @@ dimensions:
   - {name: part_family,   entity: part,        column: family,      type: categorical, synonyms: [产品族, 产品大类]}
   - {name: order_part,    entity: work_order,  column: part_name,   type: categorical, synonyms: [工单型号, 零件型号]}
   - {name: lot_part,      entity: lot,         column: part_name,   type: categorical, synonyms: [炉批型号]}
+  - {name: customer,      entity: customer,    column: name,        type: categorical, synonyms: [客户, 主机厂]}
+  - {name: carrier,       entity: shipment,    column: carrier,     type: categorical, synonyms: [承运商, 物流公司, 运输公司]}
+  - {name: shipment_part, entity: shipment,    column: part_name,   type: categorical, synonyms: [发货型号]}
+  - {name: shipment_status, entity: shipment,  column: status,      type: categorical, synonyms: [发运状态, 在途或签收]}
+  - {name: complaint_type, entity: complaint,  column: defect_type, type: categorical, synonyms: [客诉缺陷, 客诉类型]}
+  - {name: complaint_status, entity: complaint, column: status,     type: categorical, synonyms: [客诉状态]}
+  - {name: purchase_supplier, entity: purchase, column: supplier,   type: categorical, synonyms: [采购钢厂, 供方]}
+  - {name: purchase_material, entity: purchase, column: material,   type: categorical, synonyms: [采购钢种, 钢种]}
+  - {name: inspection_result, entity: purchase, column: result,     type: categorical, synonyms: [来料检验结果, 进厂检验结果]}
+  - {name: reject_reason,  entity: purchase,   column: reason,      type: categorical, synonyms: [拒收原因]}
   - {name: supplier,      entity: lot,         column: supplier,    type: categorical, synonyms: [钢厂, 原材料供应商, 供应商]}
   - {name: heat_no,       entity: lot,         column: heat_no,     type: categorical, synonyms: [炉号, 炉批号, 材料批次]}
   - {name: defect_supplier, entity: defect,    column: supplier,    type: categorical, synonyms: [缺陷件的钢厂]}
@@ -392,4 +414,180 @@ metrics:
     description: "按炉批 / 钢厂看的废品率 = 炉批报废数 / 炉批产量。"
     synonyms: [炉批废品率, 钢厂废品率, 按炉号废品率]
     formula: "1.0 * lot_scrap / nullif(lot_produced, 0)"
+    additivity: non_additive
+
+  # ---- customers, delivery and sales ----
+  - name: revenue
+    description: "销售额（元）= 发运件数 × 单价，按发运时间计。"
+    synonyms: [销售额, 营收, 收入, 产值]
+    entity: shipment
+    agg: sum
+    expr: "revenue"
+  - name: shipments
+    description: "发运批次数（一张工单的货一批）。"
+    synonyms: [发运批次, 发货次数]
+    entity: shipment
+    agg: count
+    expr: "shipment_no"
+  - name: shipped_units
+    description: "发运件数。"
+    synonyms: [发货件数, 发运数量]
+    entity: shipment
+    agg: sum
+    expr: "units"
+  - name: shipped_tonnes
+    description: "发运吨位。"
+    synonyms: [发货吨位, 发运吨数]
+    entity: shipment
+    agg: sum
+    expr: "tonnes"
+  - name: trucks
+    description: "用车数（按每车吨位折算）。"
+    synonyms: [车次, 用车数]
+    entity: shipment
+    agg: sum
+    expr: "trucks"
+  - name: deliveries
+    description: "已签收的发运批次数。"
+    synonyms: [签收批次]
+    entity: shipment
+    agg: sum
+    expr: "delivered"
+  - name: on_time_deliveries
+    description: "在承诺日期前送达的批次数。"
+    synonyms: [准时送达批次]
+    entity: shipment
+    agg: sum
+    expr: "on_time"
+  - name: delivery_on_time_rate
+    description: "客户准时交付率 = 承诺日期前送达 / 已签收批次。"
+    synonyms: [客户准时交付率, 准时送达率, 到货准时率, OTIF]
+    formula: "1.0 * on_time_deliveries / nullif(deliveries, 0)"
+    additivity: non_additive
+  - name: avg_transit_hours
+    description: "已签收批次的平均在途时长（小时）。"
+    synonyms: [平均在途时长, 运输时长]
+    entity: shipment
+    agg: avg
+    expr: "transit_h"
+  - name: delivered_units
+    description: "已签收的件数。"
+    synonyms: [签收件数]
+    entity: shipment
+    agg: sum
+    expr: "CASE WHEN delivered = 1 THEN units ELSE 0 END"
+
+  # ---- quality at the customer ----
+  - name: complaints
+    description: "客户投诉单数。"
+    synonyms: [客诉数, 投诉数, 客户投诉]
+    entity: complaint
+    agg: count
+    expr: "complaint_no"
+  - name: complained_units
+    description: "客户投诉涉及的件数（漏检流到客户的缺陷件）。"
+    synonyms: [客诉件数, 外部不良数]
+    entity: complaint
+    agg: sum
+    expr: "qty"
+  - name: open_complaints
+    description: "仍在处理中的客诉单数（8D 未关闭）。"
+    synonyms: [未关闭客诉, 处理中客诉]
+    entity: complaint
+    agg: sum
+    expr: "CASE WHEN status = '处理中' THEN 1 ELSE 0 END"
+  - name: customer_ppm
+    description: "客户 PPM = 客诉件数 / 签收件数 × 100 万。"
+    synonyms: [客户PPM, 外部PPM, PPM]
+    formula: "1000000.0 * complained_units / nullif(delivered_units, 0)"
+    additivity: non_additive
+
+  # ---- purchasing and incoming inspection ----
+  - name: purchase_tonnes
+    description: "采购到货吨位（含拒收）。"
+    synonyms: [采购吨位, 到货吨位]
+    entity: purchase
+    agg: sum
+    expr: "tonnes"
+  - name: purchase_amount
+    description: "采购金额（元）。"
+    synonyms: [采购金额, 采购额, 原材料采购额]
+    entity: purchase
+    agg: sum
+    expr: "amount"
+  - name: avg_steel_price
+    description: "钢材采购均价（元/吨）。"
+    synonyms: [钢材均价, 采购单价, 吨钢价格]
+    formula: "purchase_amount / nullif(purchase_tonnes, 0)"
+    additivity: non_additive
+  - name: purchase_lots
+    description: "到货炉批数。"
+    synonyms: [到货批次, 采购批次]
+    entity: purchase
+    agg: count
+    expr: "po_no"
+  - name: late_purchases
+    description: "晚于承诺日期到货的批次数。"
+    synonyms: [延期到货批次]
+    entity: purchase
+    agg: sum
+    expr: "late"
+  - name: supplier_on_time_rate
+    description: "供方准时到货率 = 1 − 延期批次 / 到货批次。"
+    synonyms: [供方准时率, 到货准时率]
+    formula: "1.0 - 1.0 * late_purchases / nullif(purchase_lots, 0)"
+    additivity: non_additive
+  - name: incoming_rejects
+    description: "来料检验拒收的炉批数。"
+    synonyms: [来料拒收批次, 进厂拒收]
+    entity: purchase
+    agg: sum
+    expr: "CASE WHEN result = '拒收' THEN 1 ELSE 0 END"
+  - name: incoming_reject_rate
+    description: "来料拒收率 = 拒收批次 / 到货批次。"
+    synonyms: [来料拒收率, 进厂检验不合格率, IQC不合格率]
+    formula: "1.0 * incoming_rejects / nullif(purchase_lots, 0)"
+    additivity: non_additive
+
+  # ---- costs ----
+  - name: power_cost
+    description: "电费（元），按峰谷平分时电价逐小时计。"
+    synonyms: [电费, 用电成本]
+    entity: machine_hour
+    agg: sum
+    expr: "power_cost"
+  - name: fuel_cost
+    description: "天然气费（元）。"
+    synonyms: [燃气费, 天然气费用]
+    entity: machine_hour
+    agg: sum
+    expr: "fuel_cost"
+  - name: energy_cost
+    description: "能源成本（元）= 电费 + 天然气费。"
+    synonyms: [能源成本, 能耗成本, 能源费用]
+    formula: "power_cost + fuel_cost"
+  - name: avg_power_price
+    description: "平均电价（元/kWh）= 电费 / 耗电量，越低说明越多用在谷段。"
+    synonyms: [平均电价, 度电成本]
+    formula: "power_cost / nullif(energy_kwh, 0)"
+    additivity: non_additive
+  - name: energy_cost_per_tonne
+    description: "吨锻件能源成本（元/吨）。"
+    synonyms: [吨锻件能源成本, 单位能源成本]
+    formula: "(power_cost + fuel_cost) / nullif(good_tonnes, 0)"
+    additivity: non_additive
+  - name: tooling_cost
+    description: "模具成本（元）：到寿命或提前换下的模具（新模摊销或修模费）；换型换上的旧模不计。"
+    synonyms: [模具成本, 工装成本, 模具费用]
+    entity: tool_change
+    agg: sum
+    expr: "cost"
+  - name: gross_margin
+    description: "毛利（简化，元）= 销售额 − 原材料采购额 − 能源成本 − 模具成本；不含人工、折旧与运费。"
+    synonyms: [毛利, 毛利润]
+    formula: "revenue - purchase_amount - power_cost - fuel_cost - tooling_cost"
+  - name: gross_margin_rate
+    description: "毛利率（简化）= 毛利 / 销售额。"
+    synonyms: [毛利率]
+    formula: "(revenue - purchase_amount - power_cost - fuel_cost - tooling_cost) / nullif(revenue, 0)"
     additivity: non_additive

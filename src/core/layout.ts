@@ -26,6 +26,8 @@ export interface ProductInfo {
   customer?: string;
   suppliers?: ProductCfg['suppliers'];
   variants?: ProductCfg['variants'];
+  customers?: ProductCfg['customers'];
+  price?: number;
 }
 
 export interface StationLayout {
@@ -89,6 +91,10 @@ export interface PlantLayout {
   terms: IndustryCfg['terms'];
   calendar: IndustryCfg['calendar'];
   pace: number;
+  qa: IndustryCfg['qa'];
+  tariff?: CompanyCfg['tariff'];
+  /** who carries finished goods to customers */
+  freight: { carrier: string; share: number; late: number; truck: number }[];
   inventory: InventoryLayout[];
   lines: LineLayout[];
   box: { x0: number; x1: number; z0: number; z1: number };
@@ -162,7 +168,7 @@ function productInfo(industry: IndustryCfg, key: string, needsPacked: boolean): 
     dims.packed = stageDims(stages.packed);
     max = { l: Math.max(max.l, dims.packed.l), h: Math.max(max.h, dims.packed.h), d: Math.max(max.d, dims.packed.d) };
   }
-  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer, suppliers: p.suppliers, variants: p.variants };
+  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer, suppliers: p.suppliers, variants: p.variants, customers: p.customers, price: p.price };
 }
 
 // ---------- plant ----------
@@ -353,6 +359,9 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     terms: industry.terms,
     calendar: industry.calendar,
     pace: industry.pace,
+    qa: industry.qa,
+    tariff: company.tariff,
+    freight: plant.freight?.length ? plant.freight : [{ carrier: plant.carriers[1], share: 1, late: 0.1, truck: 25 }],
     // a plant that lists its inventory keeps only those items (a BBQ site has no tents)
     inventory: Object.entries(industry.inventory).filter(([key]) => !plant.inventory || key in plant.inventory).map(([key, it]) => {
       const cap = plant.inventory?.[key] ?? it.capacity;

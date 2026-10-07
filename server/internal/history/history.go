@@ -52,7 +52,7 @@ func (s *Store) Close() { s.db.Close() }
 
 // Reset empties every table (a backfill starting over).
 func (s *Store) Reset(ctx context.Context) error {
-	_, err := s.db.Exec(ctx, `TRUNCATE lots, work_orders, defects, tool_changes, downtime, stock_hours, quality_hours,
+	_, err := s.db.Exec(ctx, `TRUNCATE complaints, shipments, purchases, customers, lots, work_orders, defects, tool_changes, downtime, stock_hours, quality_hours,
 		line_hours, machine_hours, calendar, machines, lines, parts, plants RESTART IDENTITY`)
 	return err
 }
@@ -94,7 +94,12 @@ type Dims struct {
 		Input    *float64 `json:"input"`
 		Customer string   `json:"customer"`
 		Family   string   `json:"family"`
+		Price    *float64 `json:"price"`
 	} `json:"parts"`
+	Customers []struct {
+		Name    string  `json:"name"`
+		Transit float64 `json:"transit"`
+	} `json:"customers"`
 }
 
 // WriteDims upserts plants, parts, lines and machines.
@@ -105,9 +110,12 @@ func (s *Store) WriteDims(ctx context.Context, raw string) error {
 	}
 	b := &pgx.Batch{}
 	for _, p := range d.Parts {
-		b.Queue(`INSERT INTO parts (part_id, part_no, name, material, weight_kg, input_kg, customer, family) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-			ON CONFLICT (part_id) DO UPDATE SET part_no=$2, name=$3, material=$4, weight_kg=$5, input_kg=$6, customer=$7, family=$8`,
-			p.ID, p.PartNo, p.Name, p.Material, p.Weight, p.Input, p.Customer, p.Family)
+		b.Queue(`INSERT INTO parts (part_id, part_no, name, material, weight_kg, input_kg, customer, family, price) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			ON CONFLICT (part_id) DO UPDATE SET part_no=$2, name=$3, material=$4, weight_kg=$5, input_kg=$6, customer=$7, family=$8, price=$9`,
+			p.ID, p.PartNo, p.Name, p.Material, p.Weight, p.Input, p.Customer, p.Family, p.Price)
+	}
+	for _, c := range d.Customers {
+		b.Queue(`INSERT INTO customers VALUES ($1,$2) ON CONFLICT (name) DO UPDATE SET transit_h=$2`, c.Name, c.Transit)
 	}
 	for _, p := range d.Plants {
 		b.Queue(`INSERT INTO plants VALUES ($1,$2,$3) ON CONFLICT (plant_id) DO UPDATE SET name=$2, hall=$3`, p.ID, p.Name, p.Hall)
@@ -129,7 +137,7 @@ type batch struct {
 		Machine, Hour                                         string
 		Run, Idle, Blocked, Fault, Maint, Changeover, Stopped float64
 		Cycles, Scrap, Rework                                 int
-		Kwh, Fuel                                             float64
+		Kwh, Fuel, PowerCost, FuelCost                        float64
 	} `json:"machineHours"`
 	LineHours []struct {
 		Line, Hour                             string
@@ -157,6 +165,7 @@ type batch struct {
 		Hits, Life                      int
 		Limit                           float64
 		Trigger                         string
+		Cost                            float64
 	} `json:"toolChanges"`
 	Defects []struct {
 		Machine, Line, At, Type, Feature string
@@ -167,11 +176,15 @@ type batch struct {
 	Orders []struct {
 		No, Line, Part, PartName, Customer, Heat, Supplier string
 		Qty                                                int
-		Issued, Due                                        string
+		Price                                              float64
+		Issued, Due, Promise                               string
 		Completed                                          *string
 		Good, Scrap                                        int
 	} `json:"orders"`
-	Lots []struct {
+	Purchases  []map[string]any `json:"purchases"`
+	Shipments  []map[string]any `json:"shipments"`
+	Complaints []map[string]any `json:"complaints"`
+	Lots       []struct {
 		Heat, Supplier, Line, Part, PartName, First, Last string
 		Produced, Good, Rework, Scrap                     int
 	} `json:"lots"`
@@ -184,6 +197,24 @@ var cst = time.FixedZone("CST", 8*3600)
 func wall(t time.Time) time.Time {
 	l := t.In(cst)
 	return time.Date(l.Year(), l.Month(), l.Day(), l.Hour(), l.Minute(), l.Second(), 0, time.UTC)
+}
+
+func str(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
+}
+
+func nullTime(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t := parse(s)
+	return &t
 }
 
 func parse(t string) time.Time {
@@ -223,12 +254,14 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 	}
 	for plant, x := range plants {
 		for _, r := range x.MachineHours {
-			b.Queue(`INSERT INTO machine_hours VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			b.Queue(`INSERT INTO machine_hours (machine_id, hour, run_s, idle_s, blocked_s, fault_s, maint_s, changeover_s, stopped_s, cycles, scrap, rework, energy_kwh, fuel, power_cost, fuel_cost)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 				ON CONFLICT (machine_id, hour) DO UPDATE SET run_s=machine_hours.run_s+$3, idle_s=machine_hours.idle_s+$4,
 				blocked_s=machine_hours.blocked_s+$5, fault_s=machine_hours.fault_s+$6, maint_s=machine_hours.maint_s+$7,
 				changeover_s=machine_hours.changeover_s+$8, stopped_s=machine_hours.stopped_s+$9, cycles=machine_hours.cycles+$10,
-				scrap=machine_hours.scrap+$11, rework=machine_hours.rework+$12, energy_kwh=machine_hours.energy_kwh+$13, fuel=machine_hours.fuel+$14`,
-				r.Machine, cal(r.Hour), r.Run, r.Idle, r.Blocked, r.Fault, r.Maint, r.Changeover, r.Stopped, r.Cycles, r.Scrap, r.Rework, r.Kwh, r.Fuel)
+				scrap=machine_hours.scrap+$11, rework=machine_hours.rework+$12, energy_kwh=machine_hours.energy_kwh+$13, fuel=machine_hours.fuel+$14,
+				power_cost=machine_hours.power_cost+$15, fuel_cost=machine_hours.fuel_cost+$16`,
+				r.Machine, cal(r.Hour), r.Run, r.Idle, r.Blocked, r.Fault, r.Maint, r.Changeover, r.Stopped, r.Cycles, r.Scrap, r.Rework, r.Kwh, r.Fuel, r.PowerCost, r.FuelCost)
 		}
 		for _, r := range x.LineHours {
 			b.Queue(`INSERT INTO line_hours (line_id, hour, planned_s, run_s, started, produced, good, rework, scrap, good_kg, input_kg, ideal_cycle_s, neck_cycles)
@@ -254,9 +287,9 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 		}
 		for _, r := range x.ToolChanges {
 			st, en := parse(r.Start), parse(r.End)
-			b.Queue(`INSERT INTO tool_changes (machine_id, line_id, hour, started_at, ended_at, minutes, tool, hits, life, limit_pct, trigger)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
-				r.Machine, r.Line, cal(r.Start), st, en, en.Sub(st).Minutes(), r.Tool, r.Hits, r.Life, r.Limit*100, r.Trigger)
+			b.Queue(`INSERT INTO tool_changes (machine_id, line_id, hour, started_at, ended_at, minutes, tool, hits, life, limit_pct, trigger, cost)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`,
+				r.Machine, r.Line, cal(r.Start), st, en, en.Sub(st).Minutes(), r.Tool, r.Hits, r.Life, r.Limit*100, r.Trigger, r.Cost)
 		}
 		for _, r := range x.Defects {
 			b.Queue(`INSERT INTO defects (machine_id, line_id, hour, at, defect_type, feature, value, disposition, order_no, heat_no, supplier)
@@ -278,10 +311,49 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 			} else if now.After(due) {
 				status = "已逾期"
 			}
-			b.Queue(`INSERT INTO work_orders (order_no, line_id, part_id, customer, heat_no, qty, good, scrap, issued_at, due_at, completed_at, hour, status, completed, on_time, supplier, part_name)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			b.Queue(`INSERT INTO work_orders (order_no, line_id, part_id, customer, heat_no, qty, good, scrap, issued_at, due_at, completed_at, hour, status, completed, on_time, supplier, part_name, price, promise_at)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 				ON CONFLICT (order_no) DO UPDATE SET good=$7, scrap=$8, completed_at=$11, hour=$12, status=$13, completed=$14, on_time=$15`,
-				r.No, r.Line, r.Part, r.Customer, r.Heat, r.Qty, r.Good, r.Scrap, parse(r.Issued), due, done, cal(when), status, completed, onTime, r.Supplier, r.PartName)
+				r.No, r.Line, r.Part, r.Customer, r.Heat, r.Qty, r.Good, r.Scrap, parse(r.Issued), due, done, cal(when), status, completed, onTime, r.Supplier, r.PartName, r.Price, nullTime(r.Promise))
+		}
+		for _, r := range x.Purchases {
+			late := 0
+			if str(r["received"]) > str(r["promised"]) {
+				late = 1
+			}
+			b.Queue(`INSERT INTO purchases VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING`,
+				r["po"], r["heat"], r["supplier"], r["material"], r["line"], r["part"], r["tonnes"], r["price"], r["amount"],
+				parse(str(r["ordered"])), parse(str(r["promised"])), parse(str(r["received"])), cal(str(r["received"])), late, r["result"], r["reason"])
+		}
+		for _, r := range x.Shipments {
+			dep := parse(str(r["departed"]))
+			var delivered *time.Time
+			var transit *float64
+			status, on, done := "在途", 0, 0
+			if d := str(r["delivered"]); d != "" {
+				t := parse(d)
+				h := t.Sub(dep).Hours()
+				delivered, transit, done, status = &t, &h, 1, "已签收"
+				if !t.After(parse(str(r["promise"]))) {
+					on = 1
+				}
+			}
+			b.Queue(`INSERT INTO shipments VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+				ON CONFLICT (shipment_no) DO UPDATE SET delivered_at=$14, transit_h=$17, delivered=$18, on_time=$19, status=$20`,
+				r["no"], r["order"], r["line"], r["customer"], r["part"], r["partName"], r["units"], r["tonnes"], r["trucks"], r["carrier"],
+				dep, parse(str(r["eta"])), parse(str(r["promise"])), delivered, cal(str(r["departed"])), r["revenue"], transit, done, on, status)
+		}
+		for _, r := range x.Complaints {
+			var closed *time.Time
+			status := "处理中"
+			if c := str(r["closed"]); c != "" {
+				t := parse(c)
+				closed, status = &t, "已关闭"
+			}
+			b.Queue(`INSERT INTO complaints VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+				ON CONFLICT (complaint_no) DO UPDATE SET closed_at=$11, status=$13`,
+				r["no"], r["customer"], r["order"], r["shipment"], r["line"], r["part"], r["partName"], r["type"], r["qty"],
+				parse(str(r["opened"])), closed, cal(str(r["opened"])), status)
 		}
 		for _, r := range x.Lots {
 			// a lot arrives in pieces (one per drain): add them up

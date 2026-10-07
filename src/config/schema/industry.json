@@ -129,6 +129,27 @@
       "minimum": 0,
       "maximum": 0.5
     },
+    "qa": {
+      "default": {
+        "incoming": 0.3,
+        "found": 0.6
+      },
+      "type": "object",
+      "properties": {
+        "incoming": {
+          "default": 0.3,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "found": {
+          "default": 0.6,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
     "products": {
       "type": "object",
       "propertyNames": {
@@ -180,6 +201,16 @@
                   "default": 1,
                   "type": "number",
                   "exclusiveMinimum": 0
+                },
+                "price": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "customers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "required": [
@@ -187,6 +218,34 @@
                 "name"
               ]
             }
+          },
+          "customers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "share": {
+                  "default": 1,
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "transit": {
+                  "default": 24,
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0
           },
           "suppliers": {
             "type": "array",
@@ -210,6 +269,21 @@
                   "default": 4,
                   "type": "number",
                   "minimum": 1
+                },
+                "price": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "lead": {
+                  "default": 20,
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "late": {
+                  "default": 0.1,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
                 }
               },
               "required": [
@@ -898,6 +972,11 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "cost": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
               }
             },
             "required": [
@@ -1342,6 +1421,10 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "cost": {
+                      "type": "number",
+                      "minimum": 0
                     }
                   }
                 },

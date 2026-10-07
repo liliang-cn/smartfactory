@@ -97,13 +97,23 @@ export const Product = z.object({
   variants: z.array(z.object({
     partNo: z.string(), name: z.string(), weight: z.number().positive().optional(), input: z.number().positive().optional(),
     share: z.number().positive().default(1),
+    /** selling price per unit (元) */
+    price: z.number().positive().optional(),
+    /** which of the product's customers buy this part number (default: all of them) */
+    customers: z.array(z.string()).optional(),
   })).optional(),
+  /** who buys the family: each work order is for one of them, by `share`; `transit` is hours on the road to them */
+  customers: z.array(z.object({ name: z.string(), share: z.number().positive().default(1), transit: z.number().positive().default(24) })).optional(),
+  /** selling price per unit (元) when the part numbers name none */
+  price: z.number().positive().optional(),
   /**
    * where the material comes from: each lot (a steel heat) is drawn from a supplier by `share`;
    * a `bad` share of a supplier's lots carries `factor` times the material-borne flaws
    */
   suppliers: z.array(z.object({
     name: z.string(), share: z.number().positive(), bad: z.number().min(0).max(1).default(0.05), factor: z.number().min(1).default(4),
+    /** 元 per tonne, days from order to promised delivery, chance a delivery is late */
+    price: z.number().positive().optional(), lead: z.number().positive().default(20), late: z.number().min(0).max(1).default(0.1),
   })).optional(),
   stages: z.record(z.string(), z.object({ parts: z.array(Part).min(1) })),
 });
@@ -186,6 +196,8 @@ const Tooling = z.object({
   setup: z.number().int().min(0).default(0),
   /** units until a new tool is at working temperature; flaws marked `cold` are more likely before that */
   warm: z.number().int().min(0).default(0),
+  /** 元 a change costs in tooling (the new or reconditioned tool, amortised) */
+  cost: z.number().min(0).default(0),
 });
 export type ToolingCfg = z.infer<typeof Tooling>;
 /** per-step tooling overrides: no defaults, so only what the step names replaces the machine's */
@@ -198,6 +210,7 @@ const ToolingPatch = z.object({
   limit: z.number().min(0.3).max(1).optional(),
   setup: z.number().int().min(0).optional(),
   warm: z.number().int().min(0).optional(),
+  cost: z.number().min(0).optional(),
 });
 
 export const Machine = z.object({
@@ -336,6 +349,11 @@ export const Industry = z.object({
    * performance sits a few percent under 100 % the way it does on a real line (0 = always nominal)
    */
   pace: z.number().min(0).max(0.5).default(0),
+  /**
+   * quality assurance: `incoming` is the chance incoming inspection catches a bad material lot (it is
+   * returned to the supplier); `found` the chance a customer finds a flawed unit that got past final inspection
+   */
+  qa: z.object({ incoming: z.number().min(0).max(1).default(0.3), found: z.number().min(0).max(1).default(0.6) }).default({ incoming: 0.3, found: 0.6 }),
   products: z.record(z.string(), Product),
   machines: z.record(z.string(), Machine),
   /** what the site keeps a count of (tents, tables, charcoal …), shown as in use / available / capacity */
@@ -384,6 +402,8 @@ export const PlantCfg = z.object({
   inventory: z.record(z.string(), z.number().int().nonnegative()).optional(),
   finishedGoods: z.string().default('成品库'),
   carriers: z.tuple([z.string(), z.string()]).default(['顺达物流', '远航货运']),
+  /** who carries finished goods to customers: share of shipments, chance one is delayed on the road, tonnes a truck takes */
+  freight: z.array(z.object({ carrier: z.string(), share: z.number().positive().default(1), late: z.number().min(0).max(1).default(0.1), truck: z.number().positive().default(25) })).optional(),
 });
 export type PlantCfgT = z.infer<typeof PlantCfg>;
 
@@ -394,6 +414,11 @@ export const Company = z.object({
   /** short name for the badge in the top bar */
   short: z.string().max(4),
   industry: z.string(),
+  /** energy prices: electricity 元/kWh by hour of day (peak / flat / valley), natural gas 元/Nm³ */
+  tariff: z.object({
+    power: z.array(z.object({ from: z.number().min(0).max(23), to: z.number().min(1).max(24), price: z.number().min(0) })).min(1),
+    gas: z.number().min(0).default(0),
+  }).optional(),
   plants: z.array(PlantCfg).min(1),
 });
 export type CompanyCfg = z.infer<typeof Company>;
