@@ -368,7 +368,7 @@ function Decisions({ company, pv, onChanged }: { company: string; pv: PlanView; 
         </>
       )}
       <Sheet open={!!ask} onOpenChange={(o) => { if (!o) { setAsk(null); setTried(false); } }}>
-        <SheetContent side={phone ? 'bottom' : 'right'} className={cn('gap-0 bg-card', phone ? 'rounded-t-[20px] pb-[env(safe-area-inset-bottom)]' : 'sm:max-w-md')}>
+        <SheetContent side={phone ? 'bottom' : 'right'} className={cn('gap-0 bg-card', phone ? 'rounded-t-[20px] pb-[env(safe-area-inset-bottom)]' : 'data-[side=right]:sm:max-w-md')}>
           <SheetHeader className="pb-2">
             <SheetTitle className="text-[16px] font-extrabold">{ask?.title}</SheetTitle>
             <SheetDescription className="sr-only">{pv.plan.does}</SheetDescription>
@@ -541,7 +541,7 @@ function Reviews({ company }: { company: string }) {
         </div>
       )}
       <Sheet open={!!open} onOpenChange={(v) => !v && setOpen(null)}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+        <SheetContent className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-3xl">
           <SheetHeader>
             <SheetTitle>{open?.title}</SheetTitle>
             <SheetDescription>{open && `${dayTime(open.started_at)} · ${open.trigger === 'schedule' ? '定期' : open.by}`}</SheetDescription>
