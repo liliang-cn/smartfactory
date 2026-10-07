@@ -329,7 +329,7 @@
           "weight": 17.8,
           "input": 22.6,
           "share": 0.35,
-          "price": 420,
+          "price": 270,
           "customers": [
             "远岳动力",
             "衡川汽车"
@@ -341,7 +341,7 @@
           "weight": 21.6,
           "input": 27.4,
           "share": 0.45,
-          "price": 520
+          "price": 330
         },
         {
           "partNo": "QZ-V30-6",
@@ -349,7 +349,7 @@
           "weight": 28.4,
           "input": 35.9,
           "share": 0.2,
-          "price": 860,
+          "price": 450,
           "customers": [
             "江北重卡"
           ]
@@ -653,7 +653,7 @@
           "weight": 0.52,
           "input": 0.62,
           "share": 0.4,
-          "price": 46,
+          "price": 9.5,
           "customers": [
             "远岳动力",
             "衡川汽车"
@@ -665,7 +665,7 @@
           "weight": 0.62,
           "input": 0.74,
           "share": 0.45,
-          "price": 55
+          "price": 11.5
         },
         {
           "partNo": "LG-V30",
@@ -673,7 +673,7 @@
           "weight": 0.71,
           "input": 0.85,
           "share": 0.15,
-          "price": 68,
+          "price": 13.5,
           "customers": [
             "江北重卡"
           ]
@@ -831,7 +831,7 @@
           "weight": 312,
           "input": 356,
           "share": 0.6,
-          "price": 4600
+          "price": 3200
         },
         {
           "partNo": "FL-1150-Q355",
@@ -839,7 +839,7 @@
           "weight": 286,
           "input": 327,
           "share": 0.4,
-          "price": 4300
+          "price": 2950
         }
       ],
       "customers": [
@@ -999,7 +999,7 @@
           "weight": 12.8,
           "input": 14.1,
           "share": 0.5,
-          "price": 128
+          "price": 122
         },
         {
           "partNo": "TQ-300-N",
@@ -1007,7 +1007,7 @@
           "weight": 10.9,
           "input": 12.0,
           "share": 0.5,
-          "price": 110
+          "price": 104
         }
       ],
       "customers": [
@@ -1202,7 +1202,7 @@
           "transit": 40
         }
       ],
-      "price": 265000
+      "price": 200000
     },
     "block": {
       "name": "模具模块",
@@ -1314,7 +1314,7 @@
           "transit": 54
         }
       ],
-      "price": 78000
+      "price": 64000
     }
   },
   "machines": {
