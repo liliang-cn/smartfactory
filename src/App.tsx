@@ -79,6 +79,8 @@ export default function App() {
   useShortcuts();
   const plant = usePlant();
   const campus = useCampus();
+  // the business view covers the map; the selected device stays selected for the way back
+  const biz = useBiz((s) => s.open);
   return (
     <TooltipProvider delayDuration={300}>
       <div className="fixed inset-0 overflow-hidden bg-stage">
@@ -90,8 +92,8 @@ export default function App() {
         <MapControls />
         {!campus && <Tracker />}
         {campus ? <GroupFleet /> : <Fleet />}
-        <Inspector />
-        <HoverTip />
+        {!biz && <Inspector />}
+        {!biz && <HoverTip />}
         <BusinessView />
         <FaultToasts />
         <Toaster theme="light" position="top-center" offset={{ top: 84 }} mobileOffset={{ top: 'calc(176px + env(safe-area-inset-top))' }} />
