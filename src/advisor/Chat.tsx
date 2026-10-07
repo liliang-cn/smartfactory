@@ -22,7 +22,7 @@ import { ResultTable, SqlFold } from './parts';
 interface Step { tool: string; args?: Record<string, unknown>; result?: unknown; since?: number; start: number; end?: number }
 interface Turn {
   id: string; q: string; status: 'running' | 'done' | 'error' | 'stopped'; start: number; end?: number;
-  steps: Step[]; idleSince?: number; verify?: { start: number; end?: number; text?: string }; answer?: string; error?: string;
+  steps: Step[]; idleSince?: number; verify?: { start: number; end?: number; text?: string; skipped?: boolean }; answer?: string; error?: string;
 }
 
 const KEY = (c: string) => `sf-advisor-${c}`;
@@ -70,6 +70,8 @@ const useChat = create<ChatState>()((set, get) => {
         return { ...t, idleSince: undefined, verify: { start: now } };
       case 'verified':
         return { ...t, verify: { start: t.verify?.start ?? now, end: now, text: ev.text ?? '' } };
+      case 'verify_skipped':
+        return { ...t, verify: { start: t.verify?.start ?? now, end: now, text: '', skipped: true } };
       case 'complete': {
         const text = ev.text ?? '';
         if (/^error:/i.test(text)) return { ...t, status: 'error', error: text.replace(/^error:\s*/i, ''), end: now, idleSince: undefined };
@@ -294,7 +296,7 @@ function Loop({ t, model }: { t: Turn; model: Model }) {
                 {v.end ? <ShieldCheckIcon className="size-3.5" /> : <LoaderCircleIcon className="size-3.5 animate-spin" />}
               </span>
               <b className={cn('text-[13px]', !v.end && 'text-primary')}>核对</b>
-              <span className="truncate text-[12.5px] text-muted-foreground">{v.end ? (fixes.length ? `修正 ${fixes.length} 处` : '无修正') : ''}</span>
+              <span className="truncate text-[12.5px] text-muted-foreground">{v.end ? (v.skipped ? '未完成' : fixes.length ? `修正 ${fixes.length} 处` : '无修正') : ''}</span>
               <span className={cn('ml-auto pr-6 text-[11.5px] tabular-nums', v.end ? 'text-muted-foreground' : 'font-bold text-primary')}>{secs((v.end ?? now) - v.start)}</span>
             </li>
           )}

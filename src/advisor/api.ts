@@ -95,6 +95,7 @@ export type AskEvent =
   | { kind: 'tool_result'; tool: string; result?: unknown }
   | { kind: 'verify'; text?: string }
   | { kind: 'verified'; text?: string }
+  | { kind: 'verify_skipped'; text?: string }
   | { kind: 'complete'; text?: string }
   | { kind: 'error'; text?: string };
 
