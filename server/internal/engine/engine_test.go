@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +140,13 @@ func TestPersistence(t *testing.T) {
 	}
 	if after.CV1 {
 		t.Error("CV-1 should still be stopped after restore")
+	}
+	// work orders, steel heats and document numbers carry on too
+	saved, _ := os.ReadFile(filepath.Join(dir, "huaduan.json"))
+	carried := regexp.MustCompile(`"job":\{"no":"[^"]+"|"lot":\{"no":"[^"]+","supplier":"[^"]*","factor":[0-9.]+,"left":[0-9]+|"seq":[0-9]+`)
+	sv, _ := e2.call("save", "huaduan")
+	if was, is := carried.FindAllString(string(saved), -1), carried.FindAllString(sv.String(), -1); len(was) < 10 || !slices.Equal(was, is) {
+		t.Errorf("work orders and heats not carried on:\nbefore %v\nafter  %v", was, is)
 	}
 	frame := map[string]any{}
 	fv, _ := e2.call("frame", "huaduan")

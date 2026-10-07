@@ -6,7 +6,7 @@ import type { History } from './history';
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, MachineSpec,
+  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -71,6 +71,10 @@ export interface SavedPlant {
   recond?: [string, number, number?][];
   /** shipments on their way, complaints still to come */
   later?: Later[];
+  /** each line's steel heat, work order and planning state, in layout order */
+  lines?: { lot?: Lot; job?: Job; pmWeek?: number; planEff?: number }[];
+  /** the last purchase / shipment / complaint number */
+  seq?: number;
 }
 
 /** A plant's replicated state, as sent from the server to browsers. */
@@ -1587,6 +1591,8 @@ export class PlantSim {
       repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
       recond: this.repairs,
       later: this.later,
+      lines: this.lines.map((l) => ({ lot: l.lot, job: l.job, pmWeek: l.pmWeek, planEff: l.planEff })),
+      seq: this.seq,
     };
   }
 
@@ -1605,6 +1611,11 @@ export class PlantSim {
     }
     this.repairs = saved.recond ?? [];
     this.later = saved.later ?? [];
+    this.lines.forEach((l, i) => {
+      const x = saved.lines?.[i];
+      if (x) Object.assign(l, { lot: x.lot, job: x.job, pmWeek: x.pmWeek, planEff: x.planEff });
+    });
+    this.seq = saved.seq ?? this.seq;
     // carry on in the present: the plant's wall clock is now
     this.epoch = Date.now() - this.elapsed * 1000;
     return true;
