@@ -30,6 +30,8 @@ type Server struct {
 	Log     *slog.Logger
 	// Advisors is the advisor console (DataIntelligence) of each company that has one.
 	Advisors map[string]string
+	// AdvisorAPI is how the twin reaches each company's advisor on its viewers' behalf.
+	AdvisorAPI map[string]Advisor
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -63,6 +65,7 @@ func (s *Server) Handler() http.Handler {
 	if s.MCP != nil {
 		mux.Handle("/mcp", s.requireToken(s.MCP))
 	}
+	s.advisorRoutes(mux)
 	mux.Handle("/", s.static())
 	return mux
 }

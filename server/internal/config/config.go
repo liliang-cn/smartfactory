@@ -38,6 +38,12 @@ type History struct {
 	DSN string `json:"dsn"`
 	// Advisor is the URL of the advisor console that reads this history (shown in the app)
 	Advisor string `json:"advisor,omitempty"`
+	// AdvisorAPI is the advisor service the twin calls for its viewers; AdvisorToken is the identity
+	// their reads and questions go out as, ApproverToken the one operators' decisions go out as
+	// (${VAR} is taken from the environment).
+	AdvisorAPI    string `json:"advisorApi,omitempty"`
+	AdvisorToken  string `json:"advisorToken,omitempty"`
+	ApproverToken string `json:"approverToken,omitempty"`
 }
 
 // Broker is the embedded MQTT broker.
@@ -166,6 +172,8 @@ func Load(path string) (Config, error) {
 	}
 	for i := range c.History {
 		c.History[i].DSN = os.ExpandEnv(c.History[i].DSN)
+		c.History[i].AdvisorToken = os.ExpandEnv(c.History[i].AdvisorToken)
+		c.History[i].ApproverToken = os.ExpandEnv(c.History[i].ApproverToken)
 	}
 	if c.MQTT.Prefix == "" {
 		c.MQTT.Prefix = "sf"

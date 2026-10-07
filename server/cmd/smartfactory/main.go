@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -136,14 +137,18 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 
 	advisors := map[string]string{}
+	advisorAPI := map[string]sfweb.Advisor{}
 	for _, h := range cfg.History {
 		if h.Advisor != "" {
 			advisors[h.Company] = h.Advisor
 		}
+		if h.AdvisorAPI != "" {
+			advisorAPI[h.Company] = sfweb.Advisor{API: strings.TrimRight(h.AdvisorAPI, "/"), Token: h.AdvisorToken, Approver: h.ApproverToken}
+		}
 	}
 	ms := mcptools.New(hub, eng, version)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log, Advisors: advisors,
+		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
