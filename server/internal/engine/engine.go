@@ -48,7 +48,22 @@ type Engine struct {
 	Done chan struct{}
 	// offline engines have no Run loop: calls go straight to the JS (history backfill, what-if runs)
 	offline bool
+
+	// values from equipment waiting for the loop, which applies all of them at once
+	inMu    sync.Mutex
+	inbox   []ingested
+	dropped int
+	inReady chan struct{}
 }
+
+type ingested struct {
+	company, plant, asset, field string
+	value                        any
+	src                          string
+}
+
+// maxInbox bounds the values waiting for the loop should it stall.
+const maxInbox = 200_000
 
 // Result is what a command returns.
 type Result struct {
@@ -99,7 +114,7 @@ func New(log *slog.Logger) (*Engine, error) {
 		return nil, errors.New("engine bundle does not define SF")
 	}
 	obj := sf.ToObject(vm)
-	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{})}
+	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
 	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
@@ -247,6 +262,8 @@ func (e *Engine) Run(ctx context.Context) {
 			e.save(false)
 		case fn := <-e.calls:
 			fn()
+		case <-e.inReady:
+			e.applyInbox()
 		case now := <-tick.C:
 			dt := min(now.Sub(last).Seconds(), 0.5)
 			last = now
@@ -430,7 +447,8 @@ func (e *Engine) Command(company, plant, asset, cmd string, arg *float64) Result
 	return r
 }
 
-// Ingest queues a measured value without waiting.
+// Ingest queues a measured value without waiting. Equipment reports in bursts of thousands of
+// values; they wait in an inbox the loop empties in one go.
 func (e *Engine) Ingest(company, plant, asset, field string, value any, src string) {
 	switch v := value.(type) {
 	case float64, string, bool:
@@ -439,14 +457,31 @@ func (e *Engine) Ingest(company, plant, asset, field string, value any, src stri
 	default:
 		value = fmt.Sprint(v)
 	}
+	e.inMu.Lock()
+	if len(e.inbox) < maxInbox {
+		e.inbox = append(e.inbox, ingested{company, plant, asset, field, value, src})
+	} else {
+		e.dropped++
+	}
+	e.inMu.Unlock()
 	select {
-	case e.calls <- func() {
-		if _, err := e.call("ingest", company, plant, asset, field, value, src); err != nil {
+	case e.inReady <- struct{}{}:
+	default:
+	}
+}
+
+func (e *Engine) applyInbox() {
+	e.inMu.Lock()
+	in, dropped := e.inbox, e.dropped
+	e.inbox, e.dropped = nil, 0
+	e.inMu.Unlock()
+	for _, v := range in {
+		if _, err := e.call("ingest", v.company, v.plant, v.asset, v.field, v.value, v.src); err != nil {
 			e.log.Warn("engine ingest", "err", err)
 		}
-	}:
-	default:
-		e.log.Warn("engine busy, dropped a value", "asset", asset, "field", field)
+	}
+	if dropped > 0 {
+		e.log.Warn("engine stalled, dropped values", "count", dropped)
 	}
 }
 

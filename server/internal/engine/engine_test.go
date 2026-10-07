@@ -309,3 +309,34 @@ func TestLocatedVehiclesKeepLinesSupplied(t *testing.T) {
 		t.Errorf("BF-1 was never refilled in twenty minutes, %v left", last)
 	}
 }
+
+// Equipment reports in bursts far larger than the loop's call queue; none of it is dropped.
+func TestIngestBurst(t *testing.T) {
+	e := newEngine(t)
+	go e.Run(t.Context())
+	for i := range 5000 {
+		e.Ingest("huaduan", "p1", "HP-201", "temp", 20+float64(i)/100, "test")
+	}
+	time.Sleep(500 * time.Millisecond)
+	var temp float64
+	e.do(func() {
+		f, _ := e.call("frame", "huaduan")
+		var fr struct {
+			Plants map[string]struct {
+				Assets []struct {
+					ID   string  `json:"id"`
+					Temp float64 `json:"temp"`
+				} `json:"assets"`
+			} `json:"plants"`
+		}
+		json.Unmarshal([]byte(f.String()), &fr)
+		for _, a := range fr.Plants["p1"].Assets {
+			if a.ID == "HP-201" {
+				temp = a.Temp
+			}
+		}
+	})
+	if temp != 69.99 {
+		t.Errorf("HP-201 temp %v, want the last value 69.99", temp)
+	}
+}
