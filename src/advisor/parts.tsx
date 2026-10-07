@@ -10,7 +10,8 @@ import { toNumber, type Model } from './model';
 const cache = new Map<string, Promise<Answer>>();
 
 export function runQuery(company: string, q: Query) {
-  const key = `${company}|${JSON.stringify(q)}`;
+  // the same question asked by two charts with their fields in another order is one query
+  const key = `${company}|${JSON.stringify(Object.fromEntries(Object.entries(q).sort(([a], [b]) => a.localeCompare(b))))}`;
   let p = cache.get(key);
   if (!p) {
     p = query(company, q);

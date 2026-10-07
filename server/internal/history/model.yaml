@@ -599,11 +599,11 @@ metrics:
     agg: sum
     expr: "cost"
   - name: gross_margin
-    description: "毛利（简化，元）= 销售额 − 原材料采购额 − 能源成本 − 模具成本；不含人工、折旧与运费。"
+    description: "毛利（简化，元）= 销售额 − 发运件钢材成本 − 能源成本 − 模具成本；不含人工、折旧与运费。钢材按发出的锻件计入，不按采购入库计。"
     synonyms: [毛利, 毛利润]
-    formula: "revenue - purchase_amount - power_cost - fuel_cost - tooling_cost"
+    formula: "revenue - shipped_material_cost - power_cost - fuel_cost - tooling_cost"
   - name: gross_margin_rate
     description: "毛利率（简化）= 毛利 / 销售额。"
     synonyms: [毛利率]
-    formula: "(revenue - purchase_amount - power_cost - fuel_cost - tooling_cost) / nullif(revenue, 0)"
+    formula: "(revenue - shipped_material_cost - power_cost - fuel_cost - tooling_cost) / nullif(revenue, 0)"
     additivity: non_additive
