@@ -338,10 +338,12 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 					on = 1
 				}
 			}
-			b.Queue(`INSERT INTO shipments VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+			b.Queue(`INSERT INTO shipments (shipment_no, order_no, line_id, customer, part_id, part_name, units, tonnes, trucks, carrier,
+				departed_at, eta_at, promise_at, delivered_at, hour, revenue, transit_h, delivered, on_time, status, material_cost)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 				ON CONFLICT (shipment_no) DO UPDATE SET delivered_at=$14, transit_h=$17, delivered=$18, on_time=$19, status=$20`,
 				r["no"], r["order"], r["line"], r["customer"], r["part"], r["partName"], r["units"], r["tonnes"], r["trucks"], r["carrier"],
-				dep, parse(str(r["eta"])), parse(str(r["promise"])), delivered, cal(str(r["departed"])), r["revenue"], transit, done, on, status)
+				dep, parse(str(r["eta"])), parse(str(r["promise"])), delivered, cal(str(r["departed"])), r["revenue"], transit, done, on, status, r["materialCost"])
 		}
 		for _, r := range x.Complaints {
 			var closed *time.Time

@@ -430,6 +430,8 @@ export class PlantSim {
         no: `SH-${this.ymd(e.at)}-${String(++this.seq).padStart(4, '0')}`, order: j.no, line: line.id, customer: j.customer, part: j.partNo, partName: j.name,
         units: j.good, tonnes, trucks: Math.max(1, Math.ceil(tonnes / f.truck)), carrier: f.carrier,
         departed: e.at, eta: e.at + j.transit * 3600_000, delivered: null as number | null, promise: j.promise, revenue: Math.round(j.good * j.price),
+        // the steel in these parts at the price paid for the heat's mill
+        materialCost: Math.round(((j.good * j.input) / 1000) * (line.layout.product.suppliers?.find((x) => x.name === j.supplier)?.price ?? 0)),
       };
       this.history?.shipment(line, ship);
       this.schedule({ at: e.at + road * 3600_000, kind: 'deliver', data: { line: line.id, ship, escapes: j.escapes ?? {} } });

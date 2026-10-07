@@ -477,6 +477,22 @@ metrics:
     agg: sum
     expr: "CASE WHEN delivered = 1 THEN units ELSE 0 END"
 
+  - name: shipped_material_cost
+    description: "发运件所含钢材成本（元）= 投料重量 × 该炉钢厂的采购单价。"
+    synonyms: [发运材料成本, 销售材料成本]
+    entity: shipment
+    agg: sum
+    expr: "material_cost"
+  - name: contribution_margin
+    description: "材料边际贡献（元）= 销售额 − 发运件钢材成本；可按客户、发货型号看。"
+    synonyms: [边际贡献, 材料毛利, 贡献毛益]
+    formula: "revenue - shipped_material_cost"
+  - name: contribution_margin_rate
+    description: "材料边际贡献率 = 边际贡献 / 销售额。"
+    synonyms: [边际贡献率, 材料毛利率]
+    formula: "(revenue - shipped_material_cost) / nullif(revenue, 0)"
+    additivity: non_additive
+
   # ---- quality at the customer ----
   - name: complaints
     description: "客户投诉单数。"

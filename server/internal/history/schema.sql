@@ -277,6 +277,8 @@ CREATE TABLE IF NOT EXISTS complaints (
   status       text NOT NULL
 );
 
+ALTER TABLE shipments ADD COLUMN IF NOT EXISTS material_cost double precision NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS machine_hours_hour ON machine_hours (hour);
 CREATE INDEX IF NOT EXISTS line_hours_hour ON line_hours (hour);
 CREATE INDEX IF NOT EXISTS downtime_hour ON downtime (hour);
