@@ -14,7 +14,7 @@ export function plantFigures(p: PlantRuntime): PlantFigures {
     machines++;
     if (a.state === 'running') running++;
   }
-  return { oee: k.oee, tp: k.tp, alarms: p.sim.activeAlarms().filter((a) => !a.acked).length, faults, power: k.power, running, machines };
+  return { oee: k.oee, tp: k.tp, alarms: p.sim.alarms.filter((a) => a.active).length, faults, power: k.power, running, machines };
 }
 
 /** OEE is the plain mean of the plants; counts and output are sums. */

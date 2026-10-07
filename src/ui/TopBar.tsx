@@ -109,7 +109,7 @@ function SiteSwitcher() {
           )}
           {rt.plants.map((p) => {
             const k = p.sim.kpis();
-            const alarms = p.sim.activeAlarms().filter((a) => !a.acked).length;
+            const alarms = p.sim.alarms.filter((a) => a.active).length;
             return (
               <DropdownMenuItem key={p.layout.id} onSelect={() => useUI.getState().setPlant(p.layout.id)} className={cn('gap-2.5 rounded-xl p-2', p === plant && !campus && 'bg-accent')}>
                 <SiteBadge text={p.layout.badge} />
@@ -277,10 +277,10 @@ function LiveLinks() {
   useTick();
   const { status, sources } = useLive();
   const { layout, sim } = usePlant();
+  const campus = useCampus();
   if (status !== 'on' || !sources.length) return null;
   const up = sources.filter((s) => s.connected);
   const rt = runtime();
-  const campus = useCampus();
   const here = (campus ? rt.plants.map((p) => p.sim) : [sim]).reduce((n, s) => n + [...s.assets.values()].filter((a) => liveFields(a)).length, 0);
   const place = (c: string, p: string) =>
     c === rt.bundle.company.id
