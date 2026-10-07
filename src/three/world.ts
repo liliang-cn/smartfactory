@@ -2,15 +2,22 @@
 // doors, roads, trees and neighbouring blocks. Everything is derived from the layout bounds.
 import * as THREE from 'three';
 import type { PlantLayout } from '@/core/layout';
+import type { Campus } from '@/core/campus';
 import { M, P, blk, bodyMat, canvasTex, cyl, mesh } from './kit';
 
 type Box = PlantLayout['box'];
 
-export function buildWorld(L: PlantLayout): THREE.Group {
+/**
+ * `campus`: the plant stands among the company's other plants, which share the ground, the front
+ * road and the surroundings (see buildCampus); it keeps only what lies within its own lot.
+ */
+export function buildWorld(L: PlantLayout, campus = false): THREE.Group {
   const g = new THREE.Group();
   const { box } = L;
-  const ground = mesh(g, new THREE.PlaneGeometry(1400, 1400), new THREE.MeshStandardMaterial({ color: P.ground, roughness: 1 }), 0, -0.32, 0, false);
-  ground.rotation.x = -Math.PI / 2;
+  if (!campus) {
+    const ground = mesh(g, new THREE.PlaneGeometry(1400, 1400), new THREE.MeshStandardMaterial({ color: P.ground, roughness: 1 }), 0, -0.32, 0, false);
+    ground.rotation.x = -Math.PI / 2;
+  }
 
   const W = box.x1 - box.x0;
   const D = box.z1 - box.z0;
@@ -24,9 +31,9 @@ export function buildWorld(L: PlantLayout): THREE.Group {
 
   if (outdoor) buildFence(g, box);
   else buildWalls(g, box);
-  buildRoads(g, L);
-  buildTrees(g, L);
-  buildNeighbourhood(g, box);
+  buildRoads(g, L, campus);
+  buildTrees(g, L, campus);
+  if (!campus) buildNeighbourhood(g, box);
   return g;
 }
 
@@ -194,9 +201,7 @@ function buildFence(g: THREE.Object3D, box: Box) {
   run(box.x1, box.z0, box.x1, box.z1);
 }
 
-function buildRoads(g: THREE.Object3D, L: PlantLayout) {
-  const { box, roads } = L;
-  const roadTex = (len: number, horizontal: boolean) => canvasTex(horizontal ? 2048 : 128, horizontal ? 128 : 2048, (c, w, h) => {
+const roadTex = (len: number, horizontal: boolean) => canvasTex(horizontal ? 2048 : 128, horizontal ? 128 : 2048, (c, w, h) => {
     c.fillStyle = P.road;
     c.fillRect(0, 0, w, h);
     c.fillStyle = '#ffffff';
@@ -208,37 +213,50 @@ function buildRoads(g: THREE.Object3D, L: PlantLayout) {
     c.fillStyle = 'rgba(255,255,255,0.9)';
     if (horizontal) { c.fillRect(0, 6, w, 4); c.fillRect(0, h - 10, w, 4); } else { c.fillRect(6, 0, 4, h); c.fillRect(w - 10, 0, 4, h); }
   });
-  const road = (x: number, z: number, w: number, d: number, horizontal: boolean) => {
-    const m = mesh(g, new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: roadTex(horizontal ? w : d, horizontal), roughness: 0.95 }), x, -0.31, z, false);
-    m.rotation.x = -Math.PI / 2;
-    m.receiveShadow = true;
-  };
+function road(g: THREE.Object3D, x: number, z: number, w: number, d: number, horizontal: boolean) {
+  const m = mesh(g, new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: roadTex(horizontal ? w : d, horizontal), roughness: 0.95 }), x, -0.31, z, false);
+  m.rotation.x = -Math.PI / 2;
+  m.receiveShadow = true;
+}
+const pave = new THREE.MeshStandardMaterial({ color: '#f5f6fb', roughness: 0.9 });
+
+/** The road in front of a plant (or a row of plants) with its two pavements. */
+function frontRoad(g: THREE.Object3D, x0: number, x1: number, z: number) {
+  road(g, (x0 + x1) / 2, z, x1 - x0, 8, true);
+  blk(g, pave, x1 - x0, 0.12, 1.4, (x0 + x1) / 2, -0.32, z - 4.7, 0.05);
+  blk(g, pave, x1 - x0, 0.12, 1.4, (x0 + x1) / 2, -0.32, z + 4.7, 0.05);
+}
+
+function buildRoads(g: THREE.Object3D, L: PlantLayout, campus: boolean) {
+  const { box, roads } = L;
   const span = box.x1 - box.x0 + 400;
-  const back = box.z0 - 80;
+  const back = campus ? box.z0 - 10 : box.z0 - 80;
   const sideLen = roads.front + 4 - back;
-  road((box.x0 + box.x1) / 2, roads.front, span, 8, true);
-  road(roads.left, (roads.front + back) / 2 - 2, 8, sideLen, false);
-  road(roads.right, (roads.front + back) / 2 - 2, 8, sideLen, false);
-  const pave = new THREE.MeshStandardMaterial({ color: '#f5f6fb', roughness: 0.9 });
-  blk(g, pave, span, 0.12, 1.4, (box.x0 + box.x1) / 2, -0.32, roads.front - 4.7, 0.05);
-  blk(g, pave, span, 0.12, 1.4, (box.x0 + box.x1) / 2, -0.32, roads.front + 4.7, 0.05);
+  if (!campus) frontRoad(g, (box.x0 + box.x1) / 2 - span / 2, (box.x0 + box.x1) / 2 + span / 2, roads.front);
+  road(g, roads.left, (roads.front + back) / 2 - 2, 8, sideLen, false);
+  road(g, roads.right, (roads.front + back) / 2 - 2, 8, sideLen, false);
   const midZ = (box.z0 + box.z1) / 2;
   blk(g, pave, box.x0 - roads.left - 4, 0.1, 12, (box.x0 + roads.left + 4) / 2, -0.32, midZ, 0.3);
   blk(g, pave, roads.right - 4 - box.x1, 0.1, 12, (box.x1 + roads.right - 4) / 2, -0.32, midZ, 0.3);
   const grass = (x: number, z: number, w: number, d: number) => blk(g, M.mint, w, 0.1, d, x, -0.32, z, 0.4);
-  grass((box.x0 + box.x1) / 2, roads.front + 9, span * 0.7, 7);
+  if (!campus) grass((box.x0 + box.x1) / 2, roads.front + 9, span * 0.7, 7);
   grass(roads.left - 8, midZ, 7, box.z1 - box.z0 + 20);
   grass(roads.right + 8, midZ, 7, box.z1 - box.z0 + 20);
   grass((box.x0 + box.x1) / 2, box.z0 - 5, box.x1 - box.x0, 4);
 }
 
-function buildTrees(g: THREE.Object3D, L: PlantLayout) {
+const j = () => (Math.random() - 0.5) * 2;
+
+function buildTrees(g: THREE.Object3D, L: PlantLayout, campus: boolean) {
   const { box, roads } = L;
   const spots: [number, number][] = [];
-  const j = () => (Math.random() - 0.5) * 2;
-  for (let x = box.x0 - 70; x <= box.x1 + 70; x += 7) spots.push([x + j(), roads.front + 9 + j()]);
+  if (!campus) for (let x = box.x0 - 70; x <= box.x1 + 70; x += 7) spots.push([x + j(), roads.front + 9 + j()]);
   for (let z = box.z0 - 10; z <= box.z1 + 2; z += 6) { spots.push([roads.left - 8 + j(), z]); spots.push([roads.right + 8 + j(), z]); }
   for (let x = box.x0; x <= box.x1; x += 5.5) spots.push([x, box.z0 - 5 + j() * 0.5]);
+  trees(g, spots);
+}
+
+function trees(g: THREE.Object3D, spots: [number, number][]) {
   const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 1.4, 8), M.trunk, spots.length);
   const crown = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 14), M.tree, spots.length);
   const m = new THREE.Matrix4();
@@ -267,4 +285,51 @@ function buildNeighbourhood(g: THREE.Object3D, box: Box) {
     blk(g, M.blue, w + 0.2, 0.3, d + 0.2, x, h - 0.3, z, 0.1);
     for (let k = 0; k < 3; k++) cyl(g, M.metal, 0.8, 0.5, x - w / 3 + k * (w / 3), h, z, 16);
   });
+}
+
+/**
+ * What the plants of a company share when shown together (each plant's own lot comes from
+ * buildWorld(L, true)): the ground, one front road per row with its grass and trees, the plant's
+ * name planted in the grass before it, and the neighbourhood around the whole site.
+ */
+export function buildCampus(c: Campus): THREE.Group {
+  const g = new THREE.Group();
+  const { bounds } = c;
+  const ground = mesh(g, new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: P.ground, roughness: 1 }), 0, -0.32, 0, false);
+  ground.rotation.x = -Math.PI / 2;
+  const spots: [number, number][] = [];
+  for (const row of c.rows) {
+    const x0 = bounds.x0 - 120;
+    const x1 = bounds.x1 + 120;
+    frontRoad(g, x0, x1, row.front);
+    blk(g, M.mint, x1 - x0, 0.1, 7, (x0 + x1) / 2, -0.32, row.front + 9, 0.4);
+    const inRow = c.slots.filter((s) => Math.abs(s.oz + s.layout.roads.front - row.front) < 0.01);
+    const sideRoads = inRow.flatMap((s) => [s.ox + s.layout.roads.left, s.ox + s.layout.roads.right]);
+    const signs = inRow.map((s) => [s.ox + (s.layout.box.x0 + s.layout.box.x1) / 2 - 24, s.ox + (s.layout.box.x0 + s.layout.box.x1) / 2 + 24]);
+    for (let x = x0; x <= x1; x += 7) {
+      if (sideRoads.some((r) => Math.abs(x - r) < 6) || signs.some(([a, b]) => x > a && x < b)) continue;
+      spots.push([x + j(), row.front + 9 + j()]);
+    }
+    for (const s of inRow) sign(g, `${s.layout.name}  ${s.layout.hall}`, s.ox + (s.layout.box.x0 + s.layout.box.x1) / 2, row.front + 9);
+  }
+  trees(g, spots);
+  buildNeighbourhood(g, { x0: bounds.x0 + 16, x1: bounds.x1 - 16, z0: bounds.z0 + 14, z1: bounds.z1 });
+  return g;
+}
+
+/** A plant's name laid out in the grass strip in front of it, readable from the overview. */
+function sign(g: THREE.Object3D, text: string, x: number, z: number) {
+  const W = 46;
+  const D = 6;
+  const S = 40;
+  const tex = canvasTex(W * S, D * S, (c, w, h) => {
+    c.font = `800 ${4.2 * S}px "Plus Jakarta Sans Variable", "PingFang SC", sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = 'rgba(31,63,176,0.8)';
+    c.fillText(text, w / 2, h / 2 + 0.2 * S, w * 0.96);
+  });
+  const m = mesh(g, new THREE.PlaneGeometry(W, D), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }), x, -0.2, z, false);
+  m.rotation.x = -Math.PI / 2;
+  m.receiveShadow = false;
 }

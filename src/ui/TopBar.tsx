@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { BarChart3Icon, BellIcon, BoxIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
+import { BarChart3Icon, BellIcon, BoxIcon, CheckIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Kbd } from '@/components/ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 import { useBiz } from '@/advisor/store';
 import { useLive } from '@/live/client';
 import { liveFields } from '@/sim/plant';
-import { groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
+import { ALL, goToAsset, groupsOf, runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
+import { groupFigures } from './group';
 import { CHIP, STATE_LABEL, hhmm } from './status';
 
 function Brand() {
@@ -29,7 +30,7 @@ function Brand() {
   );
 }
 
-function SiteBadge({ text, tone = 'primary' }: { text: string; tone?: 'primary' | 'ink' }) {
+function SiteBadge({ text, tone = 'primary' }: { text: React.ReactNode; tone?: 'primary' | 'ink' }) {
   return (
     <span className={cn('grid h-[30px] min-w-[34px] shrink-0 place-items-center rounded-lg px-1 text-xs font-extrabold text-primary-foreground', tone === 'ink' ? 'bg-foreground' : 'bg-primary')}>
       {text}
@@ -37,13 +38,18 @@ function SiteBadge({ text, tone = 'primary' }: { text: string; tone?: 'primary' 
   );
 }
 
+const AllBadge = () => <SiteBadge text={<LayoutGridIcon className="size-4" />} />;
+
 /** Company switch reloads with another config; plant switch is instant (all plants are simulated). */
 function SiteSwitcher() {
   useTick();
   const plant = usePlant();
+  const campus = useCampus();
   const rt = runtime();
   const { company, directory } = rt.bundle;
   const L = plant.layout;
+  const lines = rt.plants.reduce((n, p) => n + p.layout.lines.length, 0);
+  const group = rt.plants.length > 1 ? groupFigures(rt.plants) : null;
   const goCompany = (id: string) => {
     if (id === company.id) return;
     const url = new URL(location.href);
@@ -76,23 +82,36 @@ function SiteSwitcher() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="h-11 min-w-0 shrink gap-2.5 rounded-xl pl-1.5 pr-3 max-md:h-[38px] max-md:pr-1.5" aria-label="切换工厂">
-            <SiteBadge text={L.badge} />
+            {campus ? <AllBadge /> : <SiteBadge text={L.badge} />}
             <span className="grid min-w-0 text-left leading-tight max-lg:hidden">
-              <b className="truncate text-[13.5px]">{L.name} {L.hall}</b>
-              <small className="truncate text-[11.5px] font-normal text-muted-foreground max-xl:hidden">{L.sub}</small>
+              <b className="truncate text-[13.5px]">{campus ? '全部工厂' : `${L.name} ${L.hall}`}</b>
+              <small className="truncate text-[11.5px] font-normal text-muted-foreground max-xl:hidden">{campus ? `${rt.plants.length} 个工厂 · ${lines} 条产线` : L.sub}</small>
             </span>
             <ChevronDownIcon className="text-muted-foreground max-md:hidden" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[360px] rounded-2xl p-2 shadow-float max-md:w-[calc(100vw-20px)]">
           <DropdownMenuLabel className="flex justify-between text-xs text-muted-foreground">
-            <span>{company.name}，{rt.plants.length} 个工厂，{rt.plants.reduce((n, p) => n + p.layout.lines.length, 0)} 条产线</span>
+            <span>{company.name}，{rt.plants.length} 个工厂，{lines} 条产线</span>
           </DropdownMenuLabel>
+          {group && (
+            <>
+              <DropdownMenuItem onSelect={() => useUI.getState().setPlant(ALL)} className={cn('gap-2.5 rounded-xl p-2', campus && 'bg-accent')}>
+                <AllBadge />
+                <b className="flex-1 truncate text-[13.5px]">全部工厂</b>
+                <span className="grid justify-items-end text-[11px] leading-tight tabular-nums">
+                  <b className="text-[12.5px]">OEE {(group.oee * 100).toFixed(0)}%</b>
+                  <span className={group.alarms ? 'font-bold text-destructive' : 'text-muted-foreground'}>{group.alarms ? `${group.alarms} 条报警` : '无报警'}</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           {rt.plants.map((p) => {
             const k = p.sim.kpis();
             const alarms = p.sim.activeAlarms().filter((a) => !a.acked).length;
             return (
-              <DropdownMenuItem key={p.layout.id} onSelect={() => useUI.getState().setPlant(p.layout.id)} className={cn('gap-2.5 rounded-xl p-2', p === plant && 'bg-accent')}>
+              <DropdownMenuItem key={p.layout.id} onSelect={() => useUI.getState().setPlant(p.layout.id)} className={cn('gap-2.5 rounded-xl p-2', p === plant && !campus && 'bg-accent')}>
                 <SiteBadge text={p.layout.badge} />
                 <span className="grid min-w-0 flex-1 leading-tight">
                   <b className="truncate text-[13.5px]">{p.layout.name} {p.layout.hall}</b>
@@ -124,8 +143,10 @@ function Search() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   const plant = usePlant();
+  const campus = useCampus();
   const assets = [...plant.sim.assets.values()];
   const example = assets.find((a) => a.type === 'station');
+  const plants = campus ? runtime().plants : [plant];
   return (
     <>
       <button
@@ -143,13 +164,13 @@ function Search() {
           <CommandInput placeholder={`输入编号或名称，如 ${example?.id ?? 'CV-1'}、${example?.spec?.label ?? '输送线'}、AGV`} />
           <CommandList className="max-h-[60dvh]">
             <CommandEmpty>没有匹配的设备，试试 RB、AGV、TRK 这样的编号前缀</CommandEmpty>
-            {groupsOf(plant.layout).map((g) => (
-              <CommandGroup key={g.id} heading={`${g.name}${g.note ? ` ${g.note}` : ''}`}>
-                {assets.filter((a) => a.group === g.id).map((a) => (
+            {plants.flatMap((p) => groupsOf(p.layout).map((g) => (
+              <CommandGroup key={`${p.layout.id}/${g.id}`} heading={`${campus ? `${p.layout.name} · ` : ''}${g.name}${g.note ? ` ${g.note}` : ''}`}>
+                {[...p.sim.assets.values()].filter((a) => a.group === g.id).map((a) => (
                   <CommandItem
                     key={a.id}
-                    value={`${a.id} ${a.name} ${a.spec?.label ?? ''} ${a.line?.name ?? ''}`}
-                    onSelect={() => { setOpen(false); useUI.getState().select(a.id, true); }}
+                    value={`${campus ? `${p.layout.name} ` : ''}${a.id} ${a.name} ${a.spec?.label ?? ''} ${a.line?.name ?? ''}`}
+                    onSelect={() => { setOpen(false); if (campus) goToAsset(p.layout.id, a.id); else useUI.getState().select(a.id, true); }}
                     className="gap-2.5 rounded-lg py-2"
                   >
                     <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
@@ -158,7 +179,7 @@ function Search() {
                   </CommandItem>
                 ))}
               </CommandGroup>
-            ))}
+            )))}
           </CommandList>
         </Command>
       </CommandDialog>
@@ -259,7 +280,8 @@ function LiveLinks() {
   if (status !== 'on' || !sources.length) return null;
   const up = sources.filter((s) => s.connected);
   const rt = runtime();
-  const here = [...sim.assets.values()].filter((a) => liveFields(a)).length;
+  const campus = useCampus();
+  const here = (campus ? rt.plants.map((p) => p.sim) : [sim]).reduce((n, s) => n + [...s.assets.values()].filter((a) => liveFields(a)).length, 0);
   const place = (c: string, p: string) =>
     c === rt.bundle.company.id
       ? rt.byId[p]?.layout.name ?? p
@@ -324,7 +346,8 @@ function LiveLinks() {
 function AlarmBell() {
   useTick();
   const { sim } = usePlant();
-  const unacked = sim.alarms.filter((a) => !a.acked).length;
+  const campus = useCampus();
+  const unacked = (campus ? runtime().plants.map((p) => p.sim) : [sim]).reduce((n, s) => n + s.alarms.filter((a) => !a.acked).length, 0);
   return (
     <Button variant="ghost" size="icon-lg" className="relative rounded-xl max-md:hidden" aria-label={`报警，${unacked} 条未确认`} onClick={() => useUI.getState().setFleetTab('alarms', true)}>
       <BellIcon className="size-5" />

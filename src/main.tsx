@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { ConfigError, loadCompany } from '@/config/loader';
-import { initRuntime, useUI } from '@/state/store';
+import { ALL, initRuntime, useUI } from '@/state/store';
 import { startLive } from '@/live/client';
 
 const root = createRoot(document.getElementById('root')!);
@@ -28,8 +28,8 @@ const params = new URLSearchParams(location.search);
 loadCompany(params.get('company'))
   .then(async (bundle) => {
     const rt = initRuntime(bundle);
-    const plant = rt.byId[params.get('plant') ?? ''] ?? rt.plants[0];
-    useUI.getState().setPlant(plant.layout.id);
+    const wanted = params.get('plant') ?? '';
+    useUI.getState().setPlant(wanted === ALL && rt.plants.length > 1 ? ALL : (rt.byId[wanted] ?? rt.plants[0]).layout.id);
     startLive();
     // ?asset=HP-101 opens with that machine selected once the scene is up
     const asset = params.get('asset');

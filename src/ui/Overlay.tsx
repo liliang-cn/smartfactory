@@ -1,18 +1,19 @@
 // Floating map chrome: KPI cards, view-mode switch with legend, camera buttons, hover tip.
 import { useRef } from 'react';
-import { BadgeCheckIcon, GaugeIcon, HomeIcon, MinusIcon, PackageIcon, PlusIcon, RotateCcwIcon, RotateCwIcon, ZapIcon } from 'lucide-react';
+import { BadgeCheckIcon, BellIcon, GaugeIcon, OctagonAlertIcon, HomeIcon, MinusIcon, PackageIcon, PlusIcon, RotateCcwIcon, RotateCwIcon, ZapIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { Kpis as KpiData } from '@/sim/types';
-import { usePlant, useTick, useUI, type CamOp, type ViewMode } from '@/state/store';
+import { runtime, useCampus, usePlant, useTick, useUI, type CamOp, type ViewMode } from '@/state/store';
+import { groupFigures } from './group';
 import { STATE_LABEL, pct } from './status';
 
-function KpiCard({ icon, label, value, delta, sub }: { icon: React.ReactNode; label: string; value: string; delta?: number | null; sub: string }) {
+function KpiCard({ icon, label, value, delta, sub, tone }: { icon: React.ReactNode; label: string; value: string; delta?: number | null; sub: React.ReactNode; tone?: 'bad' }) {
   return (
     <div className="flex min-w-[186px] snap-start items-center gap-3 rounded-2xl bg-card py-3 pl-3 pr-4 shadow-float max-md:min-w-[158px] max-md:py-2 max-md:pl-2">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-primary max-md:size-8 [&>svg]:size-[22px] max-md:[&>svg]:size-[18px]">{icon}</span>
+      <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-primary max-md:size-8 [&>svg]:size-[22px] max-md:[&>svg]:size-[18px]', tone === 'bad' && 'bg-danger-soft text-destructive')}>{icon}</span>
       <span className="grid gap-px leading-tight">
         <small className="whitespace-nowrap text-xs text-muted-foreground">{label}</small>
         <span className="flex items-baseline gap-2 whitespace-nowrap">
@@ -52,11 +53,44 @@ export function Kpis() {
   );
 }
 
+/** Per-plant breakdown under a group figure: badge and value for each plant. */
+function Breakdown({ items }: { items: { id: string; badge: string; value: string; bad?: boolean }[] }) {
+  return (
+    <span className="flex gap-2">
+      {items.map((x) => (
+        <span key={x.id} className="flex items-baseline gap-1">
+          <span className="text-muted-foreground/70">{x.badge}</span>
+          <b className={cn('font-bold text-foreground/80', x.bad && 'text-destructive')}>{x.value}</b>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** The company's figures across its plants, each with the plants side by side. */
+export function GroupKpis() {
+  useTick();
+  const plants = runtime().plants;
+  const g = groupFigures(plants);
+  const L = plants[0].layout;
+  const items = (fmt: (f: (typeof g.per)[number]['f']) => string, bad?: (f: (typeof g.per)[number]['f']) => boolean) =>
+    g.per.map(({ p, f }) => ({ id: p.layout.id, badge: p.layout.badge, value: fmt(f), bad: bad?.(f) }));
+  return (
+    <section className="absolute left-5 top-20 z-20 flex gap-3 max-md:inset-x-0 max-md:top-[calc(62px+env(safe-area-inset-top))] max-md:snap-x max-md:snap-mandatory max-md:gap-2 max-md:overflow-x-auto max-md:px-2.5 max-md:pb-2.5 max-md:[scrollbar-width:none]">
+      <KpiCard icon={<GaugeIcon />} label={`集团 ${L.terms.oee ?? '综合设备效率 OEE'}`} value={pct(g.oee, 1)} sub={<Breakdown items={items((f) => pct(f.oee))} />} />
+      <KpiCard icon={<PackageIcon />} label={L.terms.throughput ?? '每小时产量'} value={`${g.tp}`} sub={<Breakdown items={items((f) => `${f.tp}`)} />} />
+      <KpiCard icon={<BellIcon />} label="报警" value={`${g.alarms}`} tone={g.alarms ? 'bad' : undefined} sub={<Breakdown items={items((f) => `${f.alarms}`, (f) => f.alarms > 0)} />} />
+      <KpiCard icon={<OctagonAlertIcon />} label="故障设备" value={`${g.faults}`} tone={g.faults ? 'bad' : undefined} sub={<Breakdown items={items((f) => `${f.faults}`, (f) => f.faults > 0)} />} />
+    </section>
+  );
+}
+
 const RAMP = 'linear-gradient(90deg,#4f7cff,#69c8ff,#7fe0a8,#ffd24a,#ff8a3d,#ef4444)';
 
 export function ViewSwitch() {
   const mode = useUI((s) => s.mode);
   const labels = useUI((s) => s.labels);
+  const campus = useCampus();
   return (
     <div className="absolute left-5 top-[166px] z-20 grid justify-items-start gap-2.5 max-md:left-2.5 max-md:top-[calc(132px+env(safe-area-inset-top))]">
       <div className="flex items-center gap-2 rounded-[13px] bg-card p-[5px] shadow-float">
@@ -67,13 +101,13 @@ export function ViewSwitch() {
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <span className="h-5 w-px bg-border" />
+        <span className={cn('h-5 w-px bg-border', campus && 'hidden')} />
         <Button
           variant="ghost"
           size="sm"
           aria-pressed={labels}
           onClick={() => useUI.getState().toggleLabels()}
-          className={cn('h-[30px] rounded-lg text-[12.5px] font-bold text-muted-foreground', labels && 'bg-brand-soft text-primary hover:bg-brand-soft')}
+          className={cn('h-[30px] rounded-lg text-[12.5px] font-bold text-muted-foreground', labels && 'bg-brand-soft text-primary hover:bg-brand-soft', campus && 'hidden')}
         >
           全部标签
         </Button>

@@ -2,12 +2,13 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { CampusScene } from '@/scene/CampusScene';
 import { Scene } from '@/scene/Scene';
-import { runtime, usePlant, useTick, useUI } from '@/state/store';
+import { runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
 import { Inspector } from '@/ui/Inspector';
 import { Labels } from '@/ui/Labels';
-import { HoverTip, Kpis, MapControls, ViewSwitch } from '@/ui/Overlay';
-import { Fleet, Tracker } from '@/ui/Panels';
+import { GroupKpis, HoverTip, Kpis, MapControls, ViewSwitch } from '@/ui/Overlay';
+import { Fleet, GroupFleet, Tracker } from '@/ui/Panels';
 import { TopBar } from '@/ui/TopBar';
 import { useBiz } from '@/advisor/store';
 
@@ -24,6 +25,7 @@ function BusinessView() {
 function FaultToasts() {
   useTick();
   const current = usePlant();
+  const campus = useCampus();
   const seen = useRef(new WeakMap<object, number>());
   useEffect(() => {
     for (const p of runtime().plants) {
@@ -34,7 +36,7 @@ function FaultToasts() {
       for (const al of sim.alarms) {
         if (al.id <= last) break;
         if (al.prio !== 1) continue;
-        const elsewhere = p !== current;
+        const elsewhere = campus || p !== current;
         toast.error(`${elsewhere ? `${p.layout.name} ` : ''}${al.asset}：${al.text}`, {
           duration: 5000,
           action: {
@@ -76,17 +78,18 @@ function useShortcuts() {
 export default function App() {
   useShortcuts();
   const plant = usePlant();
+  const campus = useCampus();
   return (
     <TooltipProvider delayDuration={300}>
       <div className="fixed inset-0 overflow-hidden bg-stage">
-        <Scene key={plant.layout.id} plant={plant} />
-        <Labels key={`labels-${plant.layout.id}`} />
+        {campus ? <CampusScene /> : <Scene key={plant.layout.id} plant={plant} />}
+        {!campus && <Labels key={`labels-${plant.layout.id}`} />}
         <TopBar />
-        <Kpis />
+        {campus ? <GroupKpis /> : <Kpis />}
         <ViewSwitch />
         <MapControls />
-        <Tracker />
-        <Fleet />
+        {!campus && <Tracker />}
+        {campus ? <GroupFleet /> : <Fleet />}
         <Inspector />
         <HoverTip />
         <BusinessView />

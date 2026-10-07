@@ -23,6 +23,8 @@ export function initRuntime(bundle: CompanyBundle): Runtime {
 }
 
 export const runtime = (): Runtime => rt!;
+/** The plant id that shows every plant of the company together. */
+export const ALL = 'all';
 /** The plant on screen (non-hook; safe inside event handlers and frame loops). */
 export const currentPlant = (): PlantRuntime => rt!.byId[useUI.getState().plantId] ?? rt!.plants[0];
 export const currentSim = () => currentPlant().sim;
@@ -82,16 +84,23 @@ export const useUI = create<UIState>()((set, get) => ({
 
   setPlant(id) {
     const p = rt?.byId[id];
-    if (!p) return;
+    const all = id === ALL && (rt?.plants.length ?? 0) > 1;
+    if (!p && !all) return;
     document.body.style.cursor = '';
-    set({ plantId: id, selected: null, hovered: null, tip: null, follow: false, trackerLine: p.layout.lines[0].id, sheetOpen: false });
+    const tab = get().fleetTab;
+    set({
+      plantId: id, selected: null, hovered: null, tip: null, follow: false, sheetOpen: false,
+      ...(p ? { trackerLine: p.layout.lines[0].id } : {}),
+      ...(all ? { fleetTab: 'plants' } : tab === 'plants' ? { fleetTab: 'machines' } : {}),
+    });
     const url = new URL(location.href);
     url.searchParams.set('company', rt!.bundle.company.id);
     url.searchParams.set('plant', id);
     history.replaceState(null, '', url);
-    document.title = `SmartFactory ${p.layout.name}`;
+    document.title = `SmartFactory ${p ? p.layout.name : rt!.bundle.company.name}`;
   },
   select(id, focus = false) {
+    if (id && get().plantId === ALL) return;
     const sim = currentSim();
     if (id && !sim.assets.has(id)) return;
     const a = id ? sim.assets.get(id)! : null;
@@ -139,6 +148,17 @@ export const useUI = create<UIState>()((set, get) => ({
 
 /** Re-render the calling component whenever the sims publish a new snapshot. */
 export const useTick = () => useUI((s) => s.tick);
+
+/** Every plant of the company is on screen together. */
+export const useCampus = () => useUI((s) => s.plantId === ALL);
+
+/** Opens a plant and selects one of its assets once its scene is up. */
+export function goToAsset(plantId: string, asset: string) {
+  const ui = useUI.getState();
+  const switching = ui.plantId !== plantId;
+  if (switching) ui.setPlant(plantId);
+  setTimeout(() => useUI.getState().select(asset, true), switching ? 400 : 0);
+}
 
 /** The plant on screen; re-renders when it changes. */
 export function usePlant(): PlantRuntime {

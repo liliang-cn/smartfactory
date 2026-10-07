@@ -13,11 +13,11 @@ import { CameraRig } from './CameraRig';
 import { LabelProjector } from './LabelProjector';
 import { Products } from './Products';
 
-const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+export const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
 // Steps every plant of the company with the frame clock (so off-screen plants keep producing
 // and alarming) and tells React to re-read them 4 times a second.
-function SimLoop({ active }: { active: PlantRuntime }) {
+export function SimLoop({ active }: { active: PlantRuntime[] }) {
   const acc = useRef(0);
   useFrame((_, delta) => {
     const dt = Math.min(0.1, delta);
@@ -27,8 +27,8 @@ function SimLoop({ active }: { active: PlantRuntime }) {
       for (const p of runtime().plants) p.sim.step(h);
       simDt -= h;
     }
-    // Only the plant on screen animates its events.
-    for (const p of runtime().plants) if (p !== active) p.sim.events.length = 0;
+    // Only plants whose parts are drawn animate their events.
+    for (const p of runtime().plants) if (!active.includes(p)) p.sim.events.length = 0;
     acc.current += dt;
     if (acc.current > 0.25) {
       acc.current = 0;
@@ -38,7 +38,7 @@ function SimLoop({ active }: { active: PlantRuntime }) {
   return null;
 }
 
-function Environment() {
+export function Environment() {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   useMemo(() => {
@@ -104,8 +104,8 @@ export function Scene({ plant }: { plant: PlantRuntime }) {
         screenSpacePanning={false}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       />
-      <SimLoop active={plant} />
-      <CameraRig plant={plant} />
+      <SimLoop active={[plant]} />
+      <CameraRig home={(aspect) => homeView(plant.layout, aspect)} />
       <LabelProjector />
       <World plant={plant} />
       {assets.map((a) => <AssetNode key={a.id} asset={a} plant={plant} />)}
