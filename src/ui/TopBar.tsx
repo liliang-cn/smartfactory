@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BellIcon, CheckIcon, ChevronDownIcon, LightbulbIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
+import { BarChart3Icon, BellIcon, CheckIcon, ChevronDownIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -10,6 +10,7 @@ import {
 import { Kbd } from '@/components/ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { useBiz } from '@/advisor/store';
 import { useLive } from '@/live/client';
 import { liveFields } from '@/sim/plant';
 import { groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
@@ -213,22 +214,29 @@ const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcu
  * Shown when the app is served by the SmartFactory server: the protocol links to real equipment
  * (shared by the whole server) and which machines each one feeds.
  */
-/** The advisor console (DataIntelligence) that reads this company's history, when there is one. */
+/** The company's business view (figures, advisor, consulting record), for companies that have an advisor. */
 let advisors: Promise<Record<string, string>> | null = null;
-function AdvisorLink() {
+function BusinessEntry() {
   const company = runtime().bundle.company.id;
-  const [url, setUrl] = useState<string>();
+  const [has, setHas] = useState(false);
+  const open = useBiz((s) => s.open);
   useEffect(() => {
     advisors ??= fetch('/api/advisors').then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
-    advisors.then((m) => setUrl(m?.[company]));
+    advisors.then((m) => {
+      setHas(!!m?.[company]);
+      if (!m?.[company]) useBiz.getState().setOpen(false);
+    });
   }, [company]);
-  if (!url) return null;
+  if (!has) return null;
   return (
-    <Button asChild variant="outline" className="h-9 gap-1.5 px-3 max-md:size-9 max-md:p-0">
-      <a href={url} target="_blank" rel="noreferrer" title="经营顾问：用历史数据找原因、提方案、验收效果">
-        <LightbulbIcon className="size-4" />
-        <span className="max-md:hidden">顾问</span>
-      </a>
+    <Button
+      variant="outline"
+      aria-pressed={open}
+      onClick={() => useBiz.getState().setOpen(!open)}
+      className={cn('h-9 gap-1.5 rounded-xl px-3 font-bold max-md:size-[38px] max-md:p-0', open && 'border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground')}
+    >
+      <BarChart3Icon className="size-4" />
+      <span className="max-md:hidden">经营</span>
     </Button>
   );
 }
@@ -327,7 +335,7 @@ export function TopBar() {
       <div className="flex-1 max-md:hidden" />
       <SpeedToggle />
       <LiveLinks />
-      <AdvisorLink />
+      <BusinessEntry />
       <LiveClock />
       <AlarmBell />
       <div className="flex items-center gap-2.5 max-xl:hidden">

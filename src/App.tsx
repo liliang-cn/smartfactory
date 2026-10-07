@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -9,6 +9,16 @@ import { Labels } from '@/ui/Labels';
 import { HoverTip, Kpis, MapControls, ViewSwitch } from '@/ui/Overlay';
 import { Fleet, Tracker } from '@/ui/Panels';
 import { TopBar } from '@/ui/TopBar';
+import { useBiz } from '@/advisor/store';
+
+const Business = lazy(() => import('@/advisor/Business'));
+
+/** The business view loads its charts and markdown only when first opened. */
+function BusinessView() {
+  const open = useBiz((s) => s.open);
+  if (!open) return null;
+  return <Suspense fallback={null}><Business /></Suspense>;
+}
 
 // Raise a toast for every new fault in any plant of the company; the action jumps there.
 function FaultToasts() {
@@ -79,6 +89,7 @@ export default function App() {
         <Fleet />
         <Inspector />
         <HoverTip />
+        <BusinessView />
         <FaultToasts />
         <Toaster theme="light" position="top-center" offset={{ top: 84 }} mobileOffset={{ top: 'calc(176px + env(safe-area-inset-top))' }} />
       </div>

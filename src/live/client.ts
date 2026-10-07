@@ -58,6 +58,11 @@ function token(): string | null {
   try { return sessionStorage.getItem('sf-token'); } catch { return null; }
 }
 
+/** The operator token this tab was opened with, if any. */
+export function operatorToken(): string | null {
+  try { return sessionStorage.getItem('sf-token'); } catch { return null; }
+}
+
 const send = (m: object) => {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
 };
