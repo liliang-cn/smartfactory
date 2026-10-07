@@ -13,7 +13,7 @@ import { useBiz, type BizSection } from './store';
 
 const SERIES_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-5)', 'var(--chart-4)', '#0ea5b7', '#8a94b3'];
 
-export interface Window { from: string; to: string; where: Where[]; prev: Where[] }
+export interface Window { from: string; to: string; prevFrom: string; where: Where[]; prev: Where[] }
 
 export function useWindow(): Window {
   const plant = useBiz((s) => s.plant);
@@ -24,7 +24,7 @@ export function useWindow(): Window {
     const [to, from, pfrom] = [at(0), at(days), at(days * 2)];
     const p: Where[] = plant ? [{ dimension: 'plant_name', op: '=', values: [plant] }] : [];
     return {
-      from, to,
+      from, to, prevFrom: pfrom,
       where: [{ dimension: 'time', op: '>=', values: [from] }, { dimension: 'time', op: '<', values: [to] }, ...p],
       prev: [{ dimension: 'time', op: '>=', values: [pfrom] }, { dimension: 'time', op: '<', values: [from] }, ...p],
     };
@@ -136,6 +136,10 @@ function KpiRow({ items: all }: { items: KpiSpec[] }) {
   const metrics = items.map((k) => k[0]);
   const now = useMerged(company, metrics, { where: w.where });
   const before = useMerged(company, metrics, { where: w.prev });
+  // compare only with a previous window the history fully covers
+  const span = useMerged(company, ['planned_hours'], { group_by: ['time'], grain: 'day' });
+  const first = span.rows.map((r) => String(r.time).slice(0, 10)).sort()[0];
+  const comparable = !!first && first <= w.prevFrom;
   const daily = useMerged(company, metrics, { group_by: ['time'], grain: 'day', where: w.where });
   const cur = now.rows[0] ?? {};
   const prev = before.rows[0] ?? {};
@@ -144,7 +148,7 @@ function KpiRow({ items: all }: { items: KpiSpec[] }) {
     <div className={cn('grid grid-cols-2 gap-3 max-md:gap-2', items.length > 6 ? 'sm:grid-cols-4 2xl:grid-cols-8' : 'sm:grid-cols-3 xl:grid-cols-6')}>
       {items.map(([m, better, title]) => now.loading
         ? <Skeleton key={m} className="h-[104px] rounded-2xl bg-card/70" />
-        : <Kpi key={m} metric={m} title={title ?? model.label(m)} better={better} now={cur[m]} before={prev[m]}
+        : <Kpi key={m} metric={m} title={title ?? model.label(m)} better={better} now={cur[m]} before={comparable ? prev[m] : undefined}
           series={days.filter((d) => d[m] != null).map((d) => ({ v: num(d[m]) }))} />)}
     </div>
   );
