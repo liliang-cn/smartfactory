@@ -38,12 +38,12 @@ interface ChatState {
   turns: Record<string, Turn[]>;
   ctrl: AbortController | null;
   of(c: string): Turn[];
-  send(c: string, q: string): void;
+  send(c: string, q: string, review?: string): void;
   stop(): void;
   clear(c: string): void;
 }
 
-const useChat = create<ChatState>()((set, get) => {
+export const useChat = create<ChatState>()((set, get) => {
   const save = (c: string) => {
     try { localStorage.setItem(KEY(c), JSON.stringify(get().turns[c].slice(-20))); } catch { /* storage full or blocked */ }
   };
@@ -92,14 +92,14 @@ const useChat = create<ChatState>()((set, get) => {
       set((s) => ({ turns: { ...s.turns, [c]: t } }));
       return t;
     },
-    send(c, q) {
+    send(c, q, review) {
       if (get().ctrl) return;
       const id = Math.random().toString(36).slice(2, 10);
       const turn: Turn = { id, q, status: 'running', start: Date.now(), steps: [], idleSince: Date.now() };
       const ctrl = new AbortController();
       set((s) => ({ ctrl, turns: { ...s.turns, [c]: [...(s.turns[c] ?? loadTurns(c)), turn] } }));
       save(c);
-      ask(c, q, ctrl.signal, (ev) => patch(c, id, (t) => apply(t, ev)))
+      ask(c, q, ctrl.signal, (ev) => patch(c, id, (t) => apply(t, ev)), review)
         .then(() => patch(c, id, (t) => (t.status === 'running' ? { ...t, status: 'error', error: '连接中断', end: Date.now() } : t)))
         .catch((e: Error) => patch(c, id, (t) => (t.status === 'running'
           ? { ...t, status: ctrl.signal.aborted ? 'stopped' : 'error', error: ctrl.signal.aborted ? undefined : e.message, end: Date.now(), idleSince: undefined }
@@ -308,7 +308,7 @@ function Loop({ t, model }: { t: Turn; model: Model }) {
 
 // ---- the answer ------------------------------------------------------------------------
 
-function Answer({ text }: { text: string }) {
+export function Answer({ text }: { text: string }) {
   return (
     <div className="rounded-2xl bg-card px-4.5 py-4 text-[14px] leading-relaxed shadow-float max-md:px-3.5">
       <Markdown

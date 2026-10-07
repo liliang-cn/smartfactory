@@ -10,7 +10,9 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useLive } from '@/live/client';
-import { AdvisorError, decide, getBoard, type Acceptance, type Board as BoardData, type Filter, type Finding, type GoalView, type Guard, type PlanView, type Verb } from './api';
+import { Answer, useChat } from './Chat';
+import { useBiz } from './store';
+import { AdvisorError, decide, getBoard, getReviewRun, getReviews, type Review, type ReviewRun, type Acceptance, type Board as BoardData, type Filter, type Finding, type GoalView, type Guard, type PlanView, type Verb } from './api';
 import { day, dayTime, share, toNumber, type Model } from './model';
 import { Empty, ResultTable, Skeleton, SqlFold } from './parts';
 
@@ -487,6 +489,72 @@ function GoalBlock({ company, gv, model, onChanged }: { company: string; gv: Goa
   );
 }
 
+/** The standing reviews: start one (operators), read past reports (everyone). */
+function Reviews({ company }: { company: string }) {
+  const operator = useLive((s) => s.operator);
+  const busy = useChat((s) => !!s.ctrl);
+  const [list, setList] = useState<{ reviews: Review[]; runs: ReviewRun[] } | null>(null);
+  const [open, setOpen] = useState<ReviewRun | null>(null);
+  useEffect(() => {
+    const load = () => getReviews(company).then(setList, () => setList({ reviews: [], runs: [] }));
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [company]);
+  if (!list || (!list.reviews.length && !list.runs.length)) return null;
+  const start = (rv: Review) => {
+    useBiz.getState().setTab('ask');
+    useChat.getState().send(company, rv.title, rv.name);
+  };
+  const show = (r: ReviewRun) => {
+    setOpen(r);
+    getReviewRun(company, r.id).then(setOpen, () => {});
+  };
+  return (
+    <section className="rounded-2xl bg-card p-4 shadow-float max-md:p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {list.reviews.map((rv) => (
+          <div key={rv.name} className="flex items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3">
+            <span className="text-[13px] font-extrabold">{rv.title}</span>
+            {rv.schedule && <span className="text-[12px] text-muted-foreground">{rv.schedule}</span>}
+            {rv.running && <LoaderCircleIcon className="size-3.5 animate-spin text-primary" />}
+            {operator && (
+              <Button size="sm" className="h-7 rounded-lg px-3 text-[12px] font-bold" disabled={busy || rv.running} onClick={() => start(rv)}>
+                <SendIcon className="size-3.5" />发起
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+      {list.runs.length > 0 && (
+        <div className="mt-3 grid gap-1">
+          {list.runs.slice(0, 6).map((r) => (
+            <button key={r.id} type="button" onClick={() => show(r)}
+              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[12.5px] hover:bg-surface">
+              <span className={cn('size-1.5 shrink-0 rounded-full', r.status === 'done' ? 'bg-success' : r.status === 'running' ? 'animate-pulse bg-primary' : 'bg-destructive')} />
+              <span className="font-bold">{r.title}</span>
+              <span className="text-muted-foreground tabular-nums">{dayTime(r.started_at)}</span>
+              <span className="text-muted-foreground">{r.trigger === 'schedule' ? '定期' : r.by}</span>
+              <ArrowRightIcon className="ml-auto size-3.5 text-muted-foreground" />
+            </button>
+          ))}
+        </div>
+      )}
+      <Sheet open={!!open} onOpenChange={(v) => !v && setOpen(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
+          <SheetHeader>
+            <SheetTitle>{open?.title}</SheetTitle>
+            <SheetDescription>{open && `${dayTime(open.started_at)} · ${open.trigger === 'schedule' ? '定期' : open.by}`}</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-6">
+            {open?.status === 'running' ? <Skeleton className="h-40 rounded-2xl" /> : open?.answer ? <Answer text={open.answer} /> : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </section>
+  );
+}
+
 export function Board({ company, model }: { company: string; model: Model }) {
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string>();
@@ -506,6 +574,7 @@ export function Board({ company, model }: { company: string; model: Model }) {
   const current = goals.find((g) => g.goal.id === goal) ?? goals[0];
   return (
     <div className="grid gap-3">
+      <Reviews company={company} />
       <div className="flex items-center gap-2">
         {goals.length > 1 && (
           <div className="flex min-w-0 gap-0.5 overflow-x-auto rounded-xl bg-card p-[3px] shadow-float [scrollbar-width:none]">

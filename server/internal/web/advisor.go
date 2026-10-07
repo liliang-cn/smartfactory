@@ -40,7 +40,7 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 				}
 				token = a.Approver
 			}
-			target := a.API + strings.NewReplacer("{plan}", r.PathValue("plan"), "{verb}", r.PathValue("verb")).Replace(path)
+			target := a.API + strings.NewReplacer("{plan}", r.PathValue("plan"), "{verb}", r.PathValue("verb"), "{name}", r.PathValue("name"), "{id}", r.PathValue("id")).Replace(path)
 			if r.URL.RawQuery != "" {
 				target += "?" + r.URL.RawQuery
 			}
@@ -97,6 +97,10 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 		defer asking.Delete(who)
 		ask(w, r)
 	})
+	// standing reviews (the group's weekly diagnosis): reports for everyone, starting one for operators
+	mux.HandleFunc("GET /api/advisor/{company}/reviews", pass("GET", "/v1/reviews", false))
+	mux.HandleFunc("GET /api/advisor/{company}/reviews/runs/{id}", pass("GET", "/v1/reviews/runs/{id}", false))
+	mux.HandleFunc("POST /api/advisor/{company}/reviews/{name}/run", pass("POST", "/v1/reviews/{name}/run", true))
 	mux.HandleFunc("POST /api/advisor/{company}/plans/{plan}/{verb}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("verb") {
 		case "adopt", "reject", "measure", "accept":

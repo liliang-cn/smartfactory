@@ -99,11 +99,23 @@ export type AskEvent =
   | { kind: 'complete'; text?: string }
   | { kind: 'error'; text?: string };
 
-/** One run of the agent as server-sent events over a POST. */
-export async function ask(c: string, question: string, signal: AbortSignal, on: (ev: AskEvent) => void) {
-  const res = await fetch(`${base(c)}/ask`, {
+// ---- standing reviews (the group's diagnosis) ---------------------------------------
+
+export type Review = { name: string; title: string; schedule?: string; can_run: boolean; running: boolean };
+export type ReviewStep = { tool: string; args?: Record<string, unknown>; result?: unknown };
+export type ReviewRun = {
+  id: number; name: string; title: string; by: string; trigger: 'schedule' | 'manual'; started_at: string; finished_at: string;
+  answer: string; status: 'running' | 'done' | 'failed'; steps?: ReviewStep[]; corrected?: string;
+};
+export const getReviews = (c: string) => call<{ reviews: Review[]; runs: ReviewRun[] }>(`${base(c)}/reviews`);
+export const getReviewRun = (c: string, id: number) => call<ReviewRun>(`${base(c)}/reviews/runs/${id}`);
+
+/** One run of the agent as server-sent events over a POST: a question, or a standing review. */
+export async function ask(c: string, question: string, signal: AbortSignal, on: (ev: AskEvent) => void, review?: string) {
+  const token = review ? operatorToken() : null;
+  const res = await fetch(review ? `${base(c)}/reviews/${encodeURIComponent(review)}/run` : `${base(c)}/ask`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ question }),
     signal,
   });
