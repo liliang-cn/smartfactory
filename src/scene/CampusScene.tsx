@@ -15,6 +15,7 @@ import { applyTint, buildModel, initTint, type ModelHandle } from '@/three/facto
 import { P } from '@/three/kit';
 import { buildCampus, buildWorld } from '@/three/world';
 import { plantFigures } from '@/ui/group';
+import { rate } from '@/ui/status';
 import { CameraRig, type View } from './CameraRig';
 import { Pin } from './Markers';
 import { Products } from './Products';
@@ -248,7 +249,7 @@ const PlantCard = memo(function PlantCard({ plant, hovered, onHover, els }: { pl
       </span>
       <span className="grid grid-cols-4 gap-3 max-md:flex max-md:gap-2">
         <Stat label="OEE" icon={<GaugeIcon />} value={`${(f.oee * 100).toFixed(0)}%`} />
-        <Stat label={`${L.unit}/时`} icon={<PackageIcon />} value={f.tp} />
+        <Stat label={`${L.unit}/时`} icon={<PackageIcon />} value={rate(f.tp)} />
         <Stat label="报警" icon={<BellIcon />} value={f.alarms} tone={f.alarms ? 'bad' : 'muted'} />
         <Stat label="故障" icon={<OctagonAlertIcon />} value={f.faults} tone={f.faults ? 'bad' : 'muted'} />
       </span>

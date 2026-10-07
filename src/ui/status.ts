@@ -42,6 +42,8 @@ export const DOT: Record<AssetState, string> = {
 export const ALERT_STATES = new Set<AssetState>(['fault', 'blocked', 'empty', 'full', 'maint', 'changeover']);
 
 export const pct = (v: number, d = 0) => `${(v * 100).toFixed(d)}%`;
+/** parts per hour: whole above ten, one decimal below (a slow line makes under one an hour) */
+export const rate = (v: number) => `${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10}`;
 
 export const hhmm = (sec: number, withSeconds = false) => {
   const t = ((Math.floor(sec) % 86400) + 86400) % 86400;

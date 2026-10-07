@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import type { Kpis as KpiData } from '@/sim/types';
 import { runtime, useCampus, usePlant, useTick, useUI, type CamOp, type ViewMode } from '@/state/store';
 import { groupFigures } from './group';
-import { STATE_LABEL, pct } from './status';
+import { STATE_LABEL, pct, rate } from './status';
 
 function KpiCard({ icon, label, value, delta, sub, tone }: { icon: React.ReactNode; label: string; value: string; delta?: number | null; sub: React.ReactNode; tone?: 'bad' }) {
   return (
@@ -43,7 +43,7 @@ export function Kpis() {
     <section className="absolute left-5 top-20 z-20 flex gap-3 max-md:inset-x-0 max-md:top-[calc(62px+env(safe-area-inset-top))] max-md:snap-x max-md:snap-mandatory max-md:gap-2 max-md:overflow-x-auto max-md:px-2.5 max-md:pb-2.5 max-md:[scrollbar-width:none]">
       <KpiCard icon={<GaugeIcon />} label={layout.terms.oee ?? '综合设备效率 OEE'} value={pct(k.oee, 1)} delta={(k.oee - base.oee) * 100}
         sub={`可用 ${pct(k.avail)} 性能 ${pct(k.perf)} 质量 ${pct(k.quality)}`} />
-      <KpiCard icon={<PackageIcon />} label={layout.terms.throughput ?? '每小时产量'} value={`${k.tp}`} delta={k.tp - base.tp} sub={`${layout.unit}，近 60 分钟 ${layout.lines.length} ${layout.terms.line ?? '条线'}合计`} />
+      <KpiCard icon={<PackageIcon />} label={layout.terms.throughput ?? '每小时产量'} value={rate(k.tp)} delta={k.tp - base.tp} sub={`${layout.unit}，${k.span > 3600 ? `近 ${Math.round(k.span / 3600)} 小时折算` : '近 60 分钟'} ${layout.lines.length} ${layout.terms.line ?? '条线'}合计`} />
       <KpiCard icon={<BadgeCheckIcon />} label={layout.qualityLabel} value={pct(k.quality, 1)} delta={(k.quality - base.quality) * 100}
         sub={`合格 ${k.good}，不合格 ${k.scrap}`} />
       <div className="max-xl:hidden max-md:contents">
@@ -78,7 +78,7 @@ export function GroupKpis() {
   return (
     <section className="absolute left-5 top-20 z-20 flex gap-3 max-md:inset-x-0 max-md:top-[calc(62px+env(safe-area-inset-top))] max-md:snap-x max-md:snap-mandatory max-md:gap-2 max-md:overflow-x-auto max-md:px-2.5 max-md:pb-2.5 max-md:[scrollbar-width:none]">
       <KpiCard icon={<GaugeIcon />} label={`集团 ${L.terms.oee ?? '综合设备效率 OEE'}`} value={pct(g.oee, 1)} sub={<Breakdown items={items((f) => pct(f.oee))} />} />
-      <KpiCard icon={<PackageIcon />} label={L.terms.throughput ?? '每小时产量'} value={`${g.tp}`} sub={<Breakdown items={items((f) => `${f.tp}`)} />} />
+      <KpiCard icon={<PackageIcon />} label={L.terms.throughput ?? '每小时产量'} value={rate(g.tp)} sub={<Breakdown items={items((f) => rate(f.tp))} />} />
       <KpiCard icon={<BellIcon />} label="报警" value={`${g.alarms}`} tone={g.alarms ? 'bad' : undefined} sub={<Breakdown items={items((f) => `${f.alarms}`, (f) => f.alarms > 0)} />} />
       <KpiCard icon={<OctagonAlertIcon />} label="故障设备" value={`${g.faults}`} tone={g.faults ? 'bad' : undefined} sub={<Breakdown items={items((f) => `${f.faults}`, (f) => f.faults > 0)} />} />
     </section>

@@ -245,4 +245,8 @@ export type Command = 'start' | 'stop' | 'speed' | 'reset' | 'maint' | 'fault' |
 export interface CommandResult { ok: boolean; msg: string }
 
 export interface LineKpi { tp: number; perf: number; avail: number; quality: number; oee: number; good: number; scrap: number }
-export interface Kpis extends Omit<LineKpi, 'oee'> { oee: number; lines: LineKpi[]; power: number; energy: number }
+export interface Kpis extends Omit<LineKpi, 'oee'> {
+  oee: number; lines: LineKpi[]; power: number; energy: number;
+  /** the longest window output is counted over, in seconds */
+  span: number;
+}

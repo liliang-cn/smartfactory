@@ -63,8 +63,10 @@ type ProductTuple = [id: string, s: number, done: number, proc: number, t: numbe
 export interface SavedPlant {
   fp: string;
   state: PlantState;
-  /** completion times of the last hour, per line in layout order */
+  /** completion times within each line's counting window, in layout order */
   done: number[][];
+  /** the windows they were kept for, in seconds (an hour when missing) */
+  spans?: number[];
   meas: [string, number[]][];
   repair: [string, number][];
   /** tools out for reconditioning: [inventory key, elapsed when back] */
@@ -108,6 +110,14 @@ function pickShare<T extends { share?: number }>(xs: T[]): T | undefined {
   if (!xs.length) return undefined;
   let r = Math.random() * xs.reduce((s, x) => s + (x.share ?? 1), 0);
   return xs.find((x) => (r -= x.share ?? 1) <= 0) ?? xs[xs.length - 1];
+}
+
+/**
+ * Seconds of finished parts output and OEE are counted over: the last hour, or four cycles of the
+ * slowest machine where one part takes hours (an open-die shaft), so a single part does not swing it.
+ */
+export function countSpan(line: Line) {
+  return Math.max(3600, 4 * Math.max(...line.stations.map((s) => s.cycle)));
 }
 
 export class PlantSim {
@@ -196,10 +206,8 @@ export class PlantSim {
         // tools are part-way through their life when the shift starts
         tool: st.machine.tooling ? { ...st.machine.tooling, used: Math.floor(st.machine.tooling.life * rand(0.05, 0.97)) } : undefined,
       }));
-      // Warm start: pretend the line has been running for the last hour.
-      const ideal = 3600 / Math.max(...line.stations.map((s) => s.cycle));
-      const n = Math.round(ideal * rand(0.78, 0.88));
-      for (let i = 0; i < n; i++) line.doneTimes.push(-3600 + (i + Math.random()) * (3600 / n));
+      // Warm start: pretend the line has been running for the last counting window.
+      const n = this.pretendDone(line, -countSpan(line), 0);
       line.good = n;
       line.scrap = Math.round(n * rand(0.01, 0.025));
       this.seedProducts(line);
@@ -407,6 +415,14 @@ export class PlantSim {
       line.lot = { no, supplier: s.name, factor, left };
       return;
     }
+  }
+
+  /** Completion times for a stretch the line is taken to have run through at its usual pace; the count. */
+  private pretendDone(line: Line, from: number, to: number) {
+    const n = Math.max(1, Math.round(((to - from) / Math.max(...line.stations.map((s) => s.cycle))) * rand(0.78, 0.88)));
+    const at = Array.from({ length: n }, (_, i) => from + (i + Math.random()) * ((to - from) / n));
+    line.doneTimes = [...at, ...line.doneTimes];
+    return n;
   }
 
   private ymd(ms: number) {
@@ -767,7 +783,8 @@ export class PlantSim {
     if (out.count >= out.cap) this.raise(out, 'full', 2, '成品托盘已满，等待 AGV 取货');
     else this.clear(out, 'full');
 
-    while (line.doneTimes.length && line.doneTimes[0] < this.elapsed - 3600) line.doneTimes.shift();
+    const span = countSpan(line);
+    while (line.doneTimes.length && line.doneTimes[0] < this.elapsed - span) line.doneTimes.shift();
   }
 
   private stepAgv(g: AgvState, dt: number) {
@@ -1514,10 +1531,10 @@ export class PlantSim {
       id: L.id, name: L.name, hall: L.hall, unit: L.unit,
       kpis: {
         oee: r2(k.oee), avail: r2(k.avail), perf: r2(k.perf), quality: r2(k.quality),
-        throughputPerHour: k.tp, good: k.good, scrap: k.scrap, powerKW: r2(k.power), energyKWh: r2(k.energy), clock: hhmm(this.clock),
+        throughputPerHour: r2(k.tp), good: k.good, scrap: k.scrap, powerKW: r2(k.power), energyKWh: r2(k.energy), clock: hhmm(this.clock),
       },
       lines: this.lines.map((l, i) => ({
-        id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: k.lines[i].tp,
+        id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: r2(k.lines[i].tp),
         good: l.good, scrap: l.scrap,
       })),
       alarms: this.alarms.slice(0, 60).map((x) => ({ asset: x.asset, text: x.text, prio: x.prio, at: hhmm(x.at), active: x.active, acked: x.acked })),
@@ -1587,6 +1604,7 @@ export class PlantSim {
       fp: this.fingerprint(),
       state: this.exportState(false),
       done: this.lines.map((l) => l.doneTimes.map(r)),
+      spans: this.lines.map(countSpan),
       meas: assets.filter((a) => a.hist.meas.length).map((a) => [a.id, a.hist.meas.map(r)]),
       repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
       recond: this.repairs,
@@ -1600,7 +1618,12 @@ export class PlantSim {
   restoreState(saved: SavedPlant): boolean {
     if (saved.fp !== this.fingerprint()) return false;
     this.importState(saved.state);
-    this.lines.forEach((l, i) => { if (saved.done[i]) l.doneTimes = saved.done[i]; });
+    this.lines.forEach((l, i) => {
+      if (saved.done[i]) l.doneTimes = saved.done[i];
+      // kept for a shorter window than the line counts over now: the older part is taken at its usual pace
+      const had = saved.spans?.[i] ?? 3600;
+      if (had < countSpan(l)) this.pretendDone(l, this.elapsed - countSpan(l), this.elapsed - had);
+    });
     for (const [id, m] of saved.meas) {
       const a = this.assets.get(id);
       if (a) a.hist.meas = m;
@@ -1688,9 +1711,9 @@ export class PlantSim {
   // ---------- derived ----------
 
   lineKpi(line: Line): LineKpi {
-    const tp = line.doneTimes.length; // parts in the last 3600 s
-    const ideal = 3600 / Math.max(...line.stations.map((s) => s.cycle));
-    const perf = Math.min(1, tp / ideal);
+    const span = countSpan(line);
+    const tp = (line.doneTimes.length * 3600) / span; // parts per hour over the counting window
+    const perf = Math.min(1, (line.doneTimes.length * Math.max(...line.stations.map((s) => s.cycle))) / span);
     const avail = line.stations.reduce((s, a) => s + a.avail, 0) / line.stations.length;
     const quality = line.good / Math.max(1, line.good + line.scrap);
     return { tp, perf, avail, quality, oee: avail * perf * quality, good: line.good, scrap: line.scrap };
@@ -1705,7 +1728,7 @@ export class PlantSim {
       lines: per,
       oee: avg('oee'), avail: avg('avail'), perf: avg('perf'), quality: good / Math.max(1, good + scrap),
       tp: per.reduce((s, x) => s + x.tp, 0), good, scrap,
-      power: this.powerKW, energy: this.energyKWh,
+      power: this.powerKW, energy: this.energyKWh, span: Math.max(...this.lines.map(countSpan)),
     };
   }
 }

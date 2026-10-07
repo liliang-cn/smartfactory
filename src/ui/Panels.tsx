@@ -7,7 +7,7 @@ import type { PlantSim } from '@/sim/plant';
 import type { Asset, Line } from '@/sim/types';
 import { goToAsset, groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
 import { groupFigures } from './group';
-import { ALERT_STATES, CHIP, STATE_LABEL, hhmm, pct } from './status';
+import { ALERT_STATES, CHIP, STATE_LABEL, hhmm, pct, rate } from './status';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 
@@ -358,7 +358,7 @@ export function GroupFleet() {
                 <small className="truncate text-[11px] text-muted-foreground">{p.layout.hall}</small>
               </span>
             </span>
-            {([['OEE', pct(f.oee), false], [`${p.layout.unit}/时`, `${f.tp}`, false], ['报警', `${f.alarms}`, f.alarms > 0], ['故障', `${f.faults}`, f.faults > 0]] as const).map(([label, v, bad]) => (
+            {([['OEE', pct(f.oee), false], [`${p.layout.unit}/时`, rate(f.tp), false], ['报警', `${f.alarms}`, f.alarms > 0], ['故障', `${f.faults}`, f.faults > 0]] as const).map(([label, v, bad]) => (
               <span key={label} className="grid justify-items-end leading-tight">
                 <b className={cn('font-extrabold tabular-nums', bad && 'text-destructive')}>{v}</b>
                 <small className="text-[10.5px] text-muted-foreground">{label}</small>
