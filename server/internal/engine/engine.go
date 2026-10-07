@@ -269,8 +269,12 @@ type watch struct {
 }
 
 // Plants are replicated at 2 Hz for the plant a browser is looking at, and every 4 s for the
-// company's other plants (enough for the plant switcher and cross-plant alarms).
+// company's other plants (enough for the plant switcher and cross-plant alarms). A browser
+// showing the whole company (plant "all") gets every plant at 2 Hz.
 const fullEvery = 8
+
+// AllPlants is the plant a watcher names to follow every plant of its company at full rate.
+const AllPlants = "all"
 
 func (e *Engine) broadcast() {
 	e.mu.Lock()
@@ -287,10 +291,11 @@ func (e *Engine) broadcast() {
 		if need[w.company] == nil {
 			need[w.company] = map[string]bool{}
 		}
-		if periodic || w.full {
+		if periodic || w.full || w.plant == AllPlants {
 			need[w.company]["*"] = true
+		} else {
+			need[w.company][w.plant] = true
 		}
-		need[w.company][w.plant] = true
 		w.full = false
 	}
 	e.mu.Unlock()
@@ -344,7 +349,7 @@ func (e *Engine) broadcast() {
 		first := true
 		for p, js := range fs {
 			// everything when this watcher asked for it or on the periodic refresh; else its plant
-			if !(periodic || t.w.full || p == t.w.plant) {
+			if !(periodic || t.w.full || p == t.w.plant || t.w.plant == AllPlants) {
 				continue
 			}
 			if !first {

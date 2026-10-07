@@ -197,3 +197,44 @@ func kpis(t *testing.T, e *Engine, company, plant string) plantKpis {
 	}
 	return out
 }
+
+// A watcher of one plant gets the other plants only now and then; a watcher of "all" gets every
+// plant in every frame.
+func TestWatchAll(t *testing.T) {
+	e := newEngine(t)
+	one, _, stop1 := e.Watch("huaduan", "p1")
+	defer stop1()
+	all, _, stop2 := e.Watch("huaduan", AllPlants)
+	defer stop2()
+	plants := func(ch <-chan []byte) []string {
+		var msg struct {
+			Data struct {
+				Plants map[string]json.RawMessage `json:"plants"`
+			} `json:"data"`
+		}
+		select {
+		case f := <-ch:
+			if err := json.Unmarshal(f, &msg); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("no frame")
+		}
+		var ids []string
+		for id := range msg.Data.Plants {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	for i := range 3 {
+		e.broadcast()
+		a, b := plants(one), plants(all)
+		if len(b) != 3 {
+			t.Errorf("frame %d: all-plants watcher got %v", i, b)
+		}
+		// the first frame after subscribing carries everything
+		if want := map[bool]int{true: 3, false: 1}[i == 0]; len(a) != want {
+			t.Errorf("frame %d: single-plant watcher got %v, want %d plants", i, a, want)
+		}
+	}
+}
