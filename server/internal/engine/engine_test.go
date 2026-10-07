@@ -247,3 +247,65 @@ func TestWatchAll(t *testing.T) {
 		}
 	}
 }
+
+// Vehicles located by the plant's fleet system still keep the twin's lines supplied: the twin
+// moves the material when a reported vehicle drives off a dock.
+func TestLocatedVehiclesKeepLinesSupplied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("twenty plant minutes")
+	}
+	twin, plant := newEngine(t), newEngine(t)
+	if _, err := plant.call("playEquipment"); err != nil {
+		t.Fatal(err)
+	}
+	stock := func() (bf float64) {
+		v, _ := twin.call("save", "huaduan")
+		var s struct {
+			Plants map[string]struct {
+				State struct {
+					Assets []struct {
+						ID    string  `json:"id"`
+						Stock float64 `json:"stock"`
+					} `json:"assets"`
+				} `json:"state"`
+			} `json:"plants"`
+		}
+		json.Unmarshal([]byte(v.String()), &s)
+		for _, a := range s.Plants["p1"].State.Assets {
+			if a.ID == "BF-1" {
+				bf = a.Stock
+			}
+		}
+		return
+	}
+	last := stock()
+	refills := 0
+	for range 600 {
+		plant.call("step", 2)
+		twin.call("step", 2)
+		v, _ := plant.call("telemetry", "huaduan", "p1")
+		var tel struct {
+			Vehicles []struct {
+				ID      string  `json:"id"`
+				X       float64 `json:"x"`
+				Z       float64 `json:"z"`
+				Heading float64 `json:"heading"`
+				Task    string  `json:"task"`
+			} `json:"vehicles"`
+		}
+		json.Unmarshal([]byte(v.String()), &tel)
+		for _, g := range tel.Vehicles {
+			for f, x := range map[string]any{"x": g.X, "z": g.Z, "heading": g.Heading, "task": g.Task} {
+				twin.call("ingest", "huaduan", "p1", g.ID, f, x, "dev")
+			}
+		}
+		bf := stock()
+		if bf > last {
+			refills++
+		}
+		last = bf
+	}
+	if refills == 0 {
+		t.Errorf("BF-1 was never refilled in twenty minutes, %v left", last)
+	}
+}

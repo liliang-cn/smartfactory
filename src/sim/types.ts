@@ -84,6 +84,8 @@ export interface AgvState {
   waiting: boolean;
   waitedT: number;
   task: string;
+  /** route index of the dock a located vehicle is standing at */
+  dock?: number;
 }
 
 export interface TruckState {

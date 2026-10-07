@@ -804,6 +804,7 @@ export class PlantSim {
       a.vel = (dist * k) / Math.max(dt, 1e-3);
       a.state = a.vel > 0.1 ? 'moving' : 'waiting';
       a.power = a.vel > 0.1 ? spec.pRun! : spec.pIdle!;
+      if (!this.follower) this.leftDock(g, lv.x, lv.z);
       return;
     }
     if (!this.ready(a)) {
@@ -964,6 +965,33 @@ export class PlantSim {
     if (wp.act === 'pick') return `前往 ${line!.outfeed.id} 取货`;
     if (wp.act === 'deliver') return g.cargo ? `成品送至 ${this.fg.id}` : '返回待命点';
     return g.task;
+  }
+
+  /**
+   * The material a located vehicle handled at a dock moves in the twin when it drives off: the
+   * twin's lines still draw from and fill their own buffers.
+   */
+  private leftDock(g: AgvState, x: number, z: number) {
+    const at = g.route.findIndex((wp) => wp.act && Math.hypot(wp.x - x, wp.z - z) < 0.4);
+    const was = g.dock ?? -1;
+    if (at === was) return;
+    g.dock = at;
+    if (was < 0) return;
+    const wp = g.route[was];
+    const line = wp.line ? this.lineById[wp.line] : null;
+    if (wp.act === 'load' && !g.cargo && this.wh.stock >= 20) {
+      this.wh.stock -= 20;
+      g.cargo = { kind: 'raw', n: 20 };
+    } else if (wp.act === 'drop' && g.cargo?.kind === 'raw') {
+      line!.infeed.stock = Math.min(line!.infeed.cap, line!.infeed.stock + g.cargo.n);
+      g.cargo = null;
+    } else if (wp.act === 'pick' && !g.cargo && line!.outfeed.count > 0) {
+      g.cargo = { kind: 'fg', n: line!.outfeed.count };
+      line!.outfeed.count = 0;
+    } else if (wp.act === 'deliver' && g.cargo?.kind === 'fg') {
+      this.fg.count += g.cargo.n;
+      g.cargo = null;
+    }
   }
 
   private agvAct(g: AgvState) {
