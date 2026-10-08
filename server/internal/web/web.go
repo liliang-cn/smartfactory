@@ -2,6 +2,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -16,7 +17,9 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
 )
 
@@ -36,6 +39,8 @@ type Server struct {
 	Advisors map[string]string
 	// AdvisorAPI is how the twin reaches each company's advisor on its viewers' behalf.
 	AdvisorAPI map[string]Advisor
+	// Prefix is the MQTT topic convention's first segment (protocol/devices.md).
+	Prefix string
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -66,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, map[string]any{"company": company, "industries": industries})
 	})
+	mux.HandleFunc("GET /api/devices/{company}/{plant}", s.deviceMap)
 	if s.MCP != nil {
 		mux.Handle("/mcp", s.requireToken(s.MCP))
 	}
@@ -340,6 +346,73 @@ func (s *Server) static() http.Handler {
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		files.ServeHTTP(w, r)
+	})
+}
+
+// deviceMap tells an integrator where every value of a plant lives under the sf convention:
+// the MQTT topics, the Modbus registers and the OPC UA nodes, derived from the plant's machines.
+func (s *Server) deviceMap(w http.ResponseWriter, r *http.Request) {
+	company, plant := r.PathValue("company"), r.PathValue("plant")
+	machines := s.Engine.Machines(company, plant)
+	if len(machines) == 0 {
+		writeError(w, http.StatusNotFound, "找不到这个厂")
+		return
+	}
+	fleet := s.Engine.Fleet(company, plant)
+	prefix := cmp.Or(s.Prefix, "sf")
+	base := strings.Join([]string{prefix, company, plant}, "/")
+	type mbPoint struct {
+		Asset    string         `json:"asset"`
+		Field    string         `json:"field"`
+		Register string         `json:"register"`
+		Address  uint16         `json:"address"`
+		Kind     string         `json:"kind"`
+		Scale    *float64       `json:"scale,omitempty"`
+		Map      map[string]any `json:"map,omitempty"`
+	}
+	type mbCmd struct {
+		Asset      string  `json:"asset"`
+		Address    uint16  `json:"address"`
+		ArgAddress uint16  `json:"argAddress"`
+		ArgScale   float64 `json:"argScale"`
+	}
+	type uaPoint struct {
+		Asset string `json:"asset"`
+		Field string `json:"field"`
+		Node  string `json:"node"`
+	}
+	type uaCmd struct {
+		Asset   string `json:"asset"`
+		Node    string `json:"node"`
+		ArgNode string `json:"argNode"`
+	}
+	mb := sfconv.Expand(config.Source{Type: "modbus", Company: company, Plant: plant}, machines, fleet)
+	ua := sfconv.Expand(config.Source{Type: "opcua", Company: company, Plant: plant}, machines, fleet)
+	mbPoints, uaPoints := []mbPoint{}, []uaPoint{}
+	mbCmds, uaCmds := []mbCmd{}, []uaCmd{}
+	for _, p := range mb.Points {
+		mbPoints = append(mbPoints, mbPoint{p.Asset, p.Field, p.Register, p.Address, p.Kind, p.Scale, p.Map})
+	}
+	for _, p := range ua.Points {
+		uaPoints = append(uaPoints, uaPoint{p.Asset, p.Field, p.Node})
+	}
+	// every command of a machine goes through the same register / node: list each machine once
+	for _, c := range mb.Commands {
+		if len(mbCmds) == 0 || mbCmds[len(mbCmds)-1].Asset != c.Asset {
+			mbCmds = append(mbCmds, mbCmd{c.Asset, c.Address, *c.ArgAddress, c.ArgScale})
+		}
+	}
+	for _, c := range ua.Commands {
+		if len(uaCmds) == 0 || uaCmds[len(uaCmds)-1].Asset != c.Asset {
+			uaCmds = append(uaCmds, uaCmd{c.Asset, c.Node, c.ArgNode})
+		}
+	}
+	writeJSON(w, map[string]any{
+		"company": company, "plant": plant,
+		"mqtt": map[string]string{"data": base + "/{asset}", "field": base + "/{asset}/{field}", "cmd": base + "/{asset}/cmd"},
+		"modbus": map[string]any{"points": mbPoints, "commands": mbCmds,
+			"codes": map[string]any{"state": sfconv.States, "command": sfconv.Commands}},
+		"opcua": map[string]any{"points": uaPoints, "commands": uaCmds},
 	})
 }
 

@@ -1248,6 +1248,210 @@
       },
       "description": "Each company's advisor console URL"
     },
+    "DeviceMap": {
+      "type": "object",
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "mqtt": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string"
+            },
+            "cmd": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "field",
+            "cmd"
+          ],
+          "additionalProperties": false
+        },
+        "modbus": {
+          "type": "object",
+          "properties": {
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "string"
+                  },
+                  "field": {
+                    "type": "string"
+                  },
+                  "register": {
+                    "type": "string",
+                    "const": "holding"
+                  },
+                  "address": {
+                    "type": "number"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "int16",
+                      "uint16",
+                      "float32"
+                    ]
+                  },
+                  "scale": {
+                    "type": "number"
+                  },
+                  "map": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "asset",
+                  "field",
+                  "register",
+                  "address",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "number"
+                  },
+                  "argAddress": {
+                    "type": "number"
+                  },
+                  "argScale": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "asset",
+                  "address",
+                  "argAddress",
+                  "argScale"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "codes": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "command": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "state",
+                "command"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "points",
+            "commands",
+            "codes"
+          ],
+          "additionalProperties": false
+        },
+        "opcua": {
+          "type": "object",
+          "properties": {
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "string"
+                  },
+                  "field": {
+                    "type": "string"
+                  },
+                  "node": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "asset",
+                  "field",
+                  "node"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "string"
+                  },
+                  "node": {
+                    "type": "string"
+                  },
+                  "argNode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "asset",
+                  "node",
+                  "argNode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "points",
+            "commands"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "company",
+        "plant",
+        "mqtt",
+        "modbus",
+        "opcua"
+      ],
+      "additionalProperties": false
+    },
     "Metrics": {
       "type": "object",
       "properties": {
@@ -1806,6 +2010,149 @@
         "status"
       ],
       "additionalProperties": {}
+    },
+    "DeviceFields": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "running",
+            "blocked",
+            "stopped",
+            "fault",
+            "maint",
+            "changeover"
+          ]
+        },
+        "fault": {
+          "type": [
+            "string",
+            "boolean",
+            "number"
+          ]
+        },
+        "faultCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "running": {
+          "type": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        },
+        "temp": {
+          "type": "number"
+        },
+        "power": {
+          "type": "number"
+        },
+        "vib": {
+          "type": "number"
+        },
+        "speed": {
+          "type": "number"
+        },
+        "health": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "measure": {
+          "type": "number"
+        },
+        "lastMeasure": {
+          "type": "number"
+        },
+        "mcount": {
+          "type": "number"
+        },
+        "toolUsed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "toolLife": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "stock": {
+          "type": "number"
+        },
+        "count": {
+          "type": "number"
+        },
+        "battery": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        },
+        "heading": {
+          "type": "number"
+        },
+        "task": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {
+        "type": [
+          "number",
+          "string",
+          "boolean"
+        ]
+      },
+      "description": "Fields an asset reports"
+    },
+    "DeviceCommand": {
+      "type": "object",
+      "properties": {
+        "cmd": {
+          "type": "string",
+          "enum": [
+            "start",
+            "stop",
+            "speed",
+            "reset",
+            "maint",
+            "fault",
+            "restock",
+            "ship",
+            "retool",
+            "toollimit"
+          ],
+          "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+        },
+        "arg": {
+          "type": "number"
+        },
+        "by": {
+          "type": "string",
+          "enum": [
+            "operator",
+            "mcp",
+            "visitor",
+            "auto"
+          ]
+        },
+        "t": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "cmd",
+        "by",
+        "t"
+      ],
+      "additionalProperties": false
     },
     "Source": {
       "type": "object",

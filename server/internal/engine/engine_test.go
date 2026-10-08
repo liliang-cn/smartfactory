@@ -108,7 +108,7 @@ func TestEngineRuns(t *testing.T) {
 		if found != 2 || len(p1.Lines) == 0 || len(p1.Lines[0].Products) == 0 {
 			t.Errorf("frame content: found=%d lines=%d", found, len(p1.Lines))
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second): // generous: other packages' tests may be loading the machine
 		t.Fatal("no frame")
 	}
 }
@@ -317,25 +317,27 @@ func TestIngestBurst(t *testing.T) {
 	for i := range 5000 {
 		e.Ingest("huaduan", "p1", "HP-201", "temp", 20+float64(i)/100, "test")
 	}
-	time.Sleep(500 * time.Millisecond)
+	// the burst is applied by the loop in one go; on a busy machine that can take a moment
 	var temp float64
-	e.do(func() {
-		f, _ := e.call("frame", "huaduan")
-		var fr struct {
-			Plants map[string]struct {
-				Assets []struct {
-					ID   string  `json:"id"`
-					Temp float64 `json:"temp"`
-				} `json:"assets"`
-			} `json:"plants"`
-		}
-		json.Unmarshal([]byte(f.String()), &fr)
-		for _, a := range fr.Plants["p1"].Assets {
-			if a.ID == "HP-201" {
-				temp = a.Temp
+	for deadline := time.Now().Add(5 * time.Second); temp != 69.99 && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		e.do(func() {
+			f, _ := e.call("frame", "huaduan")
+			var fr struct {
+				Plants map[string]struct {
+					Assets []struct {
+						ID   string  `json:"id"`
+						Temp float64 `json:"temp"`
+					} `json:"assets"`
+				} `json:"plants"`
 			}
-		}
-	})
+			json.Unmarshal([]byte(f.String()), &fr)
+			for _, a := range fr.Plants["p1"].Assets {
+				if a.ID == "HP-201" {
+					temp = a.Temp
+				}
+			}
+		})
+	}
 	if temp != 69.99 {
 		t.Errorf("HP-201 temp %v, want the last value 69.99", temp)
 	}

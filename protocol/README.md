@@ -1,6 +1,6 @@
 # SmartFactory 协议 SFP/1
 
-浏览器与 SmartFactory 服务器之间的全部接口：实时通道、HTTP 接口、顾问接口，以及给智能体用的 MCP。
+浏览器与 SmartFactory 服务器之间的全部接口：实时通道、HTTP 接口、顾问接口，以及给智能体用的 MCP。设备和传感器怎样接入，见 [devices.md](devices.md)（SFD/1）。
 
 | 文件 | 作用 |
 |---|---|
@@ -165,6 +165,7 @@
 | `GET /api/config/company/{id}` | `RuntimeCompany` | 运行时创建的公司配置及其行业包，格式见 `src/config/schema/*.json`；不存在时 404 |
 | `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t}]` |
 | `GET /api/advisors` | `Advisors` | 每家公司的顾问控制台地址 |
+| `GET /api/devices/{company}/{plant}` | `DeviceMap` | 这个厂在设备约定下的地址表（MQTT topic、Modbus 寄存器、OPC UA 节点），见 devices.md 第 6 节 |
 
 ## 4. 顾问接口 `/api/advisor/{company}/…`
 

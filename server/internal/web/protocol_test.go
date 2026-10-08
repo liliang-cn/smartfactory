@@ -17,50 +17,11 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/google/jsonschema-go/jsonschema"
 
 	"smartfactory/internal/engine"
+	"smartfactory/internal/sfptest"
 	"smartfactory/internal/tags"
 )
-
-// The protocol standard, as written by `npm run schema` from src/protocol/sfp.ts.
-const schemaFile = "../../../protocol/sfp.schema.json"
-
-type standard struct {
-	t    *testing.T
-	root jsonschema.Schema
-}
-
-func loadStandard(t *testing.T) *standard {
-	t.Helper()
-	b, err := os.ReadFile(schemaFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := &standard{t: t}
-	if err := json.Unmarshal(b, &s.root); err != nil {
-		t.Fatal(err)
-	}
-	return s
-}
-
-// check validates one message or response body against the definition named def.
-func (s *standard) check(def string, raw []byte) {
-	s.t.Helper()
-	root := s.root
-	root.Ref = "#/$defs/" + def
-	r, err := root.Resolve(nil)
-	if err != nil {
-		s.t.Fatalf("%s: %v", def, err)
-	}
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		s.t.Fatalf("%s: not JSON: %v\n%.300s", def, err, raw)
-	}
-	if err := r.Validate(v); err != nil {
-		s.t.Errorf("%s does not conform: %v\n%.300s", def, err, raw)
-	}
-}
 
 // Everything the server sends a browser conforms to the standard, and the server reads every
 // message the standard lets a browser send, field for field.
@@ -68,7 +29,7 @@ func TestProtocol(t *testing.T) {
 	if _, err := os.Stat("../engine/js/engine.js"); err != nil {
 		t.Skip("engine bundle not built (npm run build:engine)")
 	}
-	std := loadStandard(t)
+	std := sfptest.Load(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	eng, err := engine.New(log)
 	if err != nil {
@@ -100,6 +61,8 @@ func TestProtocol(t *testing.T) {
 		{"/api/advisors", "Advisors"},
 		{"/api/config/company/nobody", "ErrorBody"},
 		{"/api/advisor/huaduan/metrics", "ErrorBody"},
+		{"/api/devices/huaduan/p1", "DeviceMap"},
+		{"/api/devices/huaduan/nowhere", "ErrorBody"},
 	} {
 		res, err := http.Get(ts.URL + c.path)
 		if err != nil {
@@ -110,7 +73,7 @@ func TestProtocol(t *testing.T) {
 		if ct := res.Header.Get("Content-Type"); ct != "application/json" {
 			t.Errorf("%s: content type %q", c.path, ct)
 		}
-		std.check(c.def, b)
+		std.Check(c.def, b)
 	}
 
 	// The live channel, as an operator: every kind of server message turns up.
@@ -129,7 +92,7 @@ func TestProtocol(t *testing.T) {
 		`{"type":"watch","company":"huaduan","plant":"all"}`,
 	}
 	for _, m := range sent {
-		std.check("ClientMessage", []byte(m))
+		std.Check("ClientMessage", []byte(m))
 		if err := ws.Write(ctx, websocket.MessageText, []byte(m)); err != nil {
 			t.Fatal(err)
 		}
@@ -157,7 +120,7 @@ func TestProtocol(t *testing.T) {
 			} `json:"data"`
 		}
 		json.Unmarshal(b, &m)
-		std.check("ServerMessage", b)
+		std.Check("ServerMessage", b)
 		want[m.Type] = true
 		if m.Type == "hello" && m.Protocol != Protocol {
 			t.Errorf("hello says protocol %d, server is %d", m.Protocol, Protocol)
@@ -169,7 +132,7 @@ func TestProtocol(t *testing.T) {
 
 	// The server's reading of browser messages knows every field the standard defines, and no others.
 	var defined []string
-	for _, v := range std.root.Defs["ClientMessage"].OneOf {
+	for _, v := range std.Root.Defs["ClientMessage"].OneOf {
 		for k := range v.Properties {
 			if !slices.Contains(defined, k) {
 				defined = append(defined, k)

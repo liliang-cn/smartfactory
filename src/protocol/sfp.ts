@@ -1,8 +1,10 @@
 // SFP, the SmartFactory protocol between the browser and the twin's server: the live channel
-// (WebSocket /api/live) and the HTTP API. This file is the standard. The browser's types are
+// (WebSocket /api/live) and the HTTP API; and SFD, how equipment reports to the twin and takes
+// its commands (the "equipment" section below). This file is the standard. The browser's types are
 // inferred from it, `npm run schema` writes it as protocol/sfp.schema.json, and the server's
 // conformance test (server/internal/web/protocol_test.go) checks what the server sends against
-// that file. Human-readable version: protocol/README.md.
+// that file, as does internal/e2e/standard_test.go for what equipment puts on the wire.
+// Human-readable versions: protocol/README.md and protocol/devices.md.
 import { z } from 'zod';
 
 /** Bumped on a change an older peer would misread; adding a message or an optional field is not one. */
@@ -327,11 +329,91 @@ export const ReviewRun = open({
 });
 export const Reviews = open({ reviews: z.array(Review), runs: z.array(ReviewRun) });
 
+// ---------- equipment (MQTT / Modbus TCP / OPC UA): protocol/devices.md ----------
+
+const Scalar = z.union([num, str, z.boolean()]);
+
+/** What a machine reports as its state; anything but fault / maint / stopped / changeover runs it. */
+export const MachineState = z.enum(['idle', 'running', 'blocked', 'stopped', 'fault', 'maint', 'changeover']);
+
+/**
+ * The fields of one asset in one message: {prefix}/{company}/{plant}/{asset} carries a JSON
+ * object of them, {prefix}/{company}/{plant}/{asset}/{field} one of them as plain text. Other
+ * fields are kept and shown with the asset; inv.<key> / cap.<key> set the plant's inventory.
+ */
+export const DeviceFields = z.object({
+  state: MachineState.optional(),
+  /** fault text; "" / false / 0 clears the fault */
+  fault: z.union([str, z.boolean(), num]).optional(),
+  /** n-th fault of the machine type, 0 = none */
+  faultCode: num.int().min(0).optional(),
+  /** true / 1 / "on" runs the machine, false / 0 / "off" stops it */
+  running: Scalar.optional(),
+  /** °C */
+  temp: num.optional(),
+  /** kW */
+  power: num.optional(),
+  /** mm/s */
+  vib: num.optional(),
+  /** factor 0.5–1.5 (or percent 50–150) */
+  speed: num.optional(),
+  /** 0–1 */
+  health: num.min(0).max(1).optional(),
+  /** one message per measured unit */
+  measure: num.optional(),
+  /** polled protocols: the last measured value, and a counter that moves once per measured unit */
+  lastMeasure: num.optional(),
+  mcount: num.optional(),
+  toolUsed: num.int().min(0).optional(),
+  toolLife: num.int().positive().optional(),
+  stock: num.optional(),
+  count: num.optional(),
+  /** vehicles: % */
+  battery: num.optional(),
+  /** vehicles: metres in plant coordinates, radians */
+  x: num.optional(),
+  z: num.optional(),
+  heading: num.optional(),
+  task: str.optional(),
+}).catchall(Scalar).meta({ description: 'Fields an asset reports' });
+
+/** Published by the server on {prefix}/{company}/{plant}/{asset}/cmd. */
+export const DeviceCommand = z.object({
+  cmd: Command,
+  arg: num.optional(),
+  /** who issued it: an operator, an AI assistant over MCP, a visitor or the automatic undo of a visitor's action */
+  by: z.enum(['operator', 'mcp', 'visitor', 'auto']),
+  /** wall-clock ms */
+  t: num,
+});
+
+/** Where each value of a plant lives under the sf convention (GET /api/devices/{company}/{plant}). */
+export const DeviceMap = z.object({
+  company: str,
+  plant: str,
+  mqtt: z.object({ data: str, field: str, cmd: str }),
+  modbus: z.object({
+    points: z.array(z.object({
+      asset: str, field: str, register: z.literal('holding'), address: num,
+      kind: z.enum(['int16', 'uint16', 'float32']), scale: num.optional(), map: z.record(str, str).optional(),
+    })),
+    /** write the argument ×argScale to argAddress, then the command code to address; the device sets it back to 0 */
+    commands: z.array(z.object({ asset: str, address: num, argAddress: num, argScale: num })),
+    codes: z.object({ state: z.array(str), command: z.array(str) }),
+  }),
+  opcua: z.object({
+    points: z.array(z.object({ asset: str, field: str, node: str })),
+    /** write the argument to argNode, then the command name to node; the device sets it back to "" */
+    commands: z.array(z.object({ asset: str, node: str, argNode: str })),
+  }),
+});
+
 /** Everything the standard defines, by name: what protocol/sfp.schema.json lists under $defs. */
 export const DEFS = {
   ClientMessage, ServerMessage, PlantState,
-  ErrorBody, Health, Directory, RuntimeCompany, Tags, Advisors,
+  ErrorBody, Health, Directory, RuntimeCompany, Tags, Advisors, DeviceMap,
   Metrics, Dimensions, Query, Answer, Board, DecideRequest, AskRequest, AskEvent, Reviews, ReviewRun,
+  DeviceFields, DeviceCommand,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
