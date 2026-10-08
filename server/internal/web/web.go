@@ -20,6 +20,10 @@ import (
 	"smartfactory/internal/tags"
 )
 
+// Protocol is the version of the browser protocol this server speaks (protocol/README.md); it
+// must match PROTOCOL in src/protocol/sfp.ts.
+const Protocol = 1
+
 type Server struct {
 	Hub     *tags.Hub
 	Engine  *engine.Engine
@@ -57,7 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/config/company/{id}", func(w http.ResponseWriter, r *http.Request) {
 		company, industries, ok := s.Engine.RuntimeCompany(r.PathValue("id"))
 		if !ok {
-			http.NotFound(w, r)
+			writeError(w, http.StatusNotFound, "找不到这家公司")
 			return
 		}
 		writeJSON(w, map[string]any{"company": company, "industries": industries})
@@ -135,7 +139,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	send(map[string]any{"type": "hello", "operator": op, "sim": true, "version": s.Version, "sources": s.sources()})
+	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "sim": true, "version": s.Version, "sources": s.sources()})
 
 	var (
 		company  string
@@ -295,6 +299,9 @@ func (s *Server) sources() []tags.SourceStatus {
 		}
 	})
 	for i := range out {
+		if out[i].Targets == nil {
+			out[i].Targets = []string{}
+		}
 		for _, t := range out[i].Targets {
 			parts := strings.SplitN(t, "/", 3)
 			label := t
@@ -334,6 +341,13 @@ func (s *Server) static() http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+// writeError answers with the protocol's error body, {"error": msg}.
+func writeError(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

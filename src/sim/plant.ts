@@ -5,6 +5,7 @@
 import type { History } from './history';
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
+import type { PlantState, ProductTuple } from '@/protocol/sfp';
 import type {
   AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
@@ -57,7 +58,6 @@ export const STATE_LABEL: Record<AssetState, string> = {
 
 type AssetInit = Partial<Asset> & Pick<Asset, 'id' | 'name' | 'type'>;
 
-type ProductTuple = [id: string, s: number, done: number, proc: number, t: number, kind: string, stall: number, held?: Record<string, number> | null];
 
 /** A plant as written to disk by the server. */
 export interface SavedPlant {
@@ -79,31 +79,8 @@ export interface SavedPlant {
   seq?: number;
 }
 
-/** A plant's replicated state, as sent from the server to browsers. */
-export interface PlantState {
-  clock: number;
-  elapsed: number;
-  energy: number;
-  power: number;
-  alarmSeq: number;
-  assets: (Pick<Asset, 'id' | 'enabled' | 'speed' | 'fault' | 'maint' | 'state' | 'temp' | 'vib' | 'power' | 'health' | 'util' | 'avail' | 'cycles' | 'progress' | 'rejects' | 'stock' | 'count' | 'battery' | 'vel' | 'task'> & {
-    toolUsed?: number;
-    toolLimit?: number;
-    changing?: number;
-    busy: string | null;
-    reading: Asset['reading'] | null;
-    verdict: Asset['verdict'] | null;
-    live: LiveValues | null;
-  })[];
-  lines: { id: string; spawnT: number; pid: number; good: number; scrap: number; tp: number; products: ProductTuple[]; lot?: [string, string]; job?: [string, string, number, number, number] }[];
-  agvs: Pick<AgvState, 'idx' | 'x' | 'z' | 'heading' | 'cargo' | 'mode' | 'dwell' | 'waiting' | 'waitedT' | 'task'>[] & { id: string }[];
-  trucks: (Pick<TruckState, 'idx' | 'x' | 'z' | 'heading' | 'phase' | 'wait' | 'dock' | 'load'> & { id: string })[];
-  alarms: Alarm[];
-  log: LogEntry[];
-  /** [key, available, capacity] */
-  inventory?: [string, number, number][];
-  events: SimEvent[];
-}
+/** A plant's replicated state, as sent from the server to browsers: defined by the protocol. */
+export type { PlantState };
 
 /** One of several by their `share` (weight). */
 function pickShare<T extends { share?: number }>(xs: T[]): T | undefined {

@@ -29,13 +29,13 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			a, ok := s.AdvisorAPI[r.PathValue("company")]
 			if !ok || a.API == "" {
-				http.NotFound(w, r)
+				writeError(w, http.StatusNotFound, "这家公司没有顾问服务")
 				return
 			}
 			token := a.Token
 			if write {
 				if !s.operator(r) {
-					http.Error(w, `{"error":"需要运营令牌"}`, http.StatusForbidden)
+					writeError(w, http.StatusForbidden, "需要运营令牌")
 					return
 				}
 				token = a.Approver
@@ -46,14 +46,14 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 			}
 			req, err := http.NewRequestWithContext(r.Context(), method, target, r.Body)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				writeError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("Content-Type", "application/json")
 			res, err := advisorClient.Do(req)
 			if err != nil {
-				http.Error(w, `{"error":"顾问服务不可用"}`, http.StatusBadGateway)
+				writeError(w, http.StatusBadGateway, "顾问服务不可用")
 				return
 			}
 			defer res.Body.Close()
@@ -91,7 +91,7 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/advisor/{company}/ask", func(w http.ResponseWriter, r *http.Request) {
 		who := clientIP(r)
 		if _, busy := asking.LoadOrStore(who, time.Now()); busy {
-			http.Error(w, `{"error":"上一个问题还没答完"}`, http.StatusTooManyRequests)
+			writeError(w, http.StatusTooManyRequests, "上一个问题还没答完")
 			return
 		}
 		defer asking.Delete(who)
@@ -106,7 +106,7 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 		case "adopt", "reject", "measure", "accept":
 			pass("POST", "/v1/consult/plans/{plan}/{verb}", true)(w, r)
 		default:
-			http.NotFound(w, r)
+			writeError(w, http.StatusNotFound, "没有这个操作")
 		}
 	})
 }

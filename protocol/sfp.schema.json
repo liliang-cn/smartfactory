@@ -1,0 +1,2380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://factory.superleo.cn/protocol/sfp-1.schema.json",
+  "title": "SmartFactory protocol 1",
+  "$defs": {
+    "ClientMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "watch"
+            },
+            "company": {
+              "type": "string"
+            },
+            "plant": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "company",
+            "plant"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "plant"
+            },
+            "plant": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plant"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cmd"
+            },
+            "plant": {
+              "type": "string"
+            },
+            "asset": {
+              "type": "string"
+            },
+            "cmd": {
+              "type": "string",
+              "enum": [
+                "start",
+                "stop",
+                "speed",
+                "reset",
+                "maint",
+                "fault",
+                "restock",
+                "ship",
+                "retool",
+                "toollimit"
+              ],
+              "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+            },
+            "arg": {
+              "type": "number"
+            },
+            "o": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plant",
+            "asset",
+            "cmd"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "time"
+            },
+            "scale": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 20
+            }
+          },
+          "required": [
+            "type",
+            "scale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "hist"
+            },
+            "plant": {
+              "type": "string"
+            },
+            "asset": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plant",
+            "asset"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ServerMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "hello"
+            },
+            "protocol": {
+              "type": "number",
+              "const": 1
+            },
+            "operator": {
+              "type": "boolean"
+            },
+            "sim": {
+              "type": "boolean"
+            },
+            "version": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Source"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "protocol",
+            "operator",
+            "sim",
+            "version",
+            "sources"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "sources"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Source"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "sources"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "frame"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "company": {
+                  "type": "string"
+                },
+                "timeScale": {
+                  "type": "number"
+                },
+                "plants": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/$defs/PlantState"
+                  }
+                }
+              },
+              "required": [
+                "company",
+                "timeScale",
+                "plants"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "result"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "msg": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ok",
+            "msg"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "hist"
+            },
+            "plant": {
+              "type": "string"
+            },
+            "asset": {
+              "type": "string"
+            },
+            "data": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "temp": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "power": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "vib": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "level": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "meas": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "required": [
+                    "temp",
+                    "power",
+                    "vib",
+                    "level",
+                    "meas"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "plant",
+            "asset",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cmd"
+            },
+            "cmd": {
+              "type": "object",
+              "properties": {
+                "c": {
+                  "type": "string"
+                },
+                "p": {
+                  "type": "string"
+                },
+                "a": {
+                  "type": "string"
+                },
+                "cmd": {
+                  "type": "string",
+                  "enum": [
+                    "start",
+                    "stop",
+                    "speed",
+                    "reset",
+                    "maint",
+                    "fault",
+                    "restock",
+                    "ship",
+                    "retool",
+                    "toollimit"
+                  ],
+                  "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+                },
+                "arg": {
+                  "type": "number"
+                },
+                "by": {
+                  "type": "string",
+                  "enum": [
+                    "operator",
+                    "mcp"
+                  ]
+                },
+                "o": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "c",
+                "p",
+                "a",
+                "cmd",
+                "by"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type",
+            "cmd"
+          ],
+          "additionalProperties": false,
+          "description": "An operator or an AI assistant acted on the watched company"
+        }
+      ]
+    },
+    "PlantState": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "number"
+        },
+        "elapsed": {
+          "type": "number"
+        },
+        "energy": {
+          "type": "number"
+        },
+        "power": {
+          "type": "number"
+        },
+        "alarmSeq": {
+          "type": "number"
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "speed": {
+                "type": "number"
+              },
+              "fault": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "text",
+                      "at"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "maint": {
+                "type": "number"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "idle",
+                  "blocked",
+                  "stopped",
+                  "fault",
+                  "maint",
+                  "changeover",
+                  "moving",
+                  "waiting",
+                  "handling",
+                  "away",
+                  "ok",
+                  "empty",
+                  "low",
+                  "full"
+                ]
+              },
+              "temp": {
+                "type": "number"
+              },
+              "vib": {
+                "type": "number"
+              },
+              "power": {
+                "type": "number"
+              },
+              "health": {
+                "type": "number"
+              },
+              "util": {
+                "type": "number"
+              },
+              "avail": {
+                "type": "number"
+              },
+              "cycles": {
+                "type": "number"
+              },
+              "progress": {
+                "type": "number"
+              },
+              "busy": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reading": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "v": {
+                        "type": "number"
+                      },
+                      "ok": {
+                        "type": "boolean"
+                      },
+                      "at": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "ok",
+                      "at"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rejects": {
+                "type": "number"
+              },
+              "verdict": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ok": {
+                        "type": "boolean"
+                      },
+                      "at": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "ok",
+                      "at"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stock": {
+                "type": "number"
+              },
+              "count": {
+                "type": "number"
+              },
+              "battery": {
+                "type": "number"
+              },
+              "vel": {
+                "type": "number"
+              },
+              "task": {
+                "type": "string"
+              },
+              "live": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "src": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "number"
+                      },
+                      "f": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": [
+                            "number",
+                            "string",
+                            "boolean"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "src",
+                      "at",
+                      "f"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Values read from equipment; while fresh they replace the simulated ones"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "toolUsed": {
+                "type": "number"
+              },
+              "toolLimit": {
+                "type": "number"
+              },
+              "changing": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "enabled",
+              "speed",
+              "fault",
+              "maint",
+              "state",
+              "temp",
+              "vib",
+              "power",
+              "health",
+              "util",
+              "avail",
+              "cycles",
+              "progress",
+              "busy",
+              "reading",
+              "rejects",
+              "verdict",
+              "stock",
+              "count",
+              "battery",
+              "vel",
+              "task",
+              "live"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "spawnT": {
+                "type": "number"
+              },
+              "pid": {
+                "type": "number"
+              },
+              "good": {
+                "type": "number"
+              },
+              "scrap": {
+                "type": "number"
+              },
+              "tp": {
+                "type": "number"
+              },
+              "products": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 8,
+                  "maxItems": 8
+                }
+              },
+              "lot": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "job": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 5,
+                "maxItems": 5
+              }
+            },
+            "required": [
+              "id",
+              "spawnT",
+              "pid",
+              "good",
+              "scrap",
+              "tp",
+              "products"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "agvs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "idx": {
+                "type": "number"
+              },
+              "x": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              },
+              "heading": {
+                "type": "number"
+              },
+              "cargo": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "raw",
+                          "fg"
+                        ]
+                      },
+                      "n": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "n"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "move",
+                  "dwell"
+                ]
+              },
+              "dwell": {
+                "type": "number"
+              },
+              "waiting": {
+                "type": "boolean"
+              },
+              "waitedT": {
+                "type": "number"
+              },
+              "task": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "idx",
+              "x",
+              "z",
+              "heading",
+              "cargo",
+              "mode",
+              "dwell",
+              "waiting",
+              "waitedT",
+              "task"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "trucks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "idx": {
+                "type": "number"
+              },
+              "x": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              },
+              "heading": {
+                "type": "number"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "away",
+                  "drive",
+                  "dock",
+                  "leave"
+                ]
+              },
+              "wait": {
+                "type": "number"
+              },
+              "dock": {
+                "type": "number"
+              },
+              "load": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "idx",
+              "x",
+              "z",
+              "heading",
+              "phase",
+              "wait",
+              "dock",
+              "load"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "alarms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "prio": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "const": 1
+                  },
+                  {
+                    "type": "number",
+                    "const": 2
+                  },
+                  {
+                    "type": "number",
+                    "const": 3
+                  }
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "at": {
+                "type": "number"
+              },
+              "active": {
+                "type": "boolean"
+              },
+              "acked": {
+                "type": "boolean"
+              },
+              "clearedAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "asset",
+              "code",
+              "prio",
+              "text",
+              "at",
+              "active",
+              "acked"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "op",
+                  "alarm"
+                ]
+              },
+              "prio": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "asset",
+              "text",
+              "kind",
+              "prio"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "inventory": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "reject"
+                  },
+                  "line": {
+                    "type": "string"
+                  },
+                  "asset": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  },
+                  "kind": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "line",
+                  "asset",
+                  "x",
+                  "z",
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "fault"
+                  },
+                  "asset": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "asset"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "clock",
+        "elapsed",
+        "energy",
+        "power",
+        "alarmSeq",
+        "assets",
+        "lines",
+        "agvs",
+        "trucks",
+        "alarms",
+        "log",
+        "events"
+      ],
+      "additionalProperties": false,
+      "description": "A plant's replicated state"
+    },
+    "ErrorBody": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "Health": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        },
+        "companies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stepMs": {
+          "type": "number"
+        },
+        "savedAt": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Source"
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "version",
+        "companies",
+        "stepMs",
+        "savedAt",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "Directory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "short": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "short"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "RuntimeCompany": {
+      "type": "object",
+      "properties": {
+        "company": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "industries": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "company",
+        "industries"
+      ],
+      "additionalProperties": false
+    },
+    "Tags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "c": {
+            "type": "string"
+          },
+          "p": {
+            "type": "string"
+          },
+          "a": {
+            "type": "string"
+          },
+          "f": {
+            "type": "string"
+          },
+          "v": {
+            "type": [
+              "number",
+              "string",
+              "boolean"
+            ]
+          },
+          "src": {
+            "type": "string"
+          },
+          "t": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "c",
+          "p",
+          "a",
+          "f",
+          "v",
+          "src",
+          "t"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "Advisors": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Each company's advisor console URL"
+    },
+    "Metrics": {
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "synonyms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "additivity": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "description"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "metrics"
+      ],
+      "additionalProperties": {}
+    },
+    "Dimensions": {
+      "type": "object",
+      "properties": {
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "synonyms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "dimensions"
+      ],
+      "additionalProperties": {}
+    },
+    "Query": {
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "group_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "where": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "type": "string"
+              },
+              "op": {
+                "type": "string"
+              },
+              "values": {
+                "type": "array",
+                "items": {}
+              }
+            },
+            "required": [
+              "dimension",
+              "op",
+              "values"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "grain": {
+          "type": "string",
+          "enum": [
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "limit": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "metrics"
+      ],
+      "additionalProperties": false
+    },
+    "Answer": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "sql": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "columns",
+        "rows",
+        "sql"
+      ],
+      "additionalProperties": {}
+    },
+    "Board": {
+      "type": "object",
+      "properties": {
+        "goals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "goal": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "what": {
+                    "type": "string"
+                  },
+                  "metric": {
+                    "type": "string"
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "up",
+                      "down"
+                    ]
+                  },
+                  "by": {
+                    "type": "number"
+                  },
+                  "within_days": {
+                    "type": "number"
+                  },
+                  "scope": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Filter"
+                    }
+                  },
+                  "guards": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Guard"
+                    }
+                  },
+                  "baseline": {
+                    "$ref": "#/$defs/Measurement"
+                  },
+                  "author": {
+                    "type": "string"
+                  },
+                  "via": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "what",
+                  "metric",
+                  "direction",
+                  "by",
+                  "within_days",
+                  "author",
+                  "at"
+                ],
+                "additionalProperties": {}
+              },
+              "target": {
+                "type": "number"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Finding"
+                }
+              },
+              "plans": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PlanView"
+                }
+              }
+            },
+            "required": [
+              "goal",
+              "findings",
+              "plans"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "loose_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        },
+        "loose_plans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanView"
+          }
+        },
+        "at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "goals",
+        "at"
+      ],
+      "additionalProperties": {},
+      "description": "The consulting record: goals, findings, plans and their decisions"
+    },
+    "DecideRequest": {
+      "type": "object",
+      "properties": {
+        "why": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AskRequest": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "AskEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "thinking"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_call"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_result"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "result": {}
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "verify"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "verified"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "verify_skipped"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "complete"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": {}
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "error"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": {}
+        }
+      ],
+      "description": "One server-sent event of an agent run: `data: <AskEvent JSON>`"
+    },
+    "Reviews": {
+      "type": "object",
+      "properties": {
+        "reviews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "schedule": {
+                "type": "string"
+              },
+              "can_run": {
+                "type": "boolean"
+              },
+              "running": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "title",
+              "can_run",
+              "running"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReviewRun"
+          }
+        }
+      },
+      "required": [
+        "reviews",
+        "runs"
+      ],
+      "additionalProperties": {}
+    },
+    "ReviewRun": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "schedule",
+            "manual"
+          ]
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "finished_at": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "done",
+            "failed"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "args": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "result": {}
+            },
+            "required": [
+              "tool"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "corrected": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "title",
+        "by",
+        "trigger",
+        "started_at",
+        "finished_at",
+        "answer",
+        "status"
+      ],
+      "additionalProperties": {}
+    },
+    "Source": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "mqtt",
+            "modbus",
+            "opcua"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "points": {
+          "type": "number"
+        },
+        "received": {
+          "type": "number"
+        },
+        "lastAt": {
+          "type": "string"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "url",
+        "connected",
+        "points",
+        "received",
+        "lastAt",
+        "targets"
+      ],
+      "additionalProperties": false,
+      "description": "A protocol adapter reading equipment values"
+    },
+    "Filter": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "op": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {}
+        },
+        "and": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Filter"
+          }
+        },
+        "or": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Filter"
+          }
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "additionalProperties": {}
+    },
+    "Guard": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "type": "string"
+        },
+        "worse_is": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down"
+          ]
+        },
+        "tolerance": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "limit": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "metric",
+        "worse_is"
+      ],
+      "additionalProperties": {}
+    },
+    "Measurement": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Filter"
+          }
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "data_days": {
+          "type": "number"
+        },
+        "sql": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "metric",
+        "from",
+        "to",
+        "value",
+        "data_days",
+        "sql",
+        "at"
+      ],
+      "additionalProperties": {}
+    },
+    "Finding": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "says": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "asked": {
+                "type": "string"
+              },
+              "sql": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "row_count": {
+                "type": "number"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "asked",
+              "sql",
+              "columns",
+              "rows",
+              "row_count",
+              "at"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "by": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "says",
+        "evidence",
+        "by",
+        "at"
+      ],
+      "additionalProperties": {}
+    },
+    "Acceptance": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "type": "string"
+        },
+        "final": {
+          "type": "boolean"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "baseline": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "measured": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Measurement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "guards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "guard": {
+                "$ref": "#/$defs/Guard"
+              },
+              "baseline": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "measured": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Measurement"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "broken": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "guard",
+              "baseline",
+              "measured",
+              "broken"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "achieved",
+            "missed",
+            "guard_broken",
+            "no_data"
+          ]
+        },
+        "at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan",
+        "final",
+        "metric",
+        "baseline",
+        "target",
+        "measured",
+        "outcome",
+        "at"
+      ],
+      "additionalProperties": {}
+    },
+    "PlanView": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "goal": {
+              "type": "string"
+            },
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "does": {
+              "type": "string"
+            },
+            "expect": {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "type": "string"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "up",
+                    "down"
+                  ]
+                },
+                "by": {
+                  "type": "number"
+                },
+                "within_days": {
+                  "type": "number"
+                },
+                "scope": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Filter"
+                  }
+                }
+              },
+              "required": [
+                "metric",
+                "direction",
+                "by",
+                "within_days"
+              ],
+              "additionalProperties": {}
+            },
+            "guards": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Guard"
+              }
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "server": {
+                    "type": "string"
+                  },
+                  "tool": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "server",
+                  "tool"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "cost": {
+              "type": "string"
+            },
+            "by": {
+              "type": "string"
+            },
+            "via": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "findings",
+            "does",
+            "expect",
+            "by",
+            "at"
+          ],
+          "additionalProperties": {}
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "proposed",
+            "adopted",
+            "rejected",
+            "accepted"
+          ]
+        },
+        "decision": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "string"
+            },
+            "verdict": {
+              "type": "string",
+              "enum": [
+                "adopted",
+                "rejected"
+              ]
+            },
+            "who": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "baseline": {
+              "$ref": "#/$defs/Measurement"
+            },
+            "guard_baselines": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Measurement"
+              }
+            }
+          },
+          "required": [
+            "plan",
+            "verdict",
+            "who",
+            "at"
+          ],
+          "additionalProperties": {}
+        },
+        "due": {
+          "type": "string"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "plan": {
+                "type": "string"
+              },
+              "index": {
+                "type": "number"
+              },
+              "server": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "result": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "skipped": {
+                "type": "boolean"
+              },
+              "ms": {
+                "type": "number"
+              },
+              "at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "plan",
+              "index",
+              "server",
+              "tool",
+              "ms",
+              "at"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "progress": {
+          "$ref": "#/$defs/Acceptance"
+        },
+        "acceptance": {
+          "$ref": "#/$defs/Acceptance"
+        }
+      },
+      "required": [
+        "plan",
+        "state"
+      ],
+      "additionalProperties": {}
+    }
+  }
+}

@@ -6,22 +6,10 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { runtime, useUI } from '@/state/store';
-import type { PlantState } from '@/sim/plant';
-import type { Asset, Command } from '@/sim/types';
+import { PROTOCOL, type ClientMessage, type ServerMessage, type SourceInfo } from '@/protocol/sfp';
+import type { Command } from '@/sim/types';
 
-export interface SourceInfo {
-  name: string;
-  type: 'mqtt' | 'modbus' | 'opcua';
-  url: string;
-  connected: boolean;
-  error?: string;
-  points: number;
-  received: number;
-  /** assets this source feeds, as company/plant/asset */
-  targets?: string[];
-  /** the same, named for people */
-  labels?: string[];
-}
+export type { SourceInfo };
 
 interface LiveState {
   status: 'off' | 'connecting' | 'on';
@@ -34,17 +22,10 @@ interface LiveState {
 
 export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, sources: [] }));
 
-interface Cmd { c: string; p: string; a: string; cmd: Command; arg?: number; by: string; o?: string }
-type ServerMsg =
-  | { type: 'hello'; operator: boolean; sim: boolean; sources: SourceInfo[] }
-  | { type: 'sources'; sources: SourceInfo[] }
-  | { type: 'frame'; data: { company: string; timeScale: number; plants: Record<string, PlantState> } }
-  | { type: 'result'; ok: boolean; msg: string }
-  | { type: 'hist'; plant: string; asset: string; data: Asset['hist'] | null }
-  | { type: 'cmd'; cmd: Cmd };
-
 const me = Math.random().toString(36).slice(2, 10);
 let ws: WebSocket | null = null;
+/** the server speaks a newer protocol than this page: stop reconnecting until it is reloaded */
+let stale = false;
 
 function token(): string | null {
   const params = new URLSearchParams(location.search);
@@ -63,7 +44,7 @@ export function operatorToken(): string | null {
   try { return sessionStorage.getItem('sf-token'); } catch { return null; }
 }
 
-const send = (m: object) => {
+const send = (m: ClientMessage) => {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
 };
 
@@ -86,22 +67,29 @@ function connect(tok: string | null, attempt: number) {
     ws = s;
     useLive.setState({ status: 'on' });
   };
-  s.onmessage = (e) => handle(JSON.parse(e.data) as ServerMsg);
+  s.onmessage = (e) => handle(JSON.parse(e.data) as ServerMessage);
   s.onclose = () => {
     if (ws === s) ws = null;
     // Keep showing the last state and simulate locally until the server is back.
     for (const p of runtime().plants) p.sim.follower = false;
     useLive.setState({ status: 'off', following: false, sources: [] });
     // No server answered on the first tries: static hosting or dev without the server. Stay quiet.
-    if (!opened && attempt >= 2) return;
+    if (stale || (!opened && attempt >= 2)) return;
     setTimeout(() => connect(tok, opened ? 0 : attempt + 1), Math.min(30_000, 1500 * 2 ** attempt));
   };
 }
 
-function handle(m: ServerMsg) {
+function handle(m: ServerMessage) {
   const rt = runtime();
   switch (m.type) {
     case 'hello':
+      // a page cached from before the server changed its protocol: frames would be misread
+      if (m.protocol !== PROTOCOL) {
+        stale = true;
+        toast.error('服务器已更新，请刷新页面', { duration: Infinity });
+        ws?.close();
+        return;
+      }
       useLive.setState({ operator: m.operator, sources: m.sources, following: m.sim });
       if (m.sim) {
         for (const p of rt.plants) {
