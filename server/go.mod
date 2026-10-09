@@ -9,7 +9,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/gopcua/opcua v0.9.1
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/liliang-cn/agent-go/v3 v3.51.5
+	github.com/liliang-cn/agent-go/v3 v3.51.6
 	github.com/liliang-cn/semantic-go v0.2.2
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/modelcontextprotocol/go-sdk v1.8.0

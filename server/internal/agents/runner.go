@@ -135,10 +135,6 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	// These contracts name one tool per requested action, so 「记一下」 that rightly appends to an
-	// existing note (update_note) is rejected for not creating one (save_note), and the retry
-	// writes the note twice. The brief says which to use instead.
-	svc.DisableOutputLint("requested_action_contract", "task_delivery_contract")
 	all := tools(r.Store, r.Eng, a.Company)
 	for _, name := range t.Tools {
 		tl := all[name]
