@@ -4,20 +4,24 @@ package web
 import (
 	"cmp"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 
 	"smartfactory/internal/agents"
+	"smartfactory/internal/audit"
+	"smartfactory/internal/auth"
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/sfconv"
@@ -29,9 +33,12 @@ import (
 const Protocol = 1
 
 type Server struct {
-	Hub     *tags.Hub
-	Engine  *engine.Engine
-	Token   string
+	Hub    *tags.Hub
+	Engine *engine.Engine
+	// Keys are the tokens the server accepts; without one, everyone is a visitor.
+	Keys *auth.Keyring
+	// Audit keeps who changed what.
+	Audit   *audit.Log
 	Version string
 	Static  fs.FS
 	MCP     http.Handler
@@ -78,35 +85,33 @@ func (s *Server) Handler() http.Handler {
 	if s.MCP != nil {
 		mux.Handle("/mcp", s.requireToken(s.MCP))
 	}
+	mux.HandleFunc("GET /api/audit/{company}", s.auditLog)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())
 	return mux
 }
 
-func (s *Server) operator(r *http.Request) bool {
-	if s.Token == "" {
-		return false
-	}
-	got := r.URL.Query().Get("token")
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		got = strings.TrimPrefix(h, "Bearer ")
-	}
-	return subtle.ConstantTimeCompare([]byte(got), []byte(s.Token)) == 1
-}
+// caller is who made the request.
+func (s *Server) caller(r *http.Request) auth.Who { return s.Keys.Of(r) }
 
+// requireToken lets in requests that carry a token, and hands MCP's tools who sent them.
 func (s *Server) requireToken(next http.Handler) http.Handler {
+	verify := func(_ context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
+		w, ok := s.Keys.Lookup(token)
+		if !ok {
+			return nil, mcpauth.ErrInvalidToken
+		}
+		return &mcpauth.TokenInfo{UserID: w.Key, Extra: map[string]any{"who": w}}, nil
+	}
+	gate := mcpauth.RequireBearerToken(verify, &mcpauth.RequireBearerTokenOptions{AllowMissingExpiration: true})(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.Token == "" {
-			http.Error(w, "MCP is disabled: set a token in the server config or SF_TOKEN", http.StatusServiceUnavailable)
+		if s.Keys.Empty() {
+			http.Error(w, "MCP is disabled: add a token to the server config (smartfactory token)", http.StatusServiceUnavailable)
 			return
 		}
-		if !s.operator(r) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="smartfactory"`)
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="smartfactory"`)
+		gate.ServeHTTP(w, r)
 	})
 }
 
@@ -130,9 +135,12 @@ var revertOf = map[string]string{"stop": "start", "fault": "reset", "speed": "sp
 
 // live is the browser link. The server runs the simulation; a browser watches one company and
 // gets frames of the plant it is looking at (and the others now and then), sends commands, and
-// with the operator token can also change the plant clock and reach real equipment.
+// as an operator of the company can also change the plant clock and reach real equipment.
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
-	op := s.operator(r)
+	who := s.caller(r)
+	// the page says which company it shows, so the greeting can say what the caller may do there
+	first := r.URL.Query().Get("company")
+	op := who.Can(first, auth.Operator)
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true, CompressionMode: websocket.CompressionContextTakeover})
 	if err != nil {
 		return
@@ -149,7 +157,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "sim": true, "version": s.Version, "sources": s.sources()})
+	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "role": who.RoleIn(first), "name": who.Name, "sim": true, "version": s.Version, "sources": s.sources()})
 
 	var (
 		company  string
@@ -184,6 +192,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			if m.Company != company {
 				unwatch()
 				company = m.Company
+				op = who.Can(company, auth.Operator)
 				frames, setPlant, unwatch = s.Engine.Watch(company, m.Plant)
 			} else if setPlant != nil {
 				setPlant(m.Plant)
@@ -207,16 +216,23 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 				bucket--
 			}
 			res := s.Engine.Command(company, m.Plant, m.Asset, m.Cmd, m.Arg)
+			if op {
+				var err error
+				if !res.OK {
+					err = errors.New(res.Msg)
+				}
+				s.Audit.Record(who, "live", company, "command", m.Plant+"/"+m.Asset, commandText(m.Cmd, m.Arg), err)
+			}
 			if res.OK {
 				// Adapters decide what reaches equipment: operators reach everything, visitors
 				// only emulated equipment (public sources).
-				by := "visitor"
+				by, name := "visitor", ""
 				if op {
-					by = "operator"
+					by, name = "operator", who.Name
 				} else {
 					s.scheduleRevert(company, m)
 				}
-				s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: m.Cmd, Arg: m.Arg, By: by, Origin: m.O})
+				s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: m.Cmd, Arg: m.Arg, By: by, Name: name, Origin: m.O})
 			}
 			send(map[string]any{"type": "result", "ok": res.OK, "msg": res.Msg})
 		case "time":
@@ -226,6 +242,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			}
 			if company != "" {
 				s.Engine.SetTimeScale(company, m.Scale)
+				s.Audit.Record(who, "live", company, "clock", "", strconv.FormatFloat(m.Scale, 'g', -1, 64)+"×", nil)
 			}
 		case "hist":
 			if company != "" {
@@ -265,6 +282,31 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// commandText is a command as the audit log shows it: "speed 1.2", "stop".
+func commandText(cmd string, arg *float64) string {
+	if arg == nil {
+		return cmd
+	}
+	return cmd + " " + strconv.FormatFloat(*arg, 'g', -1, 64)
+}
+
+// auditLog lists a company's changes for its operators and administrators.
+func (s *Server) auditLog(w http.ResponseWriter, r *http.Request) {
+	c := r.PathValue("company")
+	if !s.caller(r).Can(c, auth.Operator) {
+		writeError(w, http.StatusForbidden, "需要这家公司操作员以上的令牌")
+		return
+	}
+	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	list, err := s.Audit.List(r.Context(), c, before, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, list)
 }
 
 func (s *Server) scheduleRevert(company string, m clientMsg) {

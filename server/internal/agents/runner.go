@@ -17,6 +17,8 @@ import (
 	"github.com/liliang-cn/agent-go/v3/pkg/domain"
 	"github.com/liliang-cn/agent-go/v3/pkg/providers"
 
+	"smartfactory/internal/audit"
+	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
 )
 
@@ -27,8 +29,9 @@ var shanghai = func() *time.Location {
 	return time.FixedZone("CST", 8*3600)
 }()
 
-func now() time.Time    { return time.Now().In(shanghai) }
-func today() string     { return now().Format("2006-01-02") }
+func now() time.Time { return time.Now().In(shanghai) }
+func today() string  { return now().Format("2006-01-02") }
+
 var weekday = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
 
 // Runner holds the companies' assistants: the store, and one agent-go service per assistant,
@@ -37,6 +40,8 @@ type Runner struct {
 	Store *Store
 	Eng   *engine.Engine
 	Log   *slog.Logger
+	// Audit keeps what the assistants write, under the person they wrote it for.
+	Audit *audit.Log
 
 	dir string
 	llm domain.Generator
@@ -130,20 +135,57 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown kind %q", a.Kind)
 	}
-	svc, err := agentpkg.New("sf-"+a.ID).WithLLM(r.llm).WithSystemPrompt(r.prompt(a)).
+	svc, err := agentpkg.New("sf-" + a.ID).WithLLM(r.llm).WithSystemPrompt(r.prompt(a)).
 		WithDBPath(filepath.Join(r.dir, "agentgo.db")).WithTimezone(shanghai).Build()
 	if err != nil {
 		return nil, err
 	}
 	all := tools(r.Store, r.Eng, a.Company)
+	writes := map[string]bool{}
 	for _, name := range t.Tools {
 		tl := all[name]
+		writes[name] = tl.write
 		svc.AddToolWithMetadata(tl.name, tl.desc, tl.params, func(ctx context.Context, m map[string]any) (any, error) {
-			return tl.run(ctx, args(m))
+			res, err := tl.run(ctx, args(m))
+			if tl.write {
+				r.Audit.Record(caller(ctx), "assistant", a.Company, tl.name, subject(res, args(m)), a.Name, err)
+			}
+			return res, err
 		}, agentpkg.ToolMetadata{ReadOnly: !tl.write, ConcurrencySafe: !tl.write})
 	}
+	// Only the template's writes need a say; agent-go's own tools (task_complete …) never do.
+	svc.SetPermissionPolicy(func(req agentpkg.PermissionRequest) bool { return writes[req.ToolName] })
+	svc.SetPermissionHandler(permit(a.Company))
 	r.svcs[a.ID] = &built{svc: svc, updated: a.Updated}
 	return svc, nil
+}
+
+// permit decides whether the person a run acts for may write on company: members and above
+// may. A refusal leaves the run going, so the model hands over what it would have saved.
+func permit(company string) agentpkg.PermissionHandler {
+	return func(ctx context.Context, req agentpkg.PermissionRequest) (*agentpkg.PermissionResponse, error) {
+		w := caller(ctx)
+		if w.Can(company, auth.Member) {
+			return &agentpkg.PermissionResponse{Allowed: true, DecidedBy: w.Name}, nil
+		}
+		return &agentpkg.PermissionResponse{ContinueRun: true, DecidedBy: "smartfactory",
+			Reason: fmt.Sprintf("只有这家公司的成员、操作员或管理员可以保存，提问的人是%s：没有保存，把整理好的内容直接给用户", w.RoleIn(company).Label())}, nil
+	}
+}
+
+// subject names what a write touched, for the audit log.
+func subject(res any, a args) string {
+	switch v := res.(type) {
+	case Note:
+		return v.ID + " " + v.Title
+	case *Note:
+		return v.ID + " " + v.Title
+	case Ticket:
+		return v.ID + " " + v.Title
+	case *Ticket:
+		return v.ID + " " + v.Title
+	}
+	return a.str("id")
 }
 
 // Event is one step of an answer as it is written, for the browser.
@@ -162,7 +204,7 @@ var ErrNoModel = errors.New("服务器没有配置大模型")
 
 // Ask puts text to the assistant in conversation conv (whose earlier turns agent-go keeps), as
 // who; emit sees every step. The answer and its steps are kept with the conversation.
-func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who Caller, emit func(Event)) error {
+func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who auth.Who, emit func(Event)) error {
 	if r.llm == nil {
 		return ErrNoModel
 	}
@@ -182,8 +224,12 @@ func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who Caller
 		return err
 	}
 	n := now()
-	goal := fmt.Sprintf("（现在是 %s %s %s，提问的是%s）\n\n%s", n.Format("2006-01-02"), weekday[n.Weekday()], n.Format("15:04"), who.Name, text)
-	ch, err := svc.RunStreamWithOptions(withCaller(ctx, who), goal, agentpkg.WithSessionID(conv), agentpkg.WithMaxTurns(24))
+	asker := who.Name
+	if role := who.RoleIn(a.Company); role != auth.Visitor {
+		asker += "（" + role.Label() + "）"
+	}
+	goal := fmt.Sprintf("（现在是 %s %s %s，提问的是%s）\n\n%s", n.Format("2006-01-02"), weekday[n.Weekday()], n.Format("15:04"), asker, text)
+	ch, err := svc.RunStreamWithOptions(auth.With(ctx, who), goal, agentpkg.WithSessionID(conv), agentpkg.WithMaxTurns(24))
 	if err != nil {
 		r.Store.FinishMessage(mid, "", nil, "failed")
 		return err

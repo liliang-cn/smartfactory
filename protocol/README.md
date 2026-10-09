@@ -13,7 +13,16 @@
 ## 1. 通用约定
 
 - **传输**：与页面同源。实时通道是 WebSocket `/api/live`，其余接口是 HTTP。所有消息都是 UTF-8 JSON。WebSocket 每帧一条消息，文本帧。
-- **身份**：分访客和操作员两种。操作员带运营令牌：WebSocket 写在 `?token=`，HTTP 写在 `Authorization: Bearer <token>`，也可以用 `?token=`。不带令牌、或令牌不对，都按访客处理，不会报错。
+- **身份**：令牌写在 `Authorization: Bearer <token>`，WebSocket 和 HTTP 也可以用 `?token=`。不带令牌、令牌不对或已过期，都按访客处理，不报错。每个令牌对应一个人或一个客户端，带一个角色和它管的公司；在它不管的公司里，持有人也是访客。角色从低到高（`Role`）：
+
+  | 角色 | 能做的事 |
+  |---|---|
+  | `visitor` 访客 | 看；试操作仿真设备（限流，90 s 后自动撤销）；向助手提问，助手只给草稿不保存 |
+  | `member` 成员 | 加上：通过助手记笔记、建工单、改工单；改工单状态 |
+  | `operator` 操作员 | 加上：会下发到真实设备的命令、全公司仿真倍速、顾问的决定和例行诊断、看审计日志 |
+  | `admin` 管理员 | 加上：增删助手、上传删除资料、删除笔记；经 MCP 建删场景 |
+
+  令牌由 `smartfactory token -name 张工 -role operator -company huaduan` 生成，服务器配置里只存它的 SHA-256。最早的单一 `token` 仍然有效，等同于所有公司的管理员。
 - **版本**：服务器在 `hello.protocol` 里声明版本号。浏览器看到版本号和自己不一致时，必须停止跟随，并提示刷新页面。
 - **兼容**：新增消息类型、新增可选字段，版本号不变。改名、删字段、改语义，版本号加 1。收到不认识的消息类型或字段时，接收方必须忽略，不能报错。
 - **发送方必须严格**：服务器只发 schema 里列出的字段，一致性测试按严格模式校验。顾问接口（第 4 节）例外：DI 返回的字段可能比这里列的多。
@@ -30,8 +39,8 @@
 
 ```
 浏览器                                  服务器
-  ── WebSocket 连接 [?token=] ─────────▶
-  ◀──────────── hello {protocol, operator, sim, version, sources}
+  ── WebSocket 连接 ?company=&token= ──▶
+  ◀──── hello {protocol, operator, role, name, sim, version, sources}
   ── watch {company, plant} ───────────▶
   ◀──────────── frame（第一帧含该公司所有厂）
   ◀──────────── frame …（每 0.5 s）
@@ -48,18 +57,18 @@
 | `watch` | `company`, `plant` | 跟随一家公司。`plant` 填当前看的厂，填 `"all"` 表示所有厂都按全速推送。换公司也发这条 | 所有人 |
 | `plant` | `plant` | 切换当前看的厂。下一帧带上所有厂 | 所有人 |
 | `cmd` | `plant`, `asset`, `cmd`, `arg?`, `o?` | 操作设备，`cmd` 的取值见 2.5。`o` 是发送页签的标识，广播时原样带回，发送方据此忽略自己的操作 | 所有人，访客有限制（2.4） |
-| `time` | `scale` 0–20 | 设置全公司的仿真倍速 | 仅操作员 |
+| `time` | `scale` 0–20 | 设置全公司的仿真倍速 | 该公司操作员以上 |
 | `hist` | `plant`, `asset` | 取一台设备的趋势曲线 | 所有人 |
 
 ### 2.3 服务器 → 浏览器：`ServerMessage`
 
 | type | 字段 | 何时发 |
 |---|---|---|
-| `hello` | `protocol`, `operator`, `sim`, `version`, `sources: Source[]` | 连接后第一条。`sim: true` 表示由服务器运行仿真，浏览器跟随 |
+| `hello` | `protocol`, `operator`, `role`, `name`, `sim`, `version`, `sources: Source[]` | 连接后第一条。`role` 和 `operator` 说的是连接时 `?company=` 那家公司；`name` 是令牌持有人，没有令牌是“访客”。`sim: true` 表示由服务器运行仿真，浏览器跟随 |
 | `frame` | `data: {company, timeScale, plants: {厂id: PlantState}}` | 每 0.5 s 一帧。内容见下 |
 | `result` | `ok`, `msg` | 回应 `cmd`；`time` 被拒绝时也会发。`msg` 是给人看的中文 |
 | `hist` | `plant`, `asset`, `data: {temp, power, vib, level, meas: number[]} \| null` | 回应 `hist`。设备不存在时 `data` 为 `null` |
-| `cmd` | `cmd: {c, p, a, cmd, arg?, by: "operator"\|"mcp", o?}` | 操作员或 AI 助手操作了当前跟随的公司 |
+| `cmd` | `cmd: {c, p, a, cmd, arg?, by: "operator"\|"mcp", n?, o?}` | 操作员或经 MCP 的客户端操作了当前跟随的公司，`n` 是令牌持有人 |
 | `sources` | `sources: Source[]` | 每 5 s 一次，报告采集源状态 |
 
 每帧 `frame` 包含哪些厂：
@@ -93,7 +102,7 @@
 - 每条浏览器消息最大 64 KB。
 - 访客的 `cmd`：令牌桶，最多连发 5 次，之后每 3 s 恢复 1 次；超出时回复 `result {ok:false}`。
 - 访客执行 `stop`、`fault`、`speed` 后 90 s 自动撤销，避免一个访客把产线停住影响所有人。
-- 只有操作员的命令会下发到真实设备。访客的命令只作用于仿真设备。
+- 只有该公司操作员以上的命令会下发到真实设备，并记入审计日志。其他人（包括成员）的命令按访客处理，只作用于仿真设备。
 - 浏览器处理不过来时，服务器丢弃旧帧；下一帧总是完整的当前状态。
 
 ### 2.5 `cmd` 的取值
@@ -166,10 +175,11 @@
 | `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t}]` |
 | `GET /api/advisors` | `Advisors` | 每家公司的顾问控制台地址 |
 | `GET /api/devices/{company}/{plant}` | `DeviceMap` | 这个厂在设备约定下的地址表（MQTT topic、Modbus 寄存器、OPC UA 节点），见 devices.md 第 6 节 |
+| `GET /api/audit/{company}?before=&limit=` | `AuditLog` | 这家公司的改动，新的在前：谁（`who`、`role`、`key`）、从哪来（`via`：`page` 页面、`live` 实时通道、`assistant` 助手、`mcp`）、做了什么（`action`、`target`、`detail`）、成没成（`ok`、`error`）。`limit` 默认 100、最多 500，`before` 是上一页最后一条的 `id`。需要该公司操作员以上。访客的试操作不记 |
 
 ## 4. 顾问接口 `/api/advisor/{company}/…`
 
-由服务器代理给该公司的 DataIntelligence。浏览器不需要 DI 的账号：只读请求以分析员身份转发，写操作以审批人身份转发，而写操作要求请求方带运营令牌。没有配置顾问的公司返回 404。
+由服务器代理给该公司的 DataIntelligence。浏览器不需要 DI 的账号：只读请求以分析员身份转发，写操作以审批人身份转发，而写操作要求请求方是该公司操作员以上，并记入审计日志。没有配置顾问的公司返回 404。
 
 | 方法 路径 | 请求 | 响应 | 权限 |
 |---|---|---|---|
@@ -177,11 +187,11 @@
 | `GET …/dimensions` | — | `Dimensions` | 所有人 |
 | `POST …/query` | `Query` | `Answer {columns, rows, sql}` | 所有人 |
 | `GET …/consult` | — | `Board`（咨询档案：目标、发现、计划、决定、验收） | 所有人 |
-| `POST …/plans/{plan}/{adopt\|reject\|measure\|accept}` | `DecideRequest {why?}` | 对象 | 操作员 |
+| `POST …/plans/{plan}/{adopt\|reject\|measure\|accept}` | `DecideRequest {why?}` | 对象 | 操作员以上 |
 | `POST …/ask` | `AskRequest {question}` | SSE，`AskEvent` 流 | 所有人；同一 IP 同一时间只能有一个问题，否则返回 429 |
 | `GET …/reviews` | — | `Reviews {reviews, runs}` | 所有人 |
 | `GET …/reviews/runs/{id}` | — | `ReviewRun` | 所有人 |
-| `POST …/reviews/{name}/run` | `{}` | SSE，`AskEvent` 流 | 操作员 |
+| `POST …/reviews/{name}/run` | `{}` | SSE，`AskEvent` 流 | 操作员以上 |
 
 **SSE 的格式**：`Content-Type: text/event-stream`。每个事件是一行 `data: <AskEvent JSON>`，后跟一个空行。`kind` 有以下几种：
 
@@ -202,26 +212,28 @@
 
 公司自己的助手，跑在 agent-go 上。每个助手由一种模板（`docs` 文档助手、`notes` 研发笔记、`service` 售后服务）加上公司起的名字和要求组成，工作对象是公司的资料库、研发笔记和售后工单，以及孪生里的设备。一家公司第一次被访问时自动建好三个助手，华锻另带示例资料。服务器没有配置数据目录时，这些接口都返回 503。
 
-谁在问：带运营令牌的是运营人员；其他人是访客，用请求头 `X-SF-Visitor`（浏览器自己生成并保存的 id）区分，没有这个头时按 IP 区分。对话只有发起人自己能看到。访客可以提问，但助手的写入工具（保存笔记、建工单、改工单）对访客返回“只有运营人员可以保存”，助手会把整理好的内容直接回给访客。
+谁在问：带令牌的按令牌区分，每个令牌有自己的对话；访客用请求头 `X-SF-Visitor`（浏览器自己生成并保存的 id）区分，没有这个头时按 IP 区分。对话只有发起人自己能看到。所有人都可以提问。助手的写入工具（保存笔记、建工单、改工单）每次调用前经 agent-go 的权限审批：该公司成员以上放行，以提问人的名字写入并记入审计日志；其他人被拒绝，助手把整理好的内容直接回给提问人，说明没有保存。
+
+权限列里的“成员”“管理员”都指该公司的这个角色或以上。
 
 | 方法 路径 | 请求 | 响应 | 权限 |
 |---|---|---|---|
-| `GET /api/agents/{company}` | — | `Assistants {ready, operator, templates, agents, severities, statuses}` | 所有人 |
-| `POST /api/agents/{company}` | `AssistantRequest {kind, name, instructions?}` | `Assistant` | 运营人员 |
-| `PUT /api/agents/{company}/{id}` | `AssistantRequest {name, instructions?}` | `Assistant` | 运营人员 |
-| `DELETE /api/agents/{company}/{id}` | — | `Done` | 运营人员 |
+| `GET /api/agents/{company}` | — | `Assistants {ready, operator, role, you, templates, agents, severities, statuses}`，`role` 是提问人在这家公司的角色 | 所有人 |
+| `POST /api/agents/{company}` | `AssistantRequest {kind, name, instructions?}` | `Assistant` | 管理员 |
+| `PUT /api/agents/{company}/{id}` | `AssistantRequest {name, instructions?}` | `Assistant` | 管理员 |
+| `DELETE /api/agents/{company}/{id}` | — | `Done` | 管理员 |
 | `POST /api/agents/{company}/{id}/ask` | `AssistantAsk {conversation?, text}` | SSE，`AssistantEvent` 流 | 所有人；同一个人同一时间只能问一个问题，否则 429；没有配置大模型时 503 |
 | `GET /api/agents/{company}/{id}/conversations` | — | `Conversations`（最近 50 段） | 本人 |
 | `GET /api/agents/{company}/{id}/conversations/{conv}` | — | `ConversationView {conversation, messages}` | 本人 |
 | `DELETE /api/agents/{company}/{id}/conversations/{conv}` | — | `Done` | 本人 |
 | `GET /api/library/{company}/docs` | — | `Docs` | 所有人 |
 | `GET /api/library/{company}/docs/{doc}` | — | `DocView {doc, body}` | 所有人 |
-| `POST /api/library/{company}/docs` | `DocUpload {title, body}`，正文是 Markdown 或纯文本 | `Doc` | 运营人员 |
-| `DELETE /api/library/{company}/docs/{doc}` | — | `Done` | 运营人员 |
+| `POST /api/library/{company}/docs` | `DocUpload {title, body}`，正文是 Markdown 或纯文本 | `Doc` | 管理员 |
+| `DELETE /api/library/{company}/docs/{doc}` | — | `Done` | 管理员 |
 | `GET /api/library/{company}/notes` | — | `Notes` | 所有人 |
-| `DELETE /api/library/{company}/notes/{note}` | — | `Done` | 运营人员 |
+| `DELETE /api/library/{company}/notes/{note}` | — | `Done` | 管理员 |
 | `GET /api/library/{company}/tickets` | — | `Tickets` | 所有人 |
-| `PATCH /api/library/{company}/tickets/{ticket}` | `TicketPatch {status}` | `Ticket` | 运营人员 |
+| `PATCH /api/library/{company}/tickets/{ticket}` | `TicketPatch {status}` | `Ticket` | 成员 |
 
 不带 `conversation` 的提问开始一段新对话，第一个事件 `conversation` 给出它的 id；之后带上这个 id 继续问，助手记得前面说过的话。`AssistantEvent` 的 `kind`：
 
@@ -240,22 +252,24 @@
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。
-- 必须带 `Authorization: Bearer <运营令牌>`，否则返回 401。服务器没有配置令牌时返回 503。
+- 必须带 `Authorization: Bearer <令牌>`，否则返回 401。服务器一个令牌都没有配置时返回 503。
+- 每个客户端应该有自己的令牌（`smartfactory token -name 某某客户端 …`），能单独吊销，审计日志里也分得开。
+- 令牌只看得到、只能操作它管的公司；角色不够的调用返回工具错误，说明缺什么。
 
-| 工具 | 作用 |
-|---|---|
-| `list_sites` | 公司、工厂，以及各自的实测点数 |
-| `plant_status` | 一个厂的 KPI、各线数据、库存、报警数、故障设备 |
-| `list_alarms` | 报警，可以按厂筛选，或只看未消除的 |
-| `get_asset` | 一台设备的状态、遥测、报警、实测值 |
-| `read_tags` | 设备实测值及其来源 |
-| `list_sources` | 采集源的连接状态 |
-| `send_command` | 操作设备，取值同 2.5；会经采集源下发到真实设备 |
-| `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 |
-| `scene_guide` | 怎样用两份 JSON 搭建一个新场景 |
-| `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 |
-| `create_industry` | 新建或替换行业包，带校验 |
-| `create_company` / `delete_company` | 新建或替换公司，立即开始仿真 / 删除 |
+| 工具 | 作用 | 权限 |
+|---|---|---|
+| `list_sites` | 公司、工厂，以及各自的实测点数（只列令牌管的公司） | 成员 |
+| `plant_status` | 一个厂的 KPI、各线数据、库存、报警数、故障设备 | 成员 |
+| `list_alarms` | 报警，可以按厂筛选，或只看未消除的 | 成员 |
+| `get_asset` | 一台设备的状态、遥测、报警、实测值 | 成员 |
+| `read_tags` | 设备实测值及其来源 | 成员 |
+| `list_sources` | 采集源的连接状态（只列喂给令牌所管公司的） | 成员 |
+| `send_command` | 操作设备，取值同 2.5；会经采集源下发到真实设备，记入审计日志 | 操作员 |
+| `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
+| `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
+| `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |
+| `create_industry` | 新建或替换行业包，带校验；行业包是所有公司共用的 | 管理所有公司的管理员 |
+| `create_company` / `delete_company` | 新建或替换公司，立即开始仿真 / 删除 | 这家公司的管理员 |
 
 ## 7. 修改协议
 

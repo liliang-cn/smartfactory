@@ -19,6 +19,8 @@ import (
 	"github.com/coder/websocket"
 
 	"smartfactory/internal/agents"
+	"smartfactory/internal/auth"
+	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/sfptest"
 	"smartfactory/internal/tags"
@@ -46,7 +48,7 @@ func TestProtocol(t *testing.T) {
 	hub.Publish(tags.Tag{Company: "huaduan", Plant: "p1", Asset: "HP-201", Field: "temp", Value: 79.5, Source: "plc", At: time.Now()})
 	const token = "operator-token"
 	srv := &Server{
-		Hub: hub, Engine: eng, Token: token, Version: "test", Log: log,
+		Hub: hub, Engine: eng, Keys: keyring(t, token), Version: "test", Log: log,
 		Static:     fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
 		Advisors:   map[string]string{"huaduan": "https://advisor.example"},
 		AdvisorAPI: map[string]Advisor{},
@@ -78,7 +80,7 @@ func TestProtocol(t *testing.T) {
 	}
 
 	// The live channel, as an operator: every kind of server message turns up.
-	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/api/live?token="+token, nil)
+	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/api/live?company=huaduan&token="+token, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +183,7 @@ func TestAssistantsProtocol(t *testing.T) {
 	}
 	defer ag.Close()
 	const token = "operator-token"
-	ts := httptest.NewServer((&Server{Hub: tags.NewHub(), Engine: eng, Token: token, Log: log, Agents: ag,
+	ts := httptest.NewServer((&Server{Hub: tags.NewHub(), Engine: eng, Keys: keyring(t, token), Log: log, Agents: ag,
 		Static: fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}}}).Handler())
 	defer ts.Close()
 
@@ -264,4 +266,14 @@ func TestAssistantsProtocol(t *testing.T) {
 		b, _ := json.Marshal(e)
 		std.Check("AssistantEvent", b)
 	}
+}
+
+// keyring accepts legacy, the original single token (an administrator of every company), and keys.
+func keyring(t *testing.T, legacy string, keys ...config.Key) *auth.Keyring {
+	t.Helper()
+	k, err := auth.NewKeyring(legacy, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
 }

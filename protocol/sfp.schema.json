@@ -145,6 +145,19 @@
             "operator": {
               "type": "boolean"
             },
+            "role": {
+              "type": "string",
+              "enum": [
+                "visitor",
+                "member",
+                "operator",
+                "admin"
+              ],
+              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+            },
+            "name": {
+              "type": "string"
+            },
             "sim": {
               "type": "boolean"
             },
@@ -162,6 +175,8 @@
             "type",
             "protocol",
             "operator",
+            "role",
+            "name",
             "sim",
             "version",
             "sources"
@@ -365,6 +380,9 @@
                     "operator",
                     "mcp"
                   ]
+                },
+                "n": {
+                  "type": "string"
                 },
                 "o": {
                   "type": "string"
@@ -2163,6 +2181,19 @@
         "operator": {
           "type": "boolean"
         },
+        "role": {
+          "type": "string",
+          "enum": [
+            "visitor",
+            "member",
+            "operator",
+            "admin"
+          ],
+          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+        },
+        "you": {
+          "type": "string"
+        },
         "templates": {
           "type": "array",
           "items": {
@@ -2216,6 +2247,8 @@
       "required": [
         "ready",
         "operator",
+        "role",
+        "you",
         "templates",
         "agents",
         "severities",
@@ -2809,6 +2842,77 @@
         "ok"
       ],
       "additionalProperties": false
+    },
+    "AuditLog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "at": {
+            "type": "string"
+          },
+          "who": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "visitor",
+              "member",
+              "operator",
+              "admin"
+            ],
+            "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+          },
+          "key": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string",
+            "enum": [
+              "page",
+              "live",
+              "assistant",
+              "mcp"
+            ]
+          },
+          "company": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "who",
+          "role",
+          "key",
+          "via",
+          "company",
+          "action",
+          "target",
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "description": "A company's changes, newest first (GET /api/audit/{company}?before=&limit=)"
     },
     "Source": {
       "type": "object",

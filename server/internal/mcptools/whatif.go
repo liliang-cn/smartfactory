@@ -17,6 +17,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
 )
 
@@ -65,7 +66,7 @@ func addSimTool(s *mcp.Server, eng *engine.Engine) {
 		"and returns the mean of both over several seeds (现状 / 方案), their difference (变化 = 方案 − 现状) and each run's OEE and scrap rate (每次), so a change can be told from luck: output, first-pass yield, scrap rate, availability, OEE, tool changes and average hits per change, downtime by category, defects by type, " +
 		"and spare stock (minimum, stock-out hours). Nothing on the live plant changes. A run takes a few minutes: if status is running, call again with the same " +
 		"arguments later. Logistics are assumed to keep up; it predicts, the history database measures."},
-		func(ctx context.Context, _ *mcp.CallToolRequest, in simIn) (*mcp.CallToolResult, simOut, error) {
+		guard(auth.Member, func(in simIn) string { return in.Company }, func(ctx context.Context, _ *mcp.CallToolRequest, in simIn) (*mcp.CallToolResult, simOut, error) {
 			if in.Company == "" || in.Plant == "" {
 				return nil, simOut{}, fmt.Errorf("company and plant are required")
 			}
@@ -118,7 +119,7 @@ func addSimTool(s *mcp.Server, eng *engine.Engine) {
 			default:
 				return nil, simOut{Status: "running", Note: fmt.Sprintf("推演进行中（已 %s），约 1–4 分钟完成；稍后用完全相同的参数再调用一次取结果", time.Since(j.started).Round(time.Second))}, nil
 			}
-		})
+		}))
 }
 
 func (j *simJob) run(eng *engine.Engine, state string, in simIn) {

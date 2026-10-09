@@ -5,6 +5,7 @@ package mcptools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"smartfactory/internal/audit"
+	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/tags"
 )
@@ -175,7 +178,7 @@ type cmdOut struct {
 var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship", "retool", "toollimit"}
 
 // New builds the MCP server.
-func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
+func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "smartfactory", Title: "SmartFactory digital twin", Version: version}, &mcp.ServerOptions{
 		Instructions: "SmartFactory is a 3D digital twin platform for factories and other sites (venues, campsites …). Companies contain plants, plants contain lines of machines (assets). New scenes can be created with scene_guide → create_industry → create_company. " +
 			"Use list_sites first. The simulation runs on the server continuously; KPIs, alarms and machine state are current. " +
@@ -184,7 +187,8 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 	})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_sites", Description: "List companies and their plants in the twin, with how many live protocol values each has."},
-		func(_ context.Context, _ *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, siteOut, error) {
+		guard(auth.Member, nil, func(_ context.Context, req *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, siteOut, error) {
+			w := who(req)
 			var list []struct {
 				ID     string      `json:"id"`
 				Name   string      `json:"name"`
@@ -195,13 +199,15 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 			}
 			out := siteOut{Companies: []siteCompany{}}
 			for _, c := range list {
-				out.Companies = append(out.Companies, siteCompany{ID: c.ID, Name: c.Name, Plants: c.Plants, LiveTags: len(hub.Last(c.ID, "", ""))})
+				if w.In(c.ID) {
+					out.Companies = append(out.Companies, siteCompany{ID: c.ID, Name: c.Name, Plants: c.Plants, LiveTags: len(hub.Last(c.ID, "", ""))})
+				}
 			}
 			return nil, out, nil
-		})
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{Name: "plant_status", Description: "KPIs (OEE, throughput, quality), per-line figures, inventory (in use / available / capacity), active alarm count, faulted machines and machines fed by live protocol data for one plant."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in plantIn) (*mcp.CallToolResult, plantOut, error) {
+		guard(auth.Member, func(in plantIn) string { return in.Company }, func(_ context.Context, _ *mcp.CallToolRequest, in plantIn) (*mcp.CallToolResult, plantOut, error) {
 			snap, err := load(eng, in.Company)
 			if err != nil {
 				return nil, plantOut{}, err
@@ -225,10 +231,10 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 				}
 			}
 			return nil, out, nil
-		})
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_alarms", Description: "Alarms of a company, newest first, optionally for one plant and only active ones."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in alarmsIn) (*mcp.CallToolResult, alarmsOut, error) {
+		guard(auth.Member, func(in alarmsIn) string { return in.Company }, func(_ context.Context, _ *mcp.CallToolRequest, in alarmsIn) (*mcp.CallToolResult, alarmsOut, error) {
 			snap, err := load(eng, in.Company)
 			if err != nil {
 				return nil, alarmsOut{}, err
@@ -246,10 +252,10 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 				}
 			}
 			return nil, out, nil
-		})
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_asset", Description: "One machine: state, temperature, power, vibration, health, utilisation, fault text, its alarms, and any live protocol values bound to it."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in assetIn) (*mcp.CallToolResult, assetOut, error) {
+		guard(auth.Member, func(in assetIn) string { return in.Company }, func(_ context.Context, _ *mcp.CallToolRequest, in assetIn) (*mcp.CallToolResult, assetOut, error) {
 			out := assetOut{LiveTags: hub.Last(in.Company, in.Plant, in.Asset)}
 			if snap, err := load(eng, in.Company); err == nil {
 				if p, err := snap.plant(in.Plant); err == nil {
@@ -269,39 +275,45 @@ func New(hub *tags.Hub, eng *engine.Engine, version string) *mcp.Server {
 				return nil, out, fmt.Errorf("no asset %s/%s/%s", in.Company, in.Plant, in.Asset)
 			}
 			return nil, out, nil
-		})
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{Name: "read_tags", Description: "Current values read from equipment over MQTT, Modbus TCP and OPC UA, with their source adapter and age."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in tagsIn) (*mcp.CallToolResult, tagsOut, error) {
+		guard(auth.Member, func(in tagsIn) string { return in.Company }, func(_ context.Context, _ *mcp.CallToolRequest, in tagsIn) (*mcp.CallToolResult, tagsOut, error) {
 			out := tagsOut{Tags: []tagAge{}}
 			for _, t := range hub.Last(in.Company, in.Plant, in.Asset) {
 				out.Tags = append(out.Tags, tagAge{t, time.Since(t.At).Round(100 * time.Millisecond).String()})
 			}
 			return nil, out, nil
-		})
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_sources", Description: "Protocol adapters (embedded MQTT broker, external MQTT, Modbus TCP, OPC UA): connection state, errors, message counts."},
-		func(_ context.Context, _ *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, sourcesOut, error) {
-			return nil, sourcesOut{Sources: hub.Sources()}, nil
-		})
+		guard(auth.Member, nil, func(_ context.Context, req *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, sourcesOut, error) {
+			return nil, sourcesOut{Sources: visibleSources(who(req), hub.Sources())}, nil
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{Name: "send_command", Description: "Operate a machine: start, stop, reset a fault, toggle maintenance, set speed (arg 0.5–1.5), inject a fault drill, restock the raw store, ship finished goods, change a die now (retool) or set the planned die-change point (toollimit, arg 0.3–1 of the die life). Applies to the server-side twin that every viewer sees, and is forwarded to devices through the protocol adapters."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in cmdIn) (*mcp.CallToolResult, cmdOut, error) {
+		guard(auth.Operator, func(in cmdIn) string { return in.Company }, func(_ context.Context, req *mcp.CallToolRequest, in cmdIn) (*mcp.CallToolResult, cmdOut, error) {
 			if !slices.Contains(commands, in.Command) {
 				return nil, cmdOut{}, fmt.Errorf("unknown command %q; use one of %v", in.Command, commands)
 			}
 			if in.Company == "" || in.Plant == "" || in.Asset == "" {
 				return nil, cmdOut{}, fmt.Errorf("company, plant and asset are required")
 			}
+			w := who(req)
 			r := eng.Command(in.Company, in.Plant, in.Asset, in.Command, in.Arg)
+			var err error
 			if !r.OK {
-				return nil, cmdOut{}, fmt.Errorf("%s", r.Msg)
+				err = errors.New(r.Msg)
 			}
-			hub.Command(tags.Command{Company: in.Company, Plant: in.Plant, Asset: in.Asset, Cmd: in.Command, Arg: in.Arg, By: "mcp"})
+			log.Record(w, "mcp", in.Company, "command", in.Plant+"/"+in.Asset, commandText(in.Command, in.Arg), err)
+			if err != nil {
+				return nil, cmdOut{}, err
+			}
+			hub.Command(tags.Command{Company: in.Company, Plant: in.Plant, Asset: in.Asset, Cmd: in.Command, Arg: in.Arg, By: "mcp", Name: w.Name})
 			return nil, cmdOut{Sent: r.Msg}, nil
-		})
+		}))
 
-	addSceneTools(s, eng)
+	addSceneTools(s, eng, log)
 	addSimTool(s, eng)
 	return s
 }
@@ -323,7 +335,7 @@ type configIn struct {
 
 // addSceneTools lets an agent create new scenes: industry packs and companies, validated by the
 // same schemas as the bundled ones and simulated immediately.
-func addSceneTools(s *mcp.Server, eng *engine.Engine) {
+func addSceneTools(s *mcp.Server, eng *engine.Engine, log *audit.Log) {
 	raw := func(js string) (json.RawMessage, error) {
 		if js == "null" {
 			return nil, fmt.Errorf("not found")
@@ -331,52 +343,76 @@ func addSceneTools(s *mcp.Server, eng *engine.Engine) {
 		return json.RawMessage(js), nil
 	}
 	mcp.AddTool(s, &mcp.Tool{Name: "scene_guide", Description: "How to build a new digital-twin scene (any industry: factories, campsites, restaurants, hospitals …) from two JSON configs: read this before create_industry / create_company."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in guideIn) (*mcp.CallToolResult, guideOut, error) {
+		guard(auth.Member, nil, func(_ context.Context, _ *mcp.CallToolRequest, in guideIn) (*mcp.CallToolResult, guideOut, error) {
 			out := guideOut{Guide: guide}
 			if in.Schema {
 				out.IndustrySchema, _ = raw(eng.Schema("industry"))
 				out.CompanySchema, _ = raw(eng.Schema("company"))
 			}
 			return nil, out, nil
-		})
+		}))
 	mcp.AddTool(s, &mcp.Tool{Name: "list_industries", Description: "Industry packs available (built-in and created), with their products and machines."},
-		func(_ context.Context, _ *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, map[string]any, error) {
+		guard(auth.Member, nil, func(_ context.Context, _ *mcp.CallToolRequest, _ siteIn) (*mcp.CallToolResult, map[string]any, error) {
 			js, err := raw(eng.IndustryList())
 			return nil, map[string]any{"industries": js}, err
-		})
+		}))
 	mcp.AddTool(s, &mcp.Tool{Name: "get_industry", Description: "The full config of an industry pack (with defaults filled in): the best example to copy from."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
+		guard(auth.Member, nil, func(_ context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
 			js, err := raw(eng.Industry(in.ID))
 			if err != nil {
 				return nil, nil, fmt.Errorf("no industry pack %q; see list_industries", in.ID)
 			}
 			return nil, map[string]any{"industry": js}, nil
-		})
-	create := func(fn func([]byte) engine.ConfigResult) func(context.Context, *mcp.CallToolRequest, configIn) (*mcp.CallToolResult, map[string]any, error) {
-		return func(_ context.Context, _ *mcp.CallToolRequest, in configIn) (*mcp.CallToolResult, map[string]any, error) {
+		}))
+	// create applies a config and keeps who did it; what is the audit log's name for it
+	create := func(what string, fn func([]byte) engine.ConfigResult) mcp.ToolHandlerFor[configIn, map[string]any] {
+		return func(_ context.Context, req *mcp.CallToolRequest, in configIn) (*mcp.CallToolResult, map[string]any, error) {
 			b, err := json.Marshal(in.Config)
 			if err != nil {
 				return nil, nil, err
 			}
 			r := fn(b)
+			id, _ := in.Config["id"].(string)
 			if !r.OK {
-				return nil, nil, fmt.Errorf("配置没有通过校验（%s）：\n- %s", r.Where, strings.Join(r.Errors, "\n- "))
+				err = fmt.Errorf("配置没有通过校验（%s）：\n- %s", r.Where, strings.Join(r.Errors, "\n- "))
+			}
+			company := id
+			if what == "industry.create" {
+				company = "*"
+			}
+			log.Record(who(req), "mcp", company, what, id, "", err)
+			if err != nil {
+				return nil, nil, err
 			}
 			var detail map[string]any
 			json.Unmarshal(r.Detail, &detail)
 			return nil, detail, nil
 		}
 	}
+	configID := func(in configIn) string { id, _ := in.Config["id"].(string); return id }
 	mcp.AddTool(s, &mcp.Tool{Name: "create_industry", Description: "Create or replace an industry pack (products, machines, routes). Validated; errors say exactly what to fix. Companies using it are rebuilt."},
-		create(eng.CreateIndustry))
+		everywhere(auth.Admin, create("industry.create", eng.CreateIndustry)))
 	mcp.AddTool(s, &mcp.Tool{Name: "create_company", Description: "Create or replace a company (its plants and lines). It is simulated immediately and viewable at https://factory.superleo.cn/?company=<id>."},
-		create(eng.CreateCompany))
+		guard(auth.Admin, configID, create("company.create", eng.CreateCompany)))
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_company", Description: "Remove a company that was created with create_company."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
+		guard(auth.Admin, func(in idIn) string { return in.ID }, func(_ context.Context, req *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
 			r := eng.DeleteCompany(in.ID)
+			var err error
 			if !r.OK {
-				return nil, nil, fmt.Errorf("%s", strings.Join(r.Errors, "; "))
+				err = fmt.Errorf("%s", strings.Join(r.Errors, "; "))
+			}
+			log.Record(who(req), "mcp", in.ID, "company.delete", in.ID, "", err)
+			if err != nil {
+				return nil, nil, err
 			}
 			return nil, map[string]any{"deleted": in.ID}, nil
-		})
+		}))
+}
+
+// commandText is a command as the audit log shows it: "speed 1.2", "stop".
+func commandText(cmd string, arg *float64) string {
+	if arg == nil {
+		return cmd
+	}
+	return fmt.Sprintf("%s %g", cmd, *arg)
 }

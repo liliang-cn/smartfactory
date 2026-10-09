@@ -10,22 +10,23 @@ import (
 	"unicode/utf8"
 
 	"smartfactory/internal/agents"
+	"smartfactory/internal/auth"
 )
 
 // one answer at a time per person: a run is a minute of model calls
 var agentBusy sync.Map
 
-// who is the person asking: operators share one identity; a visitor is the id their browser
-// keeps (X-SF-Visitor), or their address.
-func (s *Server) who(r *http.Request) (owner string, c agents.Caller) {
-	if s.operator(r) {
-		return "operator", agents.Caller{Operator: true, Name: "运营人员"}
+// who is the person asking and whose conversations they see: a token holder's own; a visitor's
+// are kept under the id their browser keeps (X-SF-Visitor), or their address.
+func (s *Server) who(r *http.Request) (owner string, w auth.Who) {
+	if w := s.caller(r); w.Key != "" {
+		return "key:" + w.Key, w
 	}
 	v := strings.TrimSpace(r.Header.Get("X-SF-Visitor"))
 	if v == "" || len(v) > 64 {
 		v = clientIP(r)
 	}
-	return "visitor:" + v, agents.Caller{Name: "访客"}
+	return "visitor:" + v, auth.Anonymous
 }
 
 func (s *Server) agentRoutes(mux *http.ServeMux) {
@@ -47,12 +48,14 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 		}
 		return c, true
 	}
-	operator := func(w http.ResponseWriter, r *http.Request) bool {
-		if !s.operator(r) {
-			writeError(w, http.StatusForbidden, "需要运营令牌")
-			return false
+	// need answers 403 unless the caller holds role on company
+	need := func(w http.ResponseWriter, r *http.Request, company string, role auth.Role) (auth.Who, bool) {
+		who := s.caller(r)
+		if !who.Can(company, role) {
+			writeError(w, http.StatusForbidden, "需要这家公司"+role.Label()+"以上的令牌")
+			return who, false
 		}
-		return true
+		return who, true
 	}
 	found := func(w http.ResponseWriter, err error, what string) bool {
 		if errors.Is(err, agents.ErrNotFound) {
@@ -82,7 +85,8 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 		if !found(w, err, "公司") {
 			return
 		}
-		writeJSON(w, map[string]any{"ready": a.Ready(), "operator": s.operator(r), "templates": agents.Templates, "agents": list,
+		who := s.caller(r)
+		writeJSON(w, map[string]any{"ready": a.Ready(), "operator": who.Can(c, auth.Operator), "role": who.RoleIn(c), "you": who.Name, "templates": agents.Templates, "agents": list,
 			"severities": agents.Severities, "statuses": agents.Statuses})
 	})
 	type agentIn struct {
@@ -104,7 +108,11 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("POST /api/agents/{company}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
+			return
+		}
+		who, ok := need(w, r, c, auth.Admin)
+		if !ok {
 			return
 		}
 		var in agentIn
@@ -116,13 +124,18 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			return
 		}
 		ag, err := a.Store.CreateAgent(c, in.Kind, in.Name, strings.TrimSpace(in.Instructions))
+		s.Audit.Record(who, "page", c, "assistant.create", ag.ID+" "+in.Name, in.Kind, err)
 		if found(w, err, "助手") {
 			writeJSON(w, ag)
 		}
 	})
 	mux.HandleFunc("PUT /api/agents/{company}/{id}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
+			return
+		}
+		who, ok := need(w, r, c, auth.Admin)
+		if !ok {
 			return
 		}
 		var in agentIn
@@ -130,6 +143,7 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			return
 		}
 		ag, err := a.Store.UpdateAgent(c, r.PathValue("id"), in.Name, strings.TrimSpace(in.Instructions))
+		s.Audit.Record(who, "page", c, "assistant.update", r.PathValue("id")+" "+in.Name, "", err)
 		if found(w, err, "助手") {
 			a.Forget(ag.ID)
 			writeJSON(w, ag)
@@ -137,10 +151,16 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("DELETE /api/agents/{company}/{id}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
 			return
 		}
-		if found(w, a.Store.DeleteAgent(c, r.PathValue("id")), "助手") {
+		who, ok := need(w, r, c, auth.Admin)
+		if !ok {
+			return
+		}
+		err := a.Store.DeleteAgent(c, r.PathValue("id"))
+		s.Audit.Record(who, "page", c, "assistant.delete", r.PathValue("id"), "", err)
+		if found(w, err, "助手") {
 			a.Forget(r.PathValue("id"))
 			writeJSON(w, map[string]bool{"ok": true})
 		}
@@ -254,7 +274,7 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 		}
 	})
 
-	// what the assistants work on: documents (operators add and remove them), notes, tickets
+	// what the assistants work on: documents (administrators add and remove them), notes, tickets
 	mux.HandleFunc("GET /api/library/{company}/docs", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
 		if !ok {
@@ -277,7 +297,11 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/library/{company}/docs", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
+			return
+		}
+		who, ok := need(w, r, c, auth.Admin)
+		if !ok {
 			return
 		}
 		var in struct {
@@ -296,17 +320,24 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			writeError(w, http.StatusBadRequest, "文档是空的，或者不是 UTF-8 文本")
 			return
 		}
-		d, err := a.Store.AddDoc(c, in.Title, in.Body, "运营人员")
+		d, err := a.Store.AddDoc(c, in.Title, in.Body, who.Name)
+		s.Audit.Record(who, "page", c, "doc.add", d.ID+" "+in.Title, "", err)
 		if found(w, err, "公司") {
 			writeJSON(w, d)
 		}
 	})
 	mux.HandleFunc("DELETE /api/library/{company}/docs/{doc}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
 			return
 		}
-		if found(w, a.Store.DeleteDoc(c, r.PathValue("doc")), "文档") {
+		who, ok := need(w, r, c, auth.Admin)
+		if !ok {
+			return
+		}
+		err := a.Store.DeleteDoc(c, r.PathValue("doc"))
+		s.Audit.Record(who, "page", c, "doc.delete", r.PathValue("doc"), "", err)
+		if found(w, err, "文档") {
 			writeJSON(w, map[string]bool{"ok": true})
 		}
 	})
@@ -322,10 +353,16 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("DELETE /api/library/{company}/notes/{note}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
 			return
 		}
-		if found(w, a.Store.DeleteNote(c, r.PathValue("note")), "笔记") {
+		who, ok := need(w, r, c, auth.Admin)
+		if !ok {
+			return
+		}
+		err := a.Store.DeleteNote(c, r.PathValue("note"))
+		s.Audit.Record(who, "page", c, "note.delete", r.PathValue("note"), "", err)
+		if found(w, err, "笔记") {
 			writeJSON(w, map[string]bool{"ok": true})
 		}
 	})
@@ -341,7 +378,11 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("PATCH /api/library/{company}/tickets/{ticket}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
-		if !ok || !operator(w, r) {
+		if !ok {
+			return
+		}
+		who, ok := need(w, r, c, auth.Member)
+		if !ok {
 			return
 		}
 		var in struct {
@@ -354,7 +395,8 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			writeError(w, http.StatusBadRequest, "没有这个状态")
 			return
 		}
-		t, err := a.Store.UpdateTicket(c, r.PathValue("ticket"), in.Status, "", "运营人员", "")
+		t, err := a.Store.UpdateTicket(c, r.PathValue("ticket"), in.Status, "", who.Name, "")
+		s.Audit.Record(who, "page", c, "ticket.status", r.PathValue("ticket")+" "+t.Title, in.Status, err)
 		if found(w, err, "工单") {
 			writeJSON(w, t)
 		}

@@ -8,27 +8,12 @@ import (
 	"slices"
 	"strings"
 
+	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
 )
 
-// Caller is who a run acts for; tools that write need an operator.
-type Caller struct {
-	Operator bool
-	Name     string
-}
-
-type callerKey struct{}
-
-func withCaller(ctx context.Context, c Caller) context.Context {
-	return context.WithValue(ctx, callerKey{}, c)
-}
-
-func caller(ctx context.Context) Caller {
-	c, _ := ctx.Value(callerKey{}).(Caller)
-	return c
-}
-
-var errReadOnly = errors.New("只有运营人员可以保存：没有保存，把整理好的内容直接给用户")
+// caller is the person a run acts for (auth.With on the run's context).
+func caller(ctx context.Context) auth.Who { return auth.From(ctx) }
 
 type tool struct {
 	name, desc string
@@ -243,15 +228,6 @@ func tools(st *Store, eng *engine.Engine, company string) map[string]tool {
 	}
 	out := map[string]tool{}
 	for _, t := range ts {
-		if t.write {
-			run := t.run
-			t.run = func(ctx context.Context, a args) (any, error) {
-				if !caller(ctx).Operator {
-					return nil, errReadOnly
-				}
-				return run(ctx, a)
-			}
-		}
 		out[t.name] = t
 	}
 	return out

@@ -15,6 +15,14 @@ const str = z.string();
 
 // ---------- shared ----------
 
+/**
+ * What a caller may do in a company. No token: visitor. A token carries one role and the
+ * companies it covers; elsewhere its holder is a visitor.
+ */
+export const Role = z.enum(['visitor', 'member', 'operator', 'admin']).meta({
+  description: 'visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants',
+});
+
 export const Command = z.enum(['start', 'stop', 'speed', 'reset', 'maint', 'fault', 'restock', 'ship', 'retool', 'toollimit']).meta({
   description: 'speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill',
 });
@@ -179,8 +187,12 @@ export const ClientMessage = z.discriminatedUnion('type', [Watch, PlantSwitch, C
 export const Hello = z.object({
   type: z.literal('hello'),
   protocol: z.literal(PROTOCOL),
-  /** opened with the operator token */
+  /** the caller is an operator (or above) of the company the page asked about (?company=) */
   operator: z.boolean(),
+  /** the caller's role in that company */
+  role: Role,
+  /** the token holder's name; 访客 without one */
+  name: str,
   /** the server runs the simulation; the browser follows it */
   sim: z.boolean(),
   /** server build */
@@ -207,6 +219,8 @@ export const CmdBroadcast = z.object({
   cmd: z.object({
     c: str, p: str, a: str, cmd: Command, arg: num.optional(),
     by: z.enum(['operator', 'mcp']),
+    /** who: the token holder's name */
+    n: str.optional(),
     o: str.optional(),
   }),
 }).meta({ description: 'An operator or an AI assistant acted on the watched company' });
@@ -343,8 +357,12 @@ export const Assistant = z.object({
 export const Assistants = z.object({
   /** whether the server has a model to answer with */
   ready: z.boolean(),
-  /** whether the caller holds the operator token: only operators set up assistants and save */
+  /** the caller is an operator (or above) of this company */
   operator: z.boolean(),
+  /** the caller's role in this company: members change ticket status, admins set up assistants and documents */
+  role: Role,
+  /** the token holder's name; 访客 without one */
+  you: str,
   templates: z.array(AssistantTemplate), agents: z.array(Assistant), severities: z.array(str), statuses: z.array(str),
 }).meta({ description: "A company's assistants and the kinds it can make" });
 export const AssistantRequest = z.object({ kind: AssistantKind.optional(), name: str, instructions: str.optional() });
@@ -467,6 +485,19 @@ export const DeviceMap = z.object({
 });
 
 /** Everything the standard defines, by name: what protocol/sfp.schema.json lists under $defs. */
+export const AuditEntry = z.object({
+  id: num, at: time, who: str, role: Role,
+  /** which token: the start of its hash ("token" for the original single token) */
+  key: str,
+  via: z.enum(['page', 'live', 'assistant', 'mcp']),
+  /** the company it happened in; * for what every company shares */
+  company: str,
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create */
+  action: str,
+  target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
+});
+export const AuditLog = z.array(AuditEntry).meta({ description: "A company's changes, newest first (GET /api/audit/{company}?before=&limit=)" });
+
 export const DEFS = {
   ClientMessage, ServerMessage, PlantState,
   ErrorBody, Health, Directory, RuntimeCompany, Tags, Advisors, DeviceMap,
@@ -474,9 +505,11 @@ export const DEFS = {
   DeviceFields, DeviceCommand,
   Assistants, Assistant, AssistantRequest, Conversations, ConversationView, AssistantAsk, AssistantEvent,
   Docs, Doc, DocView, DocUpload, Notes, Note, Tickets, Ticket, TicketPatch, Done,
+  AuditLog,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
+export type Role = z.infer<typeof Role>;
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type PlantState = z.infer<typeof PlantState>;
 export type ProductTuple = z.infer<typeof ProductTuple>;

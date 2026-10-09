@@ -19,16 +19,33 @@ import (
 type Config struct {
 	// HTTP listen address for the web app, the live feed and MCP.
 	HTTP string `json:"http"`
-	// Token unlocks operator actions: commands that reach devices, and the MCP endpoint.
-	// SF_TOKEN in the environment overrides it. Empty means no operator access.
+	// Token is the original single token: whoever holds it is an administrator of every company.
+	// SF_TOKEN in the environment overrides it. Empty means no such token.
 	Token string `json:"token"`
-	MQTT  Broker `json:"mqtt"`
+	// Tokens are people's and clients' own tokens, each with a role and the companies it covers
+	// (`smartfactory token` makes one). Only a hash of each is kept here.
+	Tokens []Key  `json:"tokens"`
+	MQTT   Broker `json:"mqtt"`
 	// Data is where the simulation's state is kept across restarts ("" disables it).
 	Data string `json:"data"`
 	// Sources are protocol adapters that read from devices.
 	Sources []Source `json:"sources"`
 	// History keeps companies' production history in Postgres, for the advisor.
 	History []History `json:"history"`
+}
+
+// Key is one person's or client's token.
+type Key struct {
+	// Name is who holds it, as the audit log and the people watching show it.
+	Name string `json:"name"`
+	// member | operator | admin
+	Role string `json:"role"`
+	// Companies it covers; "*" or none means every company.
+	Companies []string `json:"companies,omitempty"`
+	// SHA256 is the hex SHA-256 of the token.
+	SHA256 string `json:"sha256"`
+	// Expires (YYYY-MM-DD, optional) is the last day it works.
+	Expires string `json:"expires,omitempty"`
 }
 
 // History is one company's history database.

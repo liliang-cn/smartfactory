@@ -35,6 +35,8 @@ type Command struct {
 	Cmd     string   `json:"cmd"`
 	Arg     *float64 `json:"arg,omitempty"`
 	By      string   `json:"by"`
+	// Name is the person or client behind an operator's or MCP command.
+	Name string `json:"n,omitempty"`
 	// Origin is the browser that issued it, so that browser can skip the echo.
 	Origin string `json:"o,omitempty"`
 }

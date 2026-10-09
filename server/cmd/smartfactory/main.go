@@ -4,6 +4,7 @@
 //	smartfactory [-config smartfactory.json] [-http :4719]
 //	smartfactory edge -config edge.json
 //	smartfactory devices -config devices.json
+//	smartfactory token -name 张工 -role operator -company huaduan
 //	smartfactory version
 package main
 
@@ -28,6 +29,8 @@ import (
 
 	"smartfactory/internal/adapters"
 	"smartfactory/internal/agents"
+	"smartfactory/internal/audit"
+	"smartfactory/internal/auth"
 	"smartfactory/internal/config"
 	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
@@ -49,7 +52,7 @@ func main() {
 
 	args := os.Args[1:]
 	cmd := "serve"
-	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "version") {
+	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "token" || args[0] == "version") {
 		cmd, args = args[0], args[1:]
 	}
 	var err error
@@ -62,6 +65,8 @@ func main() {
 		err = runDevices(ctx, args, log)
 	case "history":
 		err = runHistory(ctx, args, log)
+	case "token":
+		err = runToken(args)
 	default:
 		err = serve(ctx, args, log)
 	}
@@ -159,9 +164,23 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			log.Warn("assistants cannot answer: set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL")
 		}
 	}
-	ms := mcptools.New(hub, eng, version)
+	keys, err := auth.NewKeyring(cfg.Token, cfg.Tokens)
+	if err != nil {
+		return err
+	}
+	var trail *audit.Log
+	if cfg.Data != "" {
+		if trail, err = audit.Open(cfg.Data, log); err != nil {
+			return fmt.Errorf("audit log: %w", err)
+		}
+		defer trail.Close()
+	}
+	if assistants != nil {
+		assistants.Audit = trail
+	}
+	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
@@ -176,7 +195,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		srv.Shutdown(sctx)
 	}()
 	mcpState := "disabled (no token)"
-	if cfg.Token != "" {
+	if !keys.Empty() {
 		mcpState = "enabled at /mcp (Bearer token)"
 	}
 	log.Info("smartfactory serving", "version", version, "http", cfg.HTTP, "companies", eng.CompanyIDs(), "sources", len(cfg.Sources), "mcp", mcpState)
@@ -189,6 +208,37 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	case <-time.After(10 * time.Second):
 		log.Warn("engine did not finish saving in time")
 	}
+	return nil
+}
+
+// runToken makes a token: the token itself, shown once, and the entry that goes under "tokens"
+// in the server config.
+func runToken(args []string) error {
+	fs := flag.NewFlagSet("token", flag.ExitOnError)
+	name := fs.String("name", "", "who holds it, as the audit log shows it")
+	role := fs.String("role", "member", "member | operator | admin")
+	companies := fs.String("company", "*", "companies it covers, comma-separated; * for every company")
+	expires := fs.String("expires", "", "last day it works, YYYY-MM-DD (optional)")
+	fs.Parse(args)
+	if strings.TrimSpace(*name) == "" {
+		return errors.New("token: -name is required")
+	}
+	r, err := auth.ParseRole(*role)
+	if err != nil {
+		return err
+	}
+	var list []string
+	for _, c := range strings.Split(*companies, ",") {
+		if c = strings.TrimSpace(c); c != "" && c != "*" {
+			list = append(list, c)
+		}
+	}
+	token, entry := auth.NewToken(strings.TrimSpace(*name), r, list, *expires)
+	if _, err := auth.NewKeyring("", []config.Key{entry}); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(entry, "", "  ")
+	fmt.Printf("token (give it to %s; it is not kept anywhere):\n\n  %s\n\nadd to \"tokens\" in the server config:\n\n%s\n", entry.Name, token, b)
 	return nil
 }
 

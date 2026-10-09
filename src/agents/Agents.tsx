@@ -332,7 +332,7 @@ function ChatActions({ company, a, info, convs }: { company: string; a: Assistan
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
-      {info.operator && (
+      {api.can(info.role, 'admin') && (
         <>
           <Button variant="ghost" size="icon" className="size-9 rounded-xl text-muted-foreground" aria-label="设置" title="设置" onClick={() => setEdit(true)}>
             <Settings2Icon className="size-4" />
@@ -459,7 +459,7 @@ function Work({ company, kind, info, docs, reloadDocs }: { company: string; kind
       <header className="flex items-center gap-2 border-b px-4 py-3">
         <h3 className="text-[14px] font-extrabold">{KIND[kind].work}</h3>
         <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11.5px] font-bold text-muted-foreground tabular-nums">{count}{kind === 'service' ? ' 未关闭' : ''}</span>
-        {kind === 'docs' && info.operator && (
+        {kind === 'docs' && api.can(info.role, 'admin') && (
           <>
             <input ref={file} type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
             <Button size="sm" variant="ghost" className="ml-auto h-8 gap-1.5 rounded-lg text-primary hover:bg-brand-soft hover:text-primary" onClick={() => file.current?.click()}>
@@ -551,7 +551,7 @@ function DocDialog({ company, doc, info, onClose, onDeleted }: { company: string
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-2">
           {body == null ? <LoaderCircleIcon className="mx-auto my-10 size-5 animate-spin text-muted-foreground" /> : <Md text={body} />}
         </div>
-        {info.operator && doc && (
+        {api.can(info.role, 'admin') && doc && (
           <DialogFooter className="border-t px-5 py-3">
             <Button variant="ghost" className={cn('gap-1.5 rounded-xl text-destructive hover:bg-danger-soft hover:text-destructive', sure && 'bg-danger-soft')}
               onClick={() => {
@@ -596,7 +596,7 @@ function NoteDialog({ company, note, info, onClose, onDeleted }: { company: stri
           </div>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{note && <Md text={note.body} />}</div>
-        {info.operator && note && (
+        {api.can(info.role, 'admin') && note && (
           <DialogFooter className="border-t px-5 py-3">
             <Button variant="ghost" className={cn('gap-1.5 rounded-xl text-destructive hover:bg-danger-soft hover:text-destructive', sure && 'bg-danger-soft')}
               onClick={() => {
@@ -626,7 +626,7 @@ function TicketDialog({ company, ticket, info, onClose, onChanged }: { company: 
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-mono text-[12px] text-muted-foreground tabular-nums">{t.id}</span>
-                {info.operator
+                {api.can(info.role, 'member')
                   ? info.statuses.map((st) => (
                     <button key={st} type="button" disabled={st === t.status}
                       onClick={() => api.setTicketStatus(company, t.id, st).then(onChanged).catch((e: Error) => toast.error(e.message))}
@@ -720,7 +720,7 @@ export default function AgentsView() {
                 </span>
               </button>
             ))}
-            {info.operator && (
+            {api.can(info.role, 'admin') && (
               <>
                 <button type="button" onClick={() => setMaking(true)}
                   className="mt-auto flex shrink-0 items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-bold text-muted-foreground hover:bg-surface hover:text-primary max-lg:mt-0 max-lg:ml-auto">

@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { runtime, useUI } from '@/state/store';
-import { PROTOCOL, type ClientMessage, type ServerMessage, type SourceInfo } from '@/protocol/sfp';
+import { PROTOCOL, type ClientMessage, type Role, type ServerMessage, type SourceInfo } from '@/protocol/sfp';
 import type { Command } from '@/sim/types';
 
 export type { SourceInfo };
@@ -15,12 +15,16 @@ interface LiveState {
   status: 'off' | 'connecting' | 'on';
   /** the server runs the simulation and this browser follows it */
   following: boolean;
-  /** opened with the operator token: commands reach equipment, the clock can change */
+  /** an operator (or above) of this company: commands reach equipment, the clock can change */
   operator: boolean;
+  /** the caller's role in this company */
+  role: Role;
+  /** the token holder's name; 访客 without one */
+  name: string;
   sources: SourceInfo[];
 }
 
-export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, sources: [] }));
+export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, role: 'visitor', name: '访客', sources: [] }));
 
 const me = Math.random().toString(36).slice(2, 10);
 let ws: WebSocket | null = null;
@@ -58,7 +62,10 @@ export function startLive() {
 }
 
 function connect(tok: string | null, attempt: number) {
-  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live${tok ? `?token=${encodeURIComponent(tok)}` : ''}`;
+  // the company on screen, so the greeting says what this caller may do in it
+  const q = new URLSearchParams({ company: runtime().bundle.company.id });
+  if (tok) q.set('token', tok);
+  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live?${q}`;
   useLive.setState({ status: 'connecting' });
   const s = new WebSocket(url);
   let opened = false;
@@ -90,7 +97,7 @@ function handle(m: ServerMessage) {
         ws?.close();
         return;
       }
-      useLive.setState({ operator: m.operator, sources: m.sources, following: m.sim });
+      useLive.setState({ operator: m.operator, role: m.role, name: m.name, sources: m.sources, following: m.sim });
       if (m.sim) {
         for (const p of rt.plants) {
           p.sim.follower = true;
@@ -122,7 +129,7 @@ function handle(m: ServerMessage) {
     case 'cmd': {
       const c = m.cmd;
       if (c.o === me || c.c !== rt.bundle.company.id) return;
-      toast.info(`${c.by === 'mcp' ? 'AI 助手' : '操作员'}：${c.a} ${CMD_LABEL[c.cmd] ?? c.cmd}`);
+      toast.info(`${c.n ?? (c.by === 'mcp' ? 'AI 助手' : '操作员')}${c.by === 'mcp' ? '（经 MCP）' : ''}：${c.a} ${CMD_LABEL[c.cmd] ?? c.cmd}`);
       break;
     }
   }

@@ -1,11 +1,15 @@
 package web
 
 import (
+	"cmp"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"smartfactory/internal/auth"
 )
 
 // Advisor is the consulting service (DataIntelligence) that reads one company's history. The
@@ -33,9 +37,10 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 				return
 			}
 			token := a.Token
+			who := s.caller(r)
 			if write {
-				if !s.operator(r) {
-					writeError(w, http.StatusForbidden, "需要运营令牌")
+				if !who.Can(r.PathValue("company"), auth.Operator) {
+					writeError(w, http.StatusForbidden, "需要这家公司操作员以上的令牌")
 					return
 				}
 				token = a.Approver
@@ -52,6 +57,13 @@ func (s *Server) advisorRoutes(mux *http.ServeMux) {
 			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("Content-Type", "application/json")
 			res, err := advisorClient.Do(req)
+			if write {
+				outcome := err
+				if err == nil && res.StatusCode >= 400 {
+					outcome = fmt.Errorf("顾问服务返回 %d", res.StatusCode)
+				}
+				s.Audit.Record(who, "page", r.PathValue("company"), "advisor."+cmp.Or(r.PathValue("verb"), "review"), r.PathValue("plan")+r.PathValue("name"), "", outcome)
+			}
 			if err != nil {
 				writeError(w, http.StatusBadGateway, "顾问服务不可用")
 				return

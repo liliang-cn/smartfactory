@@ -2,9 +2,12 @@ package agents
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
+
+	agentpkg "github.com/liliang-cn/agent-go/v3/pkg/agent"
+
+	"smartfactory/internal/auth"
 )
 
 func TestChunkFollowsHeadings(t *testing.T) {
@@ -66,17 +69,39 @@ func TestSeedAndWriteGate(t *testing.T) {
 		t.Fatal("tiankong got huaduan's documents")
 	}
 
+	// writes go through agent-go's permission gate: members and above of this company only
+	allow := func(w auth.Who) bool {
+		res, err := permit("huaduan")(auth.With(context.Background(), w), agentpkg.PermissionRequest{ToolName: "create_ticket"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Allowed && !res.ContinueRun {
+			t.Fatal("a refusal must leave the run going, so the model can hand over a draft")
+		}
+		return res.Allowed
+	}
+	for _, c := range []struct {
+		who  auth.Who
+		want bool
+	}{
+		{auth.Anonymous, false},
+		{auth.Who{Name: "张工", Role: auth.Member, Companies: []string{"huaduan"}}, true},
+		{auth.Who{Name: "外厂", Role: auth.Admin, Companies: []string{"tiankong"}}, false},
+		{auth.Who{Name: "管理员", Role: auth.Admin}, true},
+	} {
+		if got := allow(c.who); got != c.want {
+			t.Errorf("%s (%s, %v) may write: %v, want %v", c.who.Name, c.who.Role, c.who.Companies, got, c.want)
+		}
+	}
+
 	ts := tools(r.Store, nil, "huaduan")
 	in := args{"customer": "远岳动力", "product": "连杆 LG-B20", "title": "厚度超差", "detail": "5 件", "severity": "高"}
-	if _, err := ts["create_ticket"].run(withCaller(context.Background(), Caller{Name: "访客"}), in); !errors.Is(err, errReadOnly) {
-		t.Fatalf("a visitor created a ticket: %v", err)
-	}
-	got, err := ts["create_ticket"].run(withCaller(context.Background(), Caller{Operator: true, Name: "运营人员"}), in)
+	got, err := ts["create_ticket"].run(auth.With(context.Background(), auth.Who{Name: "张工", Role: auth.Member}), in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id := got.(Ticket).ID; !strings.HasSuffix(id, "-0004") {
-		t.Fatalf("new ticket numbered %s after three", id)
+	if tk := got.(Ticket); !strings.HasSuffix(tk.ID, "-0004") || tk.Log[0].By != "张工" {
+		t.Fatalf("new ticket %s by %s after three", tk.ID, tk.Log[0].By)
 	}
 	hits, _ := ts["search_docs"].run(context.Background(), args{"query": "模具 预热"})
 	if ps := hits.([]Part); len(ps) == 0 || !strings.Contains(ps[0].Text, "200～300") {

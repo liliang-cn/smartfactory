@@ -377,6 +377,26 @@ function AlarmBell() {
   );
 }
 
+const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员' } as const;
+
+/** Who this page is open as: the token holder and their role in this company. */
+function Me() {
+  const { name, role, status } = useLive();
+  if (status !== 'on') return null;
+  const visitor = role === 'visitor';
+  return (
+    <div className="flex items-center gap-2.5 max-xl:hidden" title={visitor ? '用令牌打开页面（?token=…）可以按角色操作' : undefined}>
+      <span className={cn('grid size-[38px] place-items-center rounded-full font-extrabold', visitor ? 'bg-surface text-muted-foreground' : 'bg-gradient-to-br from-amber-300 to-orange-400 text-white')}>
+        {[...name][0] ?? '访'}
+      </span>
+      <span className="grid leading-tight">
+        <b className="text-[13.5px]">{name}</b>
+        <small className="text-xs text-muted-foreground">{ROLE_LABEL[role]}</small>
+      </span>
+    </div>
+  );
+}
+
 export function TopBar() {
   return (
     <header className="absolute inset-x-0 top-0 z-30 flex h-16 items-center gap-3.5 bg-background/92 px-5 shadow-[0_1px_0_var(--border)] backdrop-blur-md max-md:h-[calc(54px+env(safe-area-inset-top))] max-md:gap-2 max-md:px-2.5 max-md:pt-[env(safe-area-inset-top)]">
@@ -389,13 +409,7 @@ export function TopBar() {
       <BusinessEntry />
       <LiveClock />
       <AlarmBell />
-      <div className="flex items-center gap-2.5 max-xl:hidden">
-        <span className="grid size-[38px] place-items-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 font-extrabold text-white">早</span>
-        <span className="grid leading-tight max-xl:hidden">
-          <b className="text-[13.5px]">早班值班长</b>
-          <small className="text-xs text-muted-foreground">生产运营</small>
-        </span>
-      </div>
+      <Me />
     </header>
   );
 }

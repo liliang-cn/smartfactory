@@ -15,6 +15,11 @@ export type Doc = z.infer<typeof P.Doc>;
 export type DocView = z.infer<typeof P.DocView>;
 export type Note = z.infer<typeof P.Note>;
 export type Ticket = z.infer<typeof P.Ticket>;
+export type Role = z.infer<typeof P.Role>;
+
+const RANK: Record<Role, number> = { visitor: 0, member: 1, operator: 2, admin: 3 };
+/** Whether role is need or above. */
+export const can = (role: Role | undefined, need: Role) => RANK[role ?? 'visitor'] >= RANK[need];
 
 export class AgentError extends Error {
   constructor(public status: number, message: string) {
