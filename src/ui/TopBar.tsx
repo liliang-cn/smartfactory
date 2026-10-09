@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { BarChart3Icon, BellIcon, BotIcon, BoxIcon, CheckIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { BarChart3Icon, BellIcon, BotIcon, BoxIcon, CheckIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, ScrollTextIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -379,21 +379,55 @@ function AlarmBell() {
 
 const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员' } as const;
 
-/** Who this page is open as: the token holder and their role in this company. */
+const AuditSheet = lazy(() => import('@/audit/Audit'));
+
+/** Who this page is open as: the token holder and their role in this company. Operators and
+ * administrators open the audit log from here. */
 function Me() {
   const { name, role, status } = useLive();
+  const [audit, setAudit] = useState(false);
   if (status !== 'on') return null;
   const visitor = role === 'visitor';
-  return (
-    <div className="flex items-center gap-2.5 max-xl:hidden" title={visitor ? '用令牌打开页面（?token=…）可以按角色操作' : undefined}>
-      <span className={cn('grid size-[38px] place-items-center rounded-full font-extrabold', visitor ? 'bg-surface text-muted-foreground' : 'bg-gradient-to-br from-amber-300 to-orange-400 text-white')}>
+  const chip = (
+    <>
+      <span className={cn('grid size-[38px] shrink-0 place-items-center rounded-full font-extrabold max-md:size-8', visitor ? 'bg-surface text-muted-foreground' : 'bg-gradient-to-br from-amber-300 to-orange-400 text-white')}>
         {[...name][0] ?? '访'}
       </span>
-      <span className="grid leading-tight">
+      <span className="grid text-left leading-tight max-xl:hidden">
         <b className="text-[13.5px]">{name}</b>
         <small className="text-xs text-muted-foreground">{ROLE_LABEL[role]}</small>
       </span>
-    </div>
+    </>
+  );
+  if (role !== 'operator' && role !== 'admin') {
+    return <div className="flex items-center gap-2.5 max-md:hidden" title={visitor ? '用令牌打开页面（?token=…）可以按角色操作' : `${name} · ${ROLE_LABEL[role]}`}>{chip}</div>;
+  }
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="flex items-center gap-2.5 rounded-xl p-0.5 pr-1.5 hover:bg-surface max-xl:pr-0.5" aria-label={`${name}，${ROLE_LABEL[role]}`}>
+            {chip}
+            <ChevronDownIcon className="size-3.5 text-muted-foreground max-xl:hidden" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52 rounded-2xl p-1.5 shadow-float">
+          <DropdownMenuLabel className="grid leading-tight">
+            <span className="text-[13px] font-extrabold">{name}</span>
+            <span className="text-xs font-normal text-muted-foreground">{runtime().bundle.company.name} · {ROLE_LABEL[role]}</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2 rounded-xl" onSelect={() => setAudit(true)}>
+            <ScrollTextIcon className="size-4" />操作记录
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {audit && (
+        <Suspense fallback={null}>
+          <AuditSheet open={audit} onClose={() => setAudit(false)} />
+        </Suspense>
+      )}
+    </>
   );
 }
 

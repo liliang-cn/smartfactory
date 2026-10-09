@@ -1,0 +1,47 @@
+package audit
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"smartfactory/internal/auth"
+)
+
+// Pages run newest first and pick up where the last one ended; each company sees only its own.
+func TestListPages(t *testing.T) {
+	l, err := Open(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	w := auth.Who{Name: "张工", Role: auth.Operator, Key: "abcd1234"}
+	for i := range 5 {
+		var e error
+		if i == 2 {
+			e = errors.New("找不到设备")
+		}
+		l.Record(w, "mcp", "huaduan", "command", "p1/HP-10"+string(rune('1'+i)), "stop", e)
+	}
+	l.Record(w, "page", "tiankong", "doc.add", "x", "", nil)
+
+	first, err := l.List(context.Background(), "huaduan", 0, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 3 || first[0].Target != "p1/HP-105" || first[2].Target != "p1/HP-103" {
+		t.Fatalf("first page: %+v", first)
+	}
+	if first[2].OK || first[2].Error != "找不到设备" || first[0].Role != auth.Operator || first[0].Key != "abcd1234" {
+		t.Errorf("entry kept wrong: %+v / %+v", first[2], first[0])
+	}
+	rest, _ := l.List(context.Background(), "huaduan", first[2].ID, 3)
+	if len(rest) != 2 || rest[0].Target != "p1/HP-102" || rest[1].Target != "p1/HP-101" {
+		t.Fatalf("second page: %+v", rest)
+	}
+	var none *Log
+	none.Record(w, "mcp", "huaduan", "command", "", "", nil)
+	if got, _ := none.List(context.Background(), "huaduan", 0, 10); len(got) != 0 {
+		t.Error("a server without a data directory keeps nothing and lists nothing")
+	}
+}

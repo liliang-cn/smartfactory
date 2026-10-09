@@ -135,8 +135,9 @@ function handle(m: ServerMessage) {
   }
 }
 
-const CMD_LABEL: Partial<Record<Command, string>> = {
+export const CMD_LABEL: Partial<Record<Command, string>> = {
   start: '启动', stop: '停止', reset: '复位', maint: '切换维护', speed: '调速', fault: '故障演练', restock: '原料入库', ship: '成品发运',
+  retool: '换模', toollimit: '设换模点',
 };
 
 /** Sends a command to the server when following it; false means apply it locally. */
