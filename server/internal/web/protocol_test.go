@@ -18,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"smartfactory/internal/agents"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/sfptest"
 	"smartfactory/internal/tags"
@@ -154,5 +155,113 @@ func TestProtocol(t *testing.T) {
 		if err := d.Decode(&clientMsg{}); err != nil {
 			t.Errorf("%s: %v", m, err)
 		}
+	}
+}
+
+// The assistants' HTTP surface conforms to the standard: what a viewer reads, what an operator
+// sets up, and each kind of event an answer streams.
+func TestAssistantsProtocol(t *testing.T) {
+	if _, err := os.Stat("../engine/js/engine.js"); err != nil {
+		t.Skip("engine bundle not built (npm run build:engine)")
+	}
+	t.Setenv("LLM_API_KEY", "") // no model: asking is refused, everything else works
+	t.Setenv("AGENTGO_HOME", t.TempDir())
+	std := sfptest.Load(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	eng, err := engine.New(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go eng.Run(ctx)
+	ag, err := agents.New(t.TempDir(), eng, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ag.Close()
+	const token = "operator-token"
+	ts := httptest.NewServer((&Server{Hub: tags.NewHub(), Engine: eng, Token: token, Log: log, Agents: ag,
+		Static: fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}}}).Handler())
+	defer ts.Close()
+
+	call := func(method, path, body string, op bool, want int, def string) []byte {
+		t.Helper()
+		if body != "" {
+			for _, d := range []string{"AssistantRequest", "AssistantAsk", "DocUpload", "TicketPatch"} {
+				if strings.Contains(def, d) {
+					std.Check(d, []byte(body))
+				}
+			}
+		}
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+		req.Header.Set("X-SF-Visitor", "test-browser")
+		if op {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != want {
+			t.Fatalf("%s %s: %d, want %d: %s", method, path, res.StatusCode, want, b)
+		}
+		std.Check(strings.Fields(def)[0], b)
+		return b
+	}
+	var list struct {
+		Agents []struct{ ID, Kind string } `json:"agents"`
+	}
+	json.Unmarshal(call("GET", "/api/agents/huaduan", "", false, 200, "Assistants"), &list)
+	if len(list.Agents) != 3 {
+		t.Fatalf("huaduan starts with %d assistants, want 3", len(list.Agents))
+	}
+	call("GET", "/api/agents/nobody", "", false, 404, "ErrorBody")
+	var docs []struct{ ID string }
+	json.Unmarshal(call("GET", "/api/library/huaduan/docs", "", false, 200, "Docs"), &docs)
+	if len(docs) == 0 {
+		t.Fatal("huaduan has no documents")
+	}
+	call("GET", "/api/library/huaduan/docs/"+docs[0].ID, "", false, 200, "DocView")
+	call("GET", "/api/library/huaduan/docs/nope", "", false, 404, "ErrorBody")
+	call("POST", "/api/library/huaduan/docs", `{"title":"试验","body":"# 一\n\n内容"}`, false, 403, "ErrorBody DocUpload")
+	call("POST", "/api/library/huaduan/docs", `{"title":"试验","body":"# 一\n\n内容"}`, true, 200, "Doc DocUpload")
+	call("GET", "/api/library/huaduan/notes", "", false, 200, "Notes")
+	var tickets []struct{ ID string }
+	json.Unmarshal(call("GET", "/api/library/huaduan/tickets", "", false, 200, "Tickets"), &tickets)
+	call("PATCH", "/api/library/huaduan/tickets/"+tickets[0].ID, `{"status":"已关闭"}`, true, 200, "Ticket TicketPatch")
+
+	made := call("POST", "/api/agents/huaduan", `{"kind":"docs","name":"标准助手","instructions":"只看国标"}`, true, 200, "Assistant AssistantRequest")
+	var a struct{ ID string }
+	json.Unmarshal(made, &a)
+	call("POST", "/api/agents/huaduan", `{"kind":"docs","name":"标准助手"}`, false, 403, "ErrorBody AssistantRequest")
+	call("PUT", "/api/agents/huaduan/"+a.ID, `{"name":"国标助手","instructions":""}`, true, 200, "Assistant AssistantRequest")
+	call("GET", "/api/agents/huaduan/"+a.ID+"/conversations", "", false, 200, "Conversations")
+	call("POST", "/api/agents/huaduan/"+a.ID+"/ask", `{"text":"有哪些标准？"}`, false, 503, "ErrorBody AssistantAsk")
+
+	// a conversation as it is kept, read back by its owner only
+	conv, err := ag.Store.CreateConversation("huaduan", a.ID, "visitor:test-browser", "有哪些标准？")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.Store.AddMessage(conv.ID, agents.Message{Role: "user", Text: "有哪些标准？", Status: "done"})
+	ag.Store.AddMessage(conv.ID, agents.Message{Role: "assistant", Text: "一份。", Status: "done",
+		Steps: []agents.Step{{Tool: "list_docs", Args: map[string]any{}, Result: []any{map[string]any{"title": "试验"}}}}})
+	call("GET", "/api/agents/huaduan/"+a.ID+"/conversations", "", false, 200, "Conversations")
+	call("GET", "/api/agents/huaduan/"+a.ID+"/conversations/"+conv.ID, "", false, 200, "ConversationView")
+	call("GET", "/api/agents/huaduan/"+a.ID+"/conversations/"+conv.ID, "", true, 404, "ErrorBody")
+	call("DELETE", "/api/agents/huaduan/"+a.ID+"/conversations/"+conv.ID, "", false, 200, "Done")
+	call("DELETE", "/api/agents/huaduan/"+a.ID, "", true, 200, "Done")
+
+	for _, e := range []agents.Event{
+		{Kind: "conversation", ID: "c1", Title: "有哪些标准？"}, {Kind: "thinking"},
+		{Kind: "tool_call", Tool: "search_docs", Args: map[string]any{"query": "模温"}},
+		{Kind: "tool_result", Tool: "search_docs", Result: []any{}}, {Kind: "delta", Text: "模温"}, {Kind: "reset"},
+		{Kind: "complete", Text: "200～300 ℃"}, {Kind: "complete"}, {Kind: "error", Text: "服务器没有配置大模型"},
+	} {
+		b, _ := json.Marshal(e)
+		std.Check("AssistantEvent", b)
 	}
 }

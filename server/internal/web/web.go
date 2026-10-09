@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"smartfactory/internal/agents"
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/sfconv"
@@ -41,6 +42,8 @@ type Server struct {
 	AdvisorAPI map[string]Advisor
 	// Prefix is the MQTT topic convention's first segment (protocol/devices.md).
 	Prefix string
+	// Agents are the companies' own assistants (nil when the server keeps no data).
+	Agents *agents.Runner
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -76,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("/mcp", s.requireToken(s.MCP))
 	}
 	s.advisorRoutes(mux)
+	s.agentRoutes(mux)
 	mux.Handle("/", s.static())
 	return mux
 }

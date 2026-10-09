@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"smartfactory/internal/adapters"
+	"smartfactory/internal/agents"
 	"smartfactory/internal/config"
 	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
@@ -146,9 +148,20 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			advisorAPI[h.Company] = sfweb.Advisor{API: strings.TrimRight(h.AdvisorAPI, "/"), Token: h.AdvisorToken, Approver: h.ApproverToken}
 		}
 	}
+	var assistants *agents.Runner
+	if cfg.Data != "" {
+		assistants, err = agents.New(filepath.Join(cfg.Data, "agents"), eng, log)
+		if err != nil {
+			return fmt.Errorf("assistants: %w", err)
+		}
+		defer assistants.Close()
+		if !assistants.Ready() {
+			log.Warn("assistants cannot answer: set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL")
+		}
+	}
 	ms := mcptools.New(hub, eng, version)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix,
+		Hub: hub, Engine: eng, Token: cfg.Token, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

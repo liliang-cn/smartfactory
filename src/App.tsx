@@ -11,14 +11,23 @@ import { GroupKpis, HoverTip, Kpis, MapControls, ViewSwitch } from '@/ui/Overlay
 import { Fleet, GroupFleet, Tracker } from '@/ui/Panels';
 import { TopBar } from '@/ui/TopBar';
 import { useBiz } from '@/advisor/store';
+import { useAgents } from '@/agents/store';
 
 const Business = lazy(() => import('@/advisor/Business'));
+const Agents = lazy(() => import('@/agents/Agents'));
 
 /** The business view loads its charts and markdown only when first opened. */
 function BusinessView() {
   const open = useBiz((s) => s.open);
   if (!open) return null;
   return <Suspense fallback={null}><Business /></Suspense>;
+}
+
+/** The assistants view, loaded when first opened. */
+function AgentsView() {
+  const open = useAgents((s) => s.open);
+  if (!open) return null;
+  return <Suspense fallback={null}><Agents /></Suspense>;
 }
 
 // Raise a toast for every new fault in any plant of the company; the action jumps there.
@@ -80,7 +89,9 @@ export default function App() {
   const plant = usePlant();
   const campus = useCampus();
   // the business view covers the map; the selected device stays selected for the way back
-  const biz = useBiz((s) => s.open);
+  const bizOpen = useBiz((s) => s.open);
+  const agentsOpen = useAgents((s) => s.open);
+  const biz = bizOpen || agentsOpen;
   return (
     <TooltipProvider delayDuration={300}>
       <div className="fixed inset-0 overflow-hidden bg-stage">
@@ -95,6 +106,7 @@ export default function App() {
         {!biz && <Inspector />}
         {!biz && <HoverTip />}
         <BusinessView />
+        <AgentsView />
         <FaultToasts />
         <Toaster theme="light" position="top-center" offset={{ top: 84 }} mobileOffset={{ top: 'calc(176px + env(safe-area-inset-top))' }} />
       </div>

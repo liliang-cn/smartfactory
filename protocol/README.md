@@ -1,6 +1,6 @@
 # SmartFactory 协议 SFP/1
 
-浏览器与 SmartFactory 服务器之间的全部接口：实时通道、HTTP 接口、顾问接口，以及给智能体用的 MCP。设备和传感器怎样接入，见 [devices.md](devices.md)（SFD/1）。
+浏览器与 SmartFactory 服务器之间的全部接口：实时通道、HTTP 接口、顾问接口、公司自己的助手，以及给智能体用的 MCP。设备和传感器怎样接入，见 [devices.md](devices.md)（SFD/1）。
 
 | 文件 | 作用 |
 |---|---|
@@ -198,7 +198,46 @@
 
 集团诊断会在服务端一直跑完，浏览器中途断开也不影响，结果照样存档。
 
-## 5. MCP `POST /mcp`
+## 5. 助手接口 `/api/agents/{company}/…`、`/api/library/{company}/…`
+
+公司自己的助手，跑在 agent-go 上。每个助手由一种模板（`docs` 文档助手、`notes` 研发笔记、`service` 售后服务）加上公司起的名字和要求组成，工作对象是公司的资料库、研发笔记和售后工单，以及孪生里的设备。一家公司第一次被访问时自动建好三个助手，华锻另带示例资料。服务器没有配置数据目录时，这些接口都返回 503。
+
+谁在问：带运营令牌的是运营人员；其他人是访客，用请求头 `X-SF-Visitor`（浏览器自己生成并保存的 id）区分，没有这个头时按 IP 区分。对话只有发起人自己能看到。访客可以提问，但助手的写入工具（保存笔记、建工单、改工单）对访客返回“只有运营人员可以保存”，助手会把整理好的内容直接回给访客。
+
+| 方法 路径 | 请求 | 响应 | 权限 |
+|---|---|---|---|
+| `GET /api/agents/{company}` | — | `Assistants {ready, operator, templates, agents, severities, statuses}` | 所有人 |
+| `POST /api/agents/{company}` | `AssistantRequest {kind, name, instructions?}` | `Assistant` | 运营人员 |
+| `PUT /api/agents/{company}/{id}` | `AssistantRequest {name, instructions?}` | `Assistant` | 运营人员 |
+| `DELETE /api/agents/{company}/{id}` | — | `Done` | 运营人员 |
+| `POST /api/agents/{company}/{id}/ask` | `AssistantAsk {conversation?, text}` | SSE，`AssistantEvent` 流 | 所有人；同一个人同一时间只能问一个问题，否则 429；没有配置大模型时 503 |
+| `GET /api/agents/{company}/{id}/conversations` | — | `Conversations`（最近 50 段） | 本人 |
+| `GET /api/agents/{company}/{id}/conversations/{conv}` | — | `ConversationView {conversation, messages}` | 本人 |
+| `DELETE /api/agents/{company}/{id}/conversations/{conv}` | — | `Done` | 本人 |
+| `GET /api/library/{company}/docs` | — | `Docs` | 所有人 |
+| `GET /api/library/{company}/docs/{doc}` | — | `DocView {doc, body}` | 所有人 |
+| `POST /api/library/{company}/docs` | `DocUpload {title, body}`，正文是 Markdown 或纯文本 | `Doc` | 运营人员 |
+| `DELETE /api/library/{company}/docs/{doc}` | — | `Done` | 运营人员 |
+| `GET /api/library/{company}/notes` | — | `Notes` | 所有人 |
+| `DELETE /api/library/{company}/notes/{note}` | — | `Done` | 运营人员 |
+| `GET /api/library/{company}/tickets` | — | `Tickets` | 所有人 |
+| `PATCH /api/library/{company}/tickets/{ticket}` | `TicketPatch {status}` | `Ticket` | 运营人员 |
+
+不带 `conversation` 的提问开始一段新对话，第一个事件 `conversation` 给出它的 id；之后带上这个 id 继续问，助手记得前面说过的话。`AssistantEvent` 的 `kind`：
+
+| kind | 含义 |
+|---|---|
+| `conversation` | 这次提问所在的对话，带 `id` 和 `title` |
+| `thinking` | 模型在想 |
+| `tool_call` / `tool_result` | 调用工具和它的结果，带 `tool`，以及 `args` 或 `result` |
+| `delta` | 回答的一段，按顺序拼起来 |
+| `reset` | 丢掉已经收到的 `delta`，回答会重写 |
+| `complete` | 最终回答，在 `text` 里 |
+| `error` | 出错，原因在 `text` 里 |
+
+浏览器断开时回答停止，已经写入的笔记和工单保留，这条回答记为 `stopped`。
+
+## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。
 - 必须带 `Authorization: Bearer <运营令牌>`，否则返回 401。服务器没有配置令牌时返回 503。
@@ -218,7 +257,7 @@
 | `create_industry` | 新建或替换行业包，带校验 |
 | `create_company` / `delete_company` | 新建或替换公司，立即开始仿真 / 删除 |
 
-## 6. 修改协议
+## 7. 修改协议
 
 1. 先改 `src/protocol/sfp.ts`。
 2. `npm run schema` 重新生成 `protocol/sfp.schema.json`，`npm run typecheck` 检查前端。

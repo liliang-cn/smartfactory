@@ -1,0 +1,272 @@
+package agents
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	agentpkg "github.com/liliang-cn/agent-go/v3/pkg/agent"
+	"github.com/liliang-cn/agent-go/v3/pkg/domain"
+	"github.com/liliang-cn/agent-go/v3/pkg/providers"
+
+	"smartfactory/internal/engine"
+)
+
+var shanghai = func() *time.Location {
+	if l, err := time.LoadLocation("Asia/Shanghai"); err == nil {
+		return l
+	}
+	return time.FixedZone("CST", 8*3600)
+}()
+
+func now() time.Time    { return time.Now().In(shanghai) }
+func today() string     { return now().Format("2006-01-02") }
+var weekday = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
+
+// Runner holds the companies' assistants: the store, and one agent-go service per assistant,
+// built when it is first asked something and rebuilt when its instructions change.
+type Runner struct {
+	Store *Store
+	Eng   *engine.Engine
+	Log   *slog.Logger
+
+	dir string
+	llm domain.Generator
+
+	mu   sync.Mutex
+	svcs map[string]*built
+}
+
+type built struct {
+	svc     *agentpkg.Service
+	updated time.Time
+}
+
+// New opens the store in dir. The model comes from LLM_BASE_URL, LLM_API_KEY and LLM_MODEL;
+// without them the assistants can be set up and their data browsed, but not asked.
+func New(dir string, eng *engine.Engine, log *slog.Logger) (*Runner, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	st, err := Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	r := &Runner{Store: st, Eng: eng, Log: log, dir: dir, svcs: map[string]*built{}}
+	// agent-go keeps its own state (conversation history) under AGENTGO_HOME
+	if os.Getenv("AGENTGO_HOME") == "" {
+		os.Setenv("AGENTGO_HOME", filepath.Join(dir, "agentgo"))
+	}
+	if key := os.Getenv("LLM_API_KEY"); key != "" {
+		p, err := providers.NewOpenAILLMProvider(&domain.OpenAIProviderConfig{BaseURL: os.Getenv("LLM_BASE_URL"), APIKey: key, LLMModel: os.Getenv("LLM_MODEL")})
+		if err != nil {
+			st.Close()
+			return nil, err
+		}
+		r.llm = p
+	}
+	return r, nil
+}
+
+// Ready reports whether there is a model to answer with.
+func (r *Runner) Ready() bool { return r.llm != nil }
+
+func (r *Runner) Close() error {
+	r.mu.Lock()
+	for _, b := range r.svcs {
+		b.svc.Close()
+	}
+	r.svcs = map[string]*built{}
+	r.mu.Unlock()
+	return r.Store.Close()
+}
+
+// Forget drops an assistant's service (it was changed or deleted).
+func (r *Runner) Forget(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if b, ok := r.svcs[id]; ok {
+		b.svc.Close()
+		delete(r.svcs, id)
+	}
+}
+
+func (r *Runner) prompt(a Agent) string {
+	t, _ := template(a.Kind)
+	name := a.Company
+	var list []struct{ ID, Name string }
+	if r.Eng != nil && json.Unmarshal([]byte(r.Eng.List()), &list) == nil {
+		for _, c := range list {
+			if c.ID == a.Company {
+				name = c.Name
+			}
+		}
+	}
+	p := fmt.Sprintf("你是%s的「%s」。\n\n%s\n%s", name, a.Name, t.prompt, commonPrompt)
+	if s := strings.TrimSpace(a.Instructions); s != "" {
+		p += "\n\n公司给你的要求（优先于上面的做法）：\n" + s
+	}
+	return p
+}
+
+func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if b, ok := r.svcs[a.ID]; ok && b.updated.Equal(a.Updated) {
+		return b.svc, nil
+	} else if ok {
+		b.svc.Close()
+		delete(r.svcs, a.ID)
+	}
+	t, ok := template(a.Kind)
+	if !ok {
+		return nil, fmt.Errorf("unknown kind %q", a.Kind)
+	}
+	svc, err := agentpkg.New("sf-"+a.ID).WithLLM(r.llm).WithSystemPrompt(r.prompt(a)).
+		WithDBPath(filepath.Join(r.dir, "agentgo.db")).WithTimezone(shanghai).Build()
+	if err != nil {
+		return nil, err
+	}
+	// These contracts name one tool per requested action, so 「记一下」 that rightly appends to an
+	// existing note (update_note) is rejected for not creating one (save_note), and the retry
+	// writes the note twice. The brief says which to use instead.
+	svc.DisableOutputLint("requested_action_contract", "task_delivery_contract")
+	all := tools(r.Store, r.Eng, a.Company)
+	for _, name := range t.Tools {
+		tl := all[name]
+		svc.AddToolWithMetadata(tl.name, tl.desc, tl.params, func(ctx context.Context, m map[string]any) (any, error) {
+			return tl.run(ctx, args(m))
+		}, agentpkg.ToolMetadata{ReadOnly: !tl.write, ConcurrencySafe: !tl.write})
+	}
+	r.svcs[a.ID] = &built{svc: svc, updated: a.Updated}
+	return svc, nil
+}
+
+// Event is one step of an answer as it is written, for the browser.
+type Event struct {
+	Kind   string         `json:"kind"` // conversation | thinking | tool_call | tool_result | delta | reset | complete | error
+	ID     string         `json:"id,omitempty"`
+	Title  string         `json:"title,omitempty"`
+	Tool   string         `json:"tool,omitempty"`
+	Args   map[string]any `json:"args,omitempty"`
+	Result any            `json:"result,omitempty"`
+	Text   string         `json:"text,omitempty"`
+}
+
+// ErrNoModel is returned when the server has no model configured.
+var ErrNoModel = errors.New("服务器没有配置大模型")
+
+// Ask puts text to the assistant in conversation conv (whose earlier turns agent-go keeps), as
+// who; emit sees every step. The answer and its steps are kept with the conversation.
+func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who Caller, emit func(Event)) error {
+	if r.llm == nil {
+		return ErrNoModel
+	}
+	t, ok := template(a.Kind)
+	if !ok {
+		return fmt.Errorf("unknown kind %q", a.Kind)
+	}
+	svc, err := r.service(a)
+	if err != nil {
+		return err
+	}
+	if _, err := r.Store.AddMessage(conv, Message{Role: "user", Text: text, Status: "done"}); err != nil {
+		return err
+	}
+	mid, err := r.Store.AddMessage(conv, Message{Role: "assistant", Status: "running"})
+	if err != nil {
+		return err
+	}
+	n := now()
+	goal := fmt.Sprintf("（现在是 %s %s %s，提问的是%s）\n\n%s", n.Format("2006-01-02"), weekday[n.Weekday()], n.Format("15:04"), who.Name, text)
+	ch, err := svc.RunStreamWithOptions(withCaller(ctx, who), goal, agentpkg.WithSessionID(conv), agentpkg.WithMaxTurns(24))
+	if err != nil {
+		r.Store.FinishMessage(mid, "", nil, "failed")
+		return err
+	}
+	var steps []Step
+	var answer, partial, failure string
+	for ev := range ch {
+		// agent-go's own tools (task_complete …) are how a run ends, not steps of the answer
+		if (ev.Type == agentpkg.EventTypeToolCall || ev.Type == agentpkg.EventTypeToolResult) && !slices.Contains(t.Tools, ev.ToolName) {
+			continue
+		}
+		switch ev.Type {
+		case agentpkg.EventTypeThinking:
+			emit(Event{Kind: "thinking"})
+		case agentpkg.EventTypeToolCall:
+			steps = append(steps, Step{Tool: ev.ToolName, Args: ev.ToolArgs})
+			emit(Event{Kind: "tool_call", Tool: ev.ToolName, Args: ev.ToolArgs})
+		case agentpkg.EventTypeToolResult:
+			res := compact(ev.ToolResult)
+			for i := len(steps) - 1; i >= 0; i-- {
+				if steps[i].Tool == ev.ToolName && steps[i].Result == nil {
+					steps[i].Result = res
+					break
+				}
+			}
+			emit(Event{Kind: "tool_result", Tool: ev.ToolName, Result: res})
+		case agentpkg.EventTypePartial:
+			partial += ev.Content
+			emit(Event{Kind: "delta", Text: ev.Content})
+		case agentpkg.EventTypeTombstone:
+			partial = ""
+			emit(Event{Kind: "reset"})
+		case agentpkg.EventTypeComplete:
+			answer = ev.Content
+		case agentpkg.EventTypeError:
+			failure = ev.Content
+		}
+	}
+	if answer == "" {
+		answer = partial
+	}
+	status := "done"
+	switch {
+	case ctx.Err() != nil:
+		status = "stopped"
+	case answer == "" && failure != "":
+		status = "failed"
+		answer = failure
+	}
+	r.Store.FinishMessage(mid, answer, steps, status)
+	if status == "failed" {
+		emit(Event{Kind: "error", Text: answer})
+	} else {
+		emit(Event{Kind: "complete", Text: answer})
+	}
+	return nil
+}
+
+// compact keeps a tool result small enough to send to a browser and keep.
+func compact(v any) any {
+	if s, ok := v.(string); ok {
+		var out any
+		if json.Unmarshal([]byte(s), &out) == nil {
+			v = out
+		} else if len(s) > 4000 {
+			return s[:4000] + "…"
+		} else {
+			return s
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	if len(b) <= 8000 {
+		var out any
+		if json.Unmarshal(b, &out) == nil {
+			return out
+		}
+	}
+	return string([]rune(string(b))[:min(len([]rune(string(b))), 3000)]) + "…"
+}

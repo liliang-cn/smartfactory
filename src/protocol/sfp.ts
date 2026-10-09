@@ -329,6 +329,64 @@ export const ReviewRun = open({
 });
 export const Reviews = open({ reviews: z.array(Review), runs: z.array(ReviewRun) });
 
+// ---------- HTTP: the companies' own assistants (/api/agents/{company}/…, /api/library/{company}/…) ----------
+
+/** RFC 3339 */
+const time = str;
+const Tools = z.record(str, z.unknown());
+
+export const AssistantKind = z.enum(['docs', 'notes', 'service']);
+export const AssistantTemplate = z.object({ kind: AssistantKind, title: str, tools: z.array(str) });
+export const Assistant = z.object({
+  id: str, company: str, kind: AssistantKind, name: str, instructions: str, created: time, updated: time,
+});
+export const Assistants = z.object({
+  /** whether the server has a model to answer with */
+  ready: z.boolean(),
+  /** whether the caller holds the operator token: only operators set up assistants and save */
+  operator: z.boolean(),
+  templates: z.array(AssistantTemplate), agents: z.array(Assistant), severities: z.array(str), statuses: z.array(str),
+}).meta({ description: "A company's assistants and the kinds it can make" });
+export const AssistantRequest = z.object({ kind: AssistantKind.optional(), name: str, instructions: str.optional() });
+
+export const Conversation = z.object({ id: str, agent: str, title: str, created: time, updated: time });
+export const Conversations = z.array(Conversation).meta({ description: "The caller's own conversations with one assistant" });
+export const ChatStep = z.object({ tool: str, args: Tools.optional(), result: z.unknown().optional() });
+export const ChatMessage = z.object({
+  id: num, role: z.enum(['user', 'assistant']), text: str, steps: z.array(ChatStep).optional(),
+  status: z.enum(['done', 'running', 'stopped', 'failed']), at: time,
+});
+export const ConversationView = z.object({ conversation: Conversation, messages: z.array(ChatMessage) });
+export const AssistantAsk = z.object({ conversation: str.optional(), text: str });
+export const AssistantEvent = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('conversation'), id: str, title: str }),
+  z.object({ kind: z.literal('thinking') }),
+  z.object({ kind: z.literal('tool_call'), tool: str, args: Tools.optional() }),
+  z.object({ kind: z.literal('tool_result'), tool: str, result: z.unknown().optional() }),
+  /** the answer as it is written */
+  z.object({ kind: z.literal('delta'), text: str }),
+  /** what was written so far is dropped; the answer is written again */
+  z.object({ kind: z.literal('reset') }),
+  z.object({ kind: z.literal('complete'), text: str.optional() }),
+  z.object({ kind: z.literal('error'), text: str }),
+]).meta({ description: 'One server-sent event of an assistant answering: `data: <AssistantEvent JSON>`' });
+
+export const Doc = z.object({ id: str, title: str, size: num, parts: num, by: str, created: time });
+export const Docs = z.array(Doc);
+export const DocView = z.object({ doc: Doc, body: str });
+export const DocUpload = z.object({ title: str, body: str });
+export const Note = z.object({
+  id: str, title: str, body: str, tags: z.array(str), assets: z.array(str), by: str, created: time, updated: time,
+});
+export const Notes = z.array(Note);
+export const Ticket = z.object({
+  id: str, customer: str, product: str, batch: str, title: str, detail: str, severity: str, status: str, reply: str,
+  log: z.array(z.object({ at: time, by: str, text: str })), created: time, updated: time,
+});
+export const Tickets = z.array(Ticket);
+export const TicketPatch = z.object({ status: str });
+export const Done = z.object({ ok: z.literal(true) });
+
 // ---------- equipment (MQTT / Modbus TCP / OPC UA): protocol/devices.md ----------
 
 const Scalar = z.union([num, str, z.boolean()]);
@@ -414,6 +472,8 @@ export const DEFS = {
   ErrorBody, Health, Directory, RuntimeCompany, Tags, Advisors, DeviceMap,
   Metrics, Dimensions, Query, Answer, Board, DecideRequest, AskRequest, AskEvent, Reviews, ReviewRun,
   DeviceFields, DeviceCommand,
+  Assistants, Assistant, AssistantRequest, Conversations, ConversationView, AssistantAsk, AssistantEvent,
+  Docs, Doc, DocView, DocUpload, Notes, Note, Tickets, Ticket, TicketPatch, Done,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

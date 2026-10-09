@@ -2154,6 +2154,662 @@
       ],
       "additionalProperties": false
     },
+    "Assistants": {
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "operator": {
+          "type": "boolean"
+        },
+        "templates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "docs",
+                  "notes",
+                  "service"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "tools"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Assistant"
+          }
+        },
+        "severities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "statuses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "ready",
+        "operator",
+        "templates",
+        "agents",
+        "severities",
+        "statuses"
+      ],
+      "additionalProperties": false,
+      "description": "A company's assistants and the kinds it can make"
+    },
+    "Assistant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "docs",
+            "notes",
+            "service"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "company",
+        "kind",
+        "name",
+        "instructions",
+        "created",
+        "updated"
+      ],
+      "additionalProperties": false
+    },
+    "AssistantRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "docs",
+            "notes",
+            "service"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Conversations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "title",
+          "created",
+          "updated"
+        ],
+        "additionalProperties": false
+      },
+      "description": "The caller's own conversations with one assistant"
+    },
+    "ConversationView": {
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "agent": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "created": {
+              "type": "string"
+            },
+            "updated": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "agent",
+            "title",
+            "created",
+            "updated"
+          ],
+          "additionalProperties": false
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "user",
+                  "assistant"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tool": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "result": {}
+                  },
+                  "required": [
+                    "tool"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "done",
+                  "running",
+                  "stopped",
+                  "failed"
+                ]
+              },
+              "at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "role",
+              "text",
+              "status",
+              "at"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "conversation",
+        "messages"
+      ],
+      "additionalProperties": false
+    },
+    "AssistantAsk": {
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "AssistantEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "conversation"
+            },
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "thinking"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_call"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_result"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "result": {}
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "delta"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "reset"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "complete"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "error"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "One server-sent event of an assistant answering: `data: <AssistantEvent JSON>`"
+    },
+    "Docs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Doc"
+      }
+    },
+    "Doc": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number"
+        },
+        "parts": {
+          "type": "number"
+        },
+        "by": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "size",
+        "parts",
+        "by",
+        "created"
+      ],
+      "additionalProperties": false
+    },
+    "DocView": {
+      "type": "object",
+      "properties": {
+        "doc": {
+          "$ref": "#/$defs/Doc"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "doc",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "DocUpload": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "Notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Note"
+      }
+    },
+    "Note": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "by": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "body",
+        "tags",
+        "assets",
+        "by",
+        "created",
+        "updated"
+      ],
+      "additionalProperties": false
+    },
+    "Tickets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Ticket"
+      }
+    },
+    "Ticket": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "customer": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "batch": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "reply": {
+          "type": "string"
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "by": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "by",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "created": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "customer",
+        "product",
+        "batch",
+        "title",
+        "detail",
+        "severity",
+        "status",
+        "reply",
+        "log",
+        "created",
+        "updated"
+      ],
+      "additionalProperties": false
+    },
+    "TicketPatch": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "Done": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "additionalProperties": false
+    },
     "Source": {
       "type": "object",
       "properties": {

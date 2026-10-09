@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BarChart3Icon, BellIcon, BoxIcon, CheckIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
+import { BarChart3Icon, BellIcon, BotIcon, BoxIcon, CheckIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -11,6 +11,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import { useBiz } from '@/advisor/store';
+import { useAgents } from '@/agents/store';
 import { useLive } from '@/live/client';
 import { liveFields } from '@/sim/plant';
 import { ALL, goToAsset, groupsOf, runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
@@ -235,30 +236,46 @@ const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcu
  * Shown when the app is served by the SmartFactory server: the protocol links to real equipment
  * (shared by the whole server) and which machines each one feeds.
  */
-/** The company's business view (figures, advisor, consulting record), for companies that have an advisor. */
+/**
+ * The views over the company: the twin, its business figures (for companies that have an advisor)
+ * and its own assistants (when the server keeps them).
+ */
 let advisors: Promise<Record<string, string>> | null = null;
+const assistants: Record<string, Promise<boolean>> = {};
 function BusinessEntry() {
   const company = runtime().bundle.company.id;
-  const [has, setHas] = useState(false);
-  const open = useBiz((s) => s.open);
+  const [has, setHas] = useState({ biz: false, agents: false });
+  const biz = useBiz((s) => s.open);
+  const agents = useAgents((s) => s.open);
   useEffect(() => {
     advisors ??= fetch('/api/advisors').then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
-    advisors.then((m) => {
-      setHas(!!m?.[company]);
+    assistants[company] ??= fetch(`/api/agents/${encodeURIComponent(company)}`).then((r) => r.ok && (r.headers.get('Content-Type') ?? '').includes('json')).catch(() => false);
+    Promise.all([advisors, assistants[company]]).then(([m, a]) => {
+      setHas({ biz: !!m?.[company], agents: a });
       if (!m?.[company]) useBiz.getState().setOpen(false);
+      if (!a) useAgents.getState().setOpen(false);
     });
   }, [company]);
-  if (!has) return null;
+  if (!has.biz && !has.agents) return null;
+  const views = ([
+    ['twin', <BoxIcon key="t" className="size-4" />, '孪生'],
+    ...(has.biz ? [['biz', <BarChart3Icon key="b" className="size-4" />, '经营'] as const] : []),
+    ...(has.agents ? [['agents', <BotIcon key="a" className="size-4" />, '助手'] as const] : []),
+  ] as const);
   return (
     <ToggleGroup
       type="single"
-      value={open ? 'biz' : 'twin'}
-      onValueChange={(v) => v && useBiz.getState().setOpen(v === 'biz')}
+      value={biz ? 'biz' : agents ? 'agents' : 'twin'}
+      onValueChange={(v) => {
+        if (!v) return;
+        useBiz.getState().setOpen(v === 'biz');
+        useAgents.getState().setOpen(v === 'agents');
+      }}
       className="rounded-xl bg-muted p-[3px]"
       spacing={0}
       aria-label="视图"
     >
-      {([['twin', <BoxIcon key="t" className="size-4" />, '孪生'], ['biz', <BarChart3Icon key="b" className="size-4" />, '经营']] as const).map(([v, icon, label]) => (
+      {views.map(([v, icon, label]) => (
         <ToggleGroupItem
           key={v}
           value={v}
