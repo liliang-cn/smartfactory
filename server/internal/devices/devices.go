@@ -53,6 +53,9 @@ type Plant struct {
 	Port int    `json:"port"`
 	// asset/field pairs this emulator leaves out because real sensors provide them, e.g. HP-101/temp
 	Skip []string `json:"skip"`
+	// ConfigFrom is the server of this plant's company, when it is not the one in the config
+	// (each customer has its own instance)
+	ConfigFrom string `json:"configFrom,omitempty"`
 }
 
 func Load(path string) (Config, error) {
@@ -78,9 +81,7 @@ func Run(ctx context.Context, cfg Config, eng *engine.Engine, log *slog.Logger) 
 	go eng.Run(ctx)
 	eng.PlayEquipment() // goes through the loop, so after it has started
 
-	if cfg.ConfigFrom != "" {
-		fetchRuntime(cfg, eng, log)
-	}
+	fetchRuntime(cfg, eng, log)
 
 	var eps []struct {
 		p  Plant
@@ -147,10 +148,14 @@ func fetchRuntime(cfg Config, eng *engine.Engine, log *slog.Logger) {
 		have[c] = true
 	}
 	for _, p := range cfg.Plants {
-		if have[p.Company] {
+		if have[p.Company] || (cfg.ConfigFrom == "" && p.ConfigFrom == "") {
 			continue
 		}
-		resp, err := http.Get(strings.TrimRight(cfg.ConfigFrom, "/") + "/api/config/company/" + p.Company)
+		from := cfg.ConfigFrom
+		if p.ConfigFrom != "" {
+			from = p.ConfigFrom
+		}
+		resp, err := http.Get(strings.TrimRight(from, "/") + "/api/config/company/" + p.Company)
 		if err != nil {
 			log.Error("fetch company", "company", p.Company, "err", err)
 			continue

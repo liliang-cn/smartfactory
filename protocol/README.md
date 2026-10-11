@@ -277,6 +277,28 @@
 
 **操作只有一份**：后台页面、命令行（`smartfactory customers|industries|tokens|kb|activity|agent`）和工作台助手调用的是服务器上同一组操作（`server/internal/ops`），权限检查和审计记录完全相同。
 
+### 部署方式和模板
+
+SmartFactory 自己部署：**一个客户一个实例**，客户的数据只在它自己的实例里。配置决定一个服务器跑什么：
+
+- 默认（有配置文件、没写 `companies`/`demo`）：**单公司实例**。第一次启动是空的，在 `data/initial-admin-token`（只有本用户可读）写一个管理员令牌；用它登录 `/admin`，从模板起步、或者描述给 AI、或者贴配置，建好这家公司的工厂，之后就只跑它。`GET /api/site` 说它跑的是哪家（`Site {companies}`），页面不带 `?company` 时打开的就是它。
+- `"demo": true`：每个内置模板各跑成一家公司（开发和公开演示；不带配置文件启动也是这样）。
+- `"companies": [...]`：只跑这几家；`[]` 一家都不跑——平台服务器，`"instances"` 列出各客户实例，`/?company=X` 跳到 X 的实例，`/admin` 列出它们是否在线。
+- `smartfactory instance init -from DIR -company ID -dir DIR -http ADDR -mqtt ADDR` 把一家公司从一个跑多家的服务器里拆成它自己的实例：只带它的设备接入、历史库、令牌和数据（仿真状态、助手、资料、笔记、工单、知识库、它那部分操作记录），数据库用 `VACUUM INTO` 拷，源服务器不用停。
+
+**模板**是建工厂的起点：公司配置（id 是模板自己的）加上它用到的、不是内置的行业包；只有结构，不带任何公司的数据。来源三种：内置、本实例存的、模板市场（`templateHub`，默认 `https://factory.superleo.cn`，`"off"` 关掉）。谁都能在模板市场发布（要那里的账号，实例配置 `hubToken`），只有作者能替换自己的模板。
+
+| 方法 路径 | 请求 | 响应 | 说明 |
+|---|---|---|---|
+| `GET /api/admin/templates` | — | `Templates` | 内置、本实例、模板市场的，各带 `source` |
+| `GET /api/admin/templates/{source}/{id}` | — | `Template` | 一个模板的全部 |
+| `POST /api/admin/templates` | `SaveTemplate {id, name, description?, from? \| company?}` | `TemplateSummary` | 把一家公司（`from`）或一份配置存成模板；公司名换成模板名 |
+| `DELETE /api/admin/templates/{id}` | — | `Done` | 删本实例的模板 |
+| `POST /api/admin/templates/{id}/publish` | — | `Done` | 发布到模板市场 |
+| `GET /api/hub/templates` | — | `Templates` | 模板市场（`"hub": true` 的服务器）：谁都能看 |
+| `GET /api/hub/templates/{id}` | — | `Template` | |
+| `POST /api/hub/templates` | `Template` | `Done` | 用那里的令牌发布；同一个标识只有作者能替换（409） |
+
 ### 知识库 `/api/knowledge/{company}`
 
 每家公司一个知识库（CortexDB，不用向量）：工艺图（工厂 → 产线 → 按顺序的工位 → 设备类型，产品、供应商、客户）由引擎排布出的场景生成，场景一改自动重写；资料库的文档按标题切段，每段和它提到的工位、设备、产线、产品、供应商、客户连起来。搜索先按词找，问题里提到工艺图里的东西时再从它出发沿图走（personalized PageRank），所以问“IH-101 的始锻温度”能找到只写了“中频感应加热炉”的工艺卡。该公司成员以上可读，管理员可重建。

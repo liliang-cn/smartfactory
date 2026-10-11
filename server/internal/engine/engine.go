@@ -51,6 +51,10 @@ type Engine struct {
 	offline bool
 	// OnChange hears of every company created, replaced, rebuilt or deleted at run time.
 	OnChange func(company string, deleted bool)
+	// only, when set, is the companies this engine runs (a customer's own instance)
+	only []string
+	// single: a self-hosted instance, empty until its one company is created
+	single bool
 
 	// values from equipment waiting for the loop, which applies all of them at once
 	inMu    sync.Mutex
@@ -118,7 +122,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkCompany", "companyConfig", "processModel", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -649,6 +653,9 @@ func (e *Engine) CreateCompany(raw []byte) ConfigResult {
 	if r, bad := badID(configID(raw)); bad {
 		return r
 	}
+	if !e.allowed(configID(raw)) {
+		return ConfigResult{Errors: []string{e.refusal()}, Where: "id"}
+	}
 	r := e.verdict(e.str("addCompany", string(raw)))
 	if r.OK {
 		id := configID(raw)
@@ -670,11 +677,23 @@ func (e *Engine) CheckCompany(raw []byte) ConfigResult {
 	if r, bad := badID(configID(raw)); bad {
 		return r
 	}
+	if !e.allowed(configID(raw)) {
+		return ConfigResult{Errors: []string{e.refusal()}, Where: "id"}
+	}
 	return e.verdict(e.str("checkCompany", string(raw)))
 }
 
 // CompanyConfig is a running company's config (JSON), or "null".
 func (e *Engine) CompanyConfig(id string) string { return e.str("companyConfig", id) }
+
+// BuiltinTemplates lists the built-in templates (JSON): each built-in company and what it lays out to.
+func (e *Engine) BuiltinTemplates() string { return e.str("builtinTemplates") }
+
+// BuiltinTemplate is a built-in company's config (JSON), or "null".
+func (e *Engine) BuiltinTemplate(id string) string { return e.str("builtinTemplate", id) }
+
+// CheckTemplate validates a template ({company, industries}) and lays it out, installing nothing.
+func (e *Engine) CheckTemplate(raw []byte) ConfigResult { return e.verdict(e.str("checkTemplate", string(raw))) }
 
 // ProcessModel is a company's plants, lines, products and stations as laid out (JSON), or "null".
 func (e *Engine) ProcessModel(id string) string { return e.str("processModel", id) }
@@ -707,6 +726,54 @@ func (e *Engine) DeleteCompany(id string) ConfigResult {
 }
 
 // LoadConfigs brings back what was created at run time. Call before Restore and Run.
+// Only makes the engine run just these companies: one customer's own instance. Call before
+// LoadConfigs and Run. Companies outside the list are not loaded and cannot be created.
+func (e *Engine) Only(ids []string) error {
+	e.only = append([]string(nil), ids...)
+	raw, _ := json.Marshal(e.only)
+	v, err := e.call("keep", string(raw))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(v.String()), &e.companies)
+}
+
+// Single makes the engine a self-hosted instance: the built-in companies are templates, not run,
+// and the one company created (from a template, a description or JSON) is all it runs.
+func (e *Engine) Single() error {
+	if err := e.Only([]string{}); err != nil {
+		return err
+	}
+	e.only, e.single = nil, true
+	return nil
+}
+
+// Runs is the companies an instance is limited to, nil for an engine that runs any.
+func (e *Engine) Runs() []string {
+	if e.single {
+		return e.CompanyIDs()
+	}
+	return e.only
+}
+
+// IsSingle reports whether this is a self-hosted instance of one company.
+func (e *Engine) IsSingle() bool { return e.single }
+
+func (e *Engine) allowed(id string) bool {
+	if e.single {
+		ids := e.CompanyIDs()
+		return len(ids) == 0 || slices.Contains(ids, id)
+	}
+	return e.only == nil || slices.Contains(e.only, id)
+}
+
+func (e *Engine) refusal() string {
+	if e.single {
+		return fmt.Sprintf("这个实例已经是 %s 的工厂；别的公司要部署自己的实例", strings.Join(e.CompanyIDs(), "、"))
+	}
+	return fmt.Sprintf("这个实例只运行 %s；新客户要另开一个实例", strings.Join(e.only, "、"))
+}
+
 func (e *Engine) LoadConfigs() {
 	if e.Dir == "" {
 		return
@@ -721,6 +788,9 @@ func (e *Engine) LoadConfigs() {
 			fn := "addIndustry"
 			if kind == "companies" {
 				fn = "addCompany"
+				if !e.allowed(configID(raw)) {
+					continue
+				}
 			}
 			v, err := e.call(fn, string(raw))
 			if err != nil {

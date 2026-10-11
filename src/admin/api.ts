@@ -22,6 +22,9 @@ export type Passage = z.infer<typeof P.Passage>;
 export type EntityAnswer = z.infer<typeof P.EntityAnswer>;
 export type KnowledgeGraph = z.infer<typeof P.KnowledgeGraph>;
 export type EntityKind = z.infer<typeof P.EntityKind>;
+export type TemplateSummary = z.infer<typeof P.TemplateSummary>;
+export type Template = z.infer<typeof P.Template>;
+export type SaveTemplate = z.infer<typeof P.SaveTemplate>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -92,6 +95,12 @@ export const agent = (conversation: string | null, text: string, signal: AbortSi
 
 /** Carry out an action (one the console agent proposed), as the signed-in person. */
 export const doAction = (a: ConsoleAction) => call<unknown>('POST', '/api/admin/actions', a);
+
+export const templates = () => call<TemplateSummary[]>('GET', '/api/admin/templates');
+export const template = (source: TemplateSummary['source'], id: string) => call<Template>('GET', `/api/admin/templates/${source}/${encodeURIComponent(id)}`);
+export const saveTemplate = (t: SaveTemplate) => call<TemplateSummary>('POST', '/api/admin/templates', t);
+export const deleteTemplate = (id: string) => call<{ ok: true }>('DELETE', `/api/admin/templates/${encodeURIComponent(id)}`);
+export const publishTemplate = (id: string) => call<{ ok: true }>('POST', `/api/admin/templates/${encodeURIComponent(id)}/publish`);
 
 const kbPath = (c: string) => `/api/knowledge/${encodeURIComponent(c)}`;
 export const knowledge = (c: string) => call<KnowledgeOverview>('GET', kbPath(c));

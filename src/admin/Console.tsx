@@ -1,7 +1,7 @@
 // The console (/admin): where administrators build what the twin shows — customers with their
 // plants and lines, the industry packs they are built from, who may do what, and what was done.
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
-import { Building2Icon, ExternalLinkIcon, KeyRoundIcon, LayersIcon, LogOutIcon, MenuIcon, ScrollTextIcon, SparklesIcon, type LucideIcon } from 'lucide-react';
+import { Building2Icon, ExternalLinkIcon, KeyRoundIcon, LayersIcon, LogOutIcon, MenuIcon, ScrollTextIcon, SparklesIcon, LayoutTemplateIcon, type LucideIcon } from 'lucide-react';
 import { Kbd } from '@/components/ui/kbd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ const Customers = lazy(() => import('./Customers'));
 const Customer = lazy(() => import('./Customer'));
 const Builder = lazy(() => import('./Builder'));
 const Industries = lazy(() => import('./Industries'));
+const Templates = lazy(() => import('./Templates'));
 const Accounts = lazy(() => import('./Accounts'));
 const Activity = lazy(() => import('./Activity'));
 
@@ -27,6 +28,7 @@ export const useConsole = () => useContext(ConsoleCtx)!;
 
 const NAV: { path: string; label: string; icon: LucideIcon; also?: string[] }[] = [
   { path: '/admin', label: '客户', icon: Building2Icon, also: ['/admin/customers', '/admin/new'] },
+  { path: '/admin/templates', label: '模板', icon: LayoutTemplateIcon },
   { path: '/admin/industries', label: '行业包', icon: LayersIcon },
   { path: '/admin/accounts', label: '账号', icon: KeyRoundIcon },
   { path: '/admin/activity', label: '操作记录', icon: ScrollTextIcon },
@@ -71,6 +73,7 @@ function SignIn({ problem, onDone }: { problem?: string; onDone(): void }) {
 }
 
 function Nav({ path, onPick }: { path: string; onPick?: () => void }) {
+  const { ov } = useConsole();
   const here = (n: (typeof NAV)[number]) => {
     const p = path.split('?')[0].replace(/\/+$/, '') || '/admin';
     return p === n.path || (n.also ?? []).some((a) => p.startsWith(a)) || (n.path !== '/admin' && p.startsWith(n.path));
@@ -82,7 +85,7 @@ function Nav({ path, onPick }: { path: string; onPick?: () => void }) {
           onClick={(e) => { e.preventDefault(); go(n.path); onPick?.(); }}
           className={cn('flex h-10 items-center gap-2.5 rounded-xl px-3 text-[14px] font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground',
             here(n) && 'bg-brand-soft text-primary hover:bg-brand-soft hover:text-primary')}>
-          <n.icon className="size-[18px]" />{n.label}
+          <n.icon className="size-[18px]" />{n.path === '/admin' && ov.single ? '工厂' : n.label}
         </a>
       ))}
     </nav>
@@ -111,6 +114,7 @@ function Page({ path }: { path: string }) {
   if (match(path, '/admin/new')) return <Builder />;
   if ((m = match(path, '/admin/industries/:id'))) return <Industries open={m.id} />;
   if (match(path, '/admin/industries')) return <Industries />;
+  if (match(path, '/admin/templates')) return <Templates />;
   if (match(path, '/admin/accounts')) return <Accounts />;
   if (match(path, '/admin/activity')) return <Activity />;
   return <Customers />;

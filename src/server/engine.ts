@@ -8,6 +8,7 @@ import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, 
 import { History } from '@/sim/history';
 import { PlantSim, type SavedPlant } from '@/sim/plant';
 import type { Command } from '@/sim/types';
+import type { PlantLayout } from '@/core/layout';
 
 declare const host: { log(msg: string): void };
 
@@ -45,7 +46,59 @@ function init(): string {
   for (const bundle of loadAll(companyRaw, industryRaw, (m) => host.log(m))) {
     register(bundle);
     builtinCompanies.add(bundle.company.id);
+    builtinBundles.set(bundle.company.id, bundle);
   }
+  return JSON.stringify([...companies.keys()]);
+}
+
+// ---------- templates ----------
+//
+// A template is a factory to start from: a company config and the industry packs it uses that are
+// not built in. The built-in companies are the built-in templates (an instance that runs none of
+// them still offers them).
+
+const builtinBundles = new Map<string, CompanyBundle>();
+
+const summarize = (plants: PlantLayout[]) => ({
+  plants: plants.map((p) => ({ id: p.id, name: p.name, site: p.site, lines: p.lines.map((l) => l.name), machines: p.lines.reduce((n, l) => n + l.stations.length, 0) })),
+});
+
+/** The built-in templates: each built-in company's config, its industry and what it lays out to. */
+function builtinTemplates(): string {
+  return JSON.stringify([...builtinBundles.values()].map((b) => ({
+    id: b.company.id, name: b.company.name, industry: b.company.industry,
+    industryName: industries.get(b.company.industry)?.name ?? b.company.industry, ...summarize(b.plants),
+  })));
+}
+
+function builtinTemplate(id: string): string {
+  const b = builtinBundles.get(id);
+  return b ? JSON.stringify(b.company) : 'null';
+}
+
+/**
+ * Checks a template without installing anything: its industry packs validate, and its company
+ * validates and lays out with them (and the packs already here).
+ */
+function checkTemplate(json: string): string {
+  return result(() => {
+    const t = JSON.parse(json) as { company?: unknown; industries?: Record<string, unknown> };
+    const packs = new Map(industries);
+    for (const [id, raw] of Object.entries(t.industries ?? {})) {
+      const ind = validateIndustry(raw, `行业包 ${id}`);
+      if (builtinIndustries.has(ind.id)) continue;
+      packs.set(ind.id, ind);
+    }
+    const cfg = validateCompany(t.company, '模板的公司配置');
+    const plants = layoutCompany(cfg, packs, '模板的公司配置');
+    return { id: cfg.id, name: cfg.name, industry: cfg.industry, industryName: packs.get(cfg.industry)?.name ?? cfg.industry, ...summarize(plants) };
+  });
+}
+
+/** Runs only the listed companies (a customer's own instance); the rest stop. */
+function keep(json: string): string {
+  const ids = new Set(JSON.parse(json) as string[]);
+  for (const id of [...companies.keys()]) if (!ids.has(id)) companies.delete(id);
   return JSON.stringify([...companies.keys()]);
 }
 
@@ -546,6 +599,6 @@ function list(): string {
 
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
-  addIndustry, addCompany, checkCompany, companyConfig, processModel, removeCompany, industryList, industry, schema,
+  addIndustry, addCompany, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock,
 };

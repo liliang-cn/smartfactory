@@ -43,6 +43,7 @@ import (
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
+	"smartfactory/internal/templates"
 	sfweb "smartfactory/internal/web"
 	"smartfactory/web"
 )
@@ -66,7 +67,7 @@ func main() {
 		}
 	}
 	cmd := "serve"
-	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "token" || args[0] == "version") {
+	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "token" || args[0] == "instance" || args[0] == "version") {
 		cmd, args = args[0], args[1:]
 	}
 	var err error
@@ -81,6 +82,8 @@ func main() {
 		err = runHistory(ctx, args, log)
 	case "token":
 		err = runToken(args)
+	case "instance":
+		err = runInstance(args)
 	default:
 		err = serve(ctx, args, log)
 	}
@@ -110,6 +113,17 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		return err
 	}
 	eng.Dir = cfg.Data
+	switch {
+	case cfg.Companies != nil:
+		err = eng.Only(cfg.Companies)
+	case cfg.Demo:
+		// every built-in template runs
+	default:
+		err = eng.Single()
+	}
+	if err != nil {
+		return err
+	}
 	eng.LoadConfigs()
 	eng.Restore()
 	go eng.Run(ctx)
@@ -197,6 +211,16 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		if err := keys.Attach(accounts); err != nil {
 			return fmt.Errorf("accounts: %w", err)
 		}
+		// a new installation: the first administrator's token, in a file only this user can read
+		if token, err := keys.Bootstrap(); err != nil {
+			return fmt.Errorf("first token: %w", err)
+		} else if token != "" {
+			p := filepath.Join(cfg.Data, "initial-admin-token")
+			if err := os.WriteFile(p, []byte(token+"\n"), 0o600); err != nil {
+				return err
+			}
+			log.Warn("new installation: the administrator's token is in "+p+"; sign in at /admin with it, then delete the file", "file", p)
+		}
 	}
 	if assistants != nil {
 		assistants.Audit = trail
@@ -235,9 +259,26 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			}
 		}()
 	}
+	// templates: the ones saved here, the public hub, and the hub's own when this server is it
+	var saved, hubStore *templates.Store
+	var market *templates.Hub
+	if cfg.Data != "" {
+		if saved, err = templates.Open(filepath.Join(cfg.Data, "templates")); err != nil {
+			return err
+		}
+		if cfg.Hub {
+			if hubStore, err = templates.Open(filepath.Join(cfg.Data, "hub")); err != nil {
+				return err
+			}
+		}
+	}
+	if cfg.TemplateHub != "" {
+		market = &templates.Hub{URL: cfg.TemplateHub, Token: cfg.HubToken}
+	}
 	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Instances: cfg.Instances,
+		Saved: saved, Market: market, HubStore: hubStore, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

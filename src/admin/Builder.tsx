@@ -13,13 +13,13 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
-import { ConfigError, industriesOf, layoutCompany, validateCompany } from '@/config/loader';
+import { builtinCompanies, ConfigError, industriesOf, industryConfig, layoutCompany, validateCompany, validateIndustry } from '@/config/loader';
 import type { Company as CompanySchema, IndustryCfg, LineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import * as api from './api';
 import { Blueprint, BlueprintLegend } from './Blueprint';
 import { link, PageHead, useConsole } from './Console';
-import { forget, useCompanies, type Loaded } from './layouts';
+import { forget, loadCompany, useCompanies, type Loaded } from './layouts';
 import { query, usePath } from './router';
 
 type Draft = z.input<typeof CompanySchema>;
@@ -233,7 +233,7 @@ function Architect({ draft, onDraft, edit }: { draft: Draft | null; onDraft(d: D
       <div className="grid gap-3 p-5 max-sm:p-4">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="grid size-8 place-items-center rounded-[10px] bg-foreground text-background"><SparklesIcon className="size-4" /></span>
-          <h2 className="text-[15px] font-extrabold">{edit ? '说要怎么改' : '描述客户的工厂'}</h2>
+          <h2 className="text-[15px] font-extrabold">{edit ? '说要怎么改' : '描述工厂'}</h2>
           <span className="text-[12.5px] text-muted-foreground max-sm:basis-full">AI 按行业包写好放进下面的表单，你确认后再建</span>
         </div>
         <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3} disabled={busy}
@@ -320,13 +320,22 @@ function Done({ result, edit }: { result: api.CompanyCreated; edit: boolean }) {
   );
 }
 
+const SOURCE_LABEL: Record<api.TemplateSummary['source'], string> = { builtin: '内置模板', local: '这里存的模板', hub: '模板市场' };
+
 export default function Builder({ edit }: { edit?: string }) {
   const { ov, reload } = useConsole();
   const path = usePath();
+  // what lines can be made of: the built-in templates, the companies here, and templates picked
   const ids = useMemo(() => ov.companies.map((c) => c.id), [ov.companies]);
-  const templates = useCompanies(ids);
+  const companies = useCompanies(ids);
+  const [builtin, setBuiltin] = useState(new Map<string, Loaded>());
+  const [picked, setPicked] = useState(new Map<string, Loaded>());
+  const [list, setList] = useState<api.TemplateSummary[]>([]);
+  // industry packs a template brings that this instance does not have yet: installed when building
+  const [bundled, setBundled] = useState(new Map<string, unknown>());
   const [extra, setExtra] = useState(new Map<string, IndustryCfg>());
-  const [from, setFrom] = useState<string>(edit ?? query(path).get('from') ?? '');
+  const q = query(path);
+  const [from, setFrom] = useState<string>(edit ? `company:${edit}` : q.get('template') ?? (q.get('from') ? `company:${q.get('from')}` : ''));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [mode, setMode] = useState<'form' | 'json'>('form');
   const [json, setJson] = useState('');
@@ -335,28 +344,71 @@ export default function Builder({ edit }: { edit?: string }) {
   const [server, setServer] = useState<string[]>([]);
   const [done, setDone] = useState<api.CompanyCreated | null>(null);
   const [touched, setTouched] = useState(false);
+  const noun = ov.single ? '公司' : '客户';
 
-  // industry packs no company uses yet start blank; fetch them when picked
-  const unused = ov.industries.filter((i) => !ov.companies.some((c) => c.industry === i.id));
+  useEffect(() => {
+    api.templates().then(setList, () => setList([]));
+    builtinCompanies().then(async (cs) => {
+      const m = new Map<string, Loaded>();
+      for (const c of cs) {
+        try {
+          const inds = new Map<string, IndustryCfg>();
+          for (const id of industriesOf(c)) inds.set(id, await industryConfig(id));
+          m.set(c.id, { company: c, industries: inds, plants: [] });
+        } catch { /* a broken file */ }
+      }
+      setBuiltin(m);
+    });
+  }, []);
+
+  const sources = useMemo(() => new Map<string, Loaded>([...builtin, ...companies, ...picked]), [builtin, companies, picked]);
+  // industry packs no template uses yet start blank; fetch them when picked
+  const unused = ov.industries.filter((i) => ![...sources.values()].some((t) => t.company.industry === i.id));
   const industries = useMemo(() => {
     const m = new Map<string, IndustryCfg>(extra);
-    for (const t of templates.values()) for (const [k, v] of t.industries) m.set(k, v);
+    for (const t of sources.values()) for (const [k, v] of t.industries) m.set(k, v);
     return m;
-  }, [templates, extra]);
-  const kinds = useMemo(() => kindsOf(templates, industries), [templates, industries]);
+  }, [sources, extra]);
+  const kinds = useMemo(() => kindsOf(sources, industries), [sources, industries]);
 
-  // start from the template (or the company being edited) once it has loaded
-  useEffect(() => {
-    if (draft || !templates.size) return;
-    const pick = from && templates.has(from) ? from : !from || from.startsWith('blank:') ? null : [...templates.keys()][0];
-    if (from.startsWith('blank:')) return;
-    const t = templates.get(pick ?? [...templates.keys()][0])!;
-    const copy = structuredClone(t.company) as Draft;
+  // a template as a draft: its structure, the name and id left for the customer's own
+  const load = async (key: string): Promise<Draft | null> => {
+    const [source, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+    let company: unknown;
+    let packs: Record<string, unknown> = {};
+    if (source === 'company') company = (companies.get(id) ?? (await loadCompany(id))).company;
+    else if (source === 'builtin' && builtin.has(id)) company = builtin.get(id)!.company;
+    else {
+      const t = await api.template(source as api.TemplateSummary['source'], id);
+      company = t.company;
+      packs = t.industries ?? {};
+    }
+    const inds = new Map<string, IndustryCfg>();
+    for (const [pid, raw] of Object.entries(packs)) inds.set(pid, validateIndustry(raw, `行业包 ${pid}`));
+    const cfg = validateCompany(company, `模板 ${id}`);
+    for (const pid of industriesOf(cfg)) if (!inds.has(pid) && !industries.has(pid)) inds.set(pid, await industryConfig(pid, api.industry));
+    setPicked((m) => new Map(m).set(key, { company: cfg, industries: inds, plants: [] }));
+    if (Object.keys(packs).length) setBundled((m) => { const n = new Map(m); for (const [pid, raw] of Object.entries(packs)) n.set(pid, raw); return n; });
+    const copy = structuredClone(company) as Draft;
     delete (copy as { $schema?: string }).$schema;
-    if (!edit) { copy.id = ''; copy.name = ''; copy.short = ''; }
-    setFrom(t.company.id);
-    setDraft(copy);
-  }, [templates, from, draft, edit]);
+    return copy;
+  };
+
+  // start from the template (or the company being edited) once there is something to start from
+  useEffect(() => {
+    if (draft) return;
+    const key = from || (builtin.size ? `builtin:${[...builtin.keys()][0]}` : '');
+    if (!key || key.startsWith('blank:') || (key.startsWith('builtin:') && !builtin.size) || (key.startsWith('company:') && edit && !companies.has(edit))) return;
+    let live = true;
+    load(key).then((d) => {
+      if (!live || !d) return;
+      if (!edit) { d.id = ''; d.name = ''; d.short = ''; }
+      setFrom(key);
+      setDraft(d);
+    }, (e: Error) => toast.error(e.message));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builtin, companies, from, draft, edit]);
 
   const startBlank = async (industryId: string) => {
     let ind = industries.get(industryId);
@@ -369,15 +421,16 @@ export default function Builder({ edit }: { edit?: string }) {
     setDraft({ id: '', name: '', short: '', industry: industryId, plants: [{ id: 'p1', name: '一厂', lines: [{ name: `${ind.products[product].name} {n} 线`, product, route, repeat: 1 }] }] });
   };
 
-  const pickTemplate = (v: string) => {
+  const pickTemplate = async (v: string) => {
     setFrom(v);
     setServer([]);
     if (v.startsWith('blank:')) { startBlank(v.slice(6)); return; }
-    const t = templates.get(v);
-    if (!t) return;
-    const copy = structuredClone(t.company) as Draft;
-    delete (copy as { $schema?: string }).$schema;
-    setDraft({ ...copy, id: draft?.id ?? '', name: draft?.name ?? '', short: draft?.short ?? '' });
+    try {
+      const d = await load(v);
+      if (d) setDraft({ ...d, id: draft?.id ?? '', name: draft?.name ?? '', short: draft?.short ?? '' });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   // a pack the draft uses that nothing loaded yet (the architect picked it, or it came as JSON)
@@ -404,10 +457,13 @@ export default function Builder({ edit }: { edit?: string }) {
   if (edit && !ov.companies.some((c) => c.id === edit && !c.builtin)) {
     return <PageHead title="这家公司不能在这里改" sub="随应用内置的公司改不了，可以照它新建一个" back={{ to: `/admin/customers/${encodeURIComponent(edit)}`, label: '客户' }} />;
   }
-  if (!ov.me.everywhere && !edit) {
-    return <PageHead title="新建客户要所有公司的管理员令牌" sub={`你的令牌只管 ${ov.companies.map((c) => c.name).join('、')}`} back={{ to: '/admin', label: '客户' }} />;
+  if (!edit && (ov.single ? ov.companies.length > 0 : !!ov.runs)) {
+    return <PageHead title={ov.single ? '这个实例已经建好了工厂' : '这是一个客户自己的实例'} sub="别的公司部署自己的实例" back={{ to: '/admin', label: noun }} />;
   }
-  if (done) return <><PageHead title={edit ? '改场景' : '新建客户'} back={{ to: '/admin', label: '客户' }} /><Done result={done} edit={!!edit} /></>;
+  if (!ov.me.everywhere && !edit) {
+    return <PageHead title={`新建${noun}要所有公司的管理员令牌`} sub={`你的令牌只管 ${ov.companies.map((c) => c.name).join('、')}`} back={{ to: '/admin', label: '客户' }} />;
+  }
+  if (done) return <><PageHead title={edit ? '改场景' : ov.single ? '建你的工厂' : '新建客户'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
 
   const idTaken = !edit && !!draft?.id && ov.companies.some((c) => c.id === draft.id.trim());
   const idBad = !!draft?.id && !ID.test(draft.id.trim());
@@ -421,6 +477,10 @@ export default function Builder({ edit }: { edit?: string }) {
     setBusy(true);
     setServer([]);
     try {
+      // the packs the template brought that are not here yet
+      const have = new Set(ov.industries.map((i) => i.id));
+      const used = new Set([draft.industry, ...draft.plants.map((p) => p.industry)].filter(Boolean));
+      for (const [pid, raw] of bundled) if (used.has(pid) && !have.has(pid)) await api.createIndustry(raw);
       const res = await api.createCompany(clean(draft));
       forget(res.id);
       await reload();
@@ -450,8 +510,8 @@ export default function Builder({ edit }: { edit?: string }) {
   const templateName = (id: string) => ov.companies.find((c) => c.id === id)?.name ?? id;
   return (
     <>
-      <PageHead title={edit ? `改场景：${templateName(edit)}` : '新建客户'} back={edit ? { to: `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: '客户' }}
-        sub={edit ? '保存后这家公司的仿真按新场景从头开始' : '从一个现有的工厂起步，改成客户的名字、工厂和产线'}>
+      <PageHead title={edit ? `改场景：${templateName(edit)}` : ov.single ? '建你的工厂' : '新建客户'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '模板' : '客户' }}
+        sub={edit ? '保存后这家公司的仿真按新场景从头开始' : `从一个模板起步，改成${ov.single ? '你公司' : '客户'}的名字、工厂和产线`}>
         <ToggleGroup type="single" value={mode} onValueChange={(v) => { if (v === 'json' && mode === 'form') toJson(); if (v === 'form' && mode === 'json') fromJson(); }} className="rounded-xl bg-card p-0.5 shadow-float">
           <ToggleGroupItem value="form" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><ListIcon className="size-4" />表单</ToggleGroupItem>
           <ToggleGroupItem value="json" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><CodeXmlIcon className="size-4" />JSON</ToggleGroupItem>
@@ -477,23 +537,39 @@ export default function Builder({ edit }: { edit?: string }) {
                     if (edit) next.id = edit;
                     setDraft(next);
                     setServer([]);
-                    if (next.industry) setFrom((f) => (templates.has(f) && templates.get(f)!.company.industry === next.industry ? f : ''));
+                    if (next.industry) setFrom((f) => (sources.get(f)?.company.industry === next.industry ? f : ''));
                   }} />
                 )}
                 {!edit && (
                   <section className="rounded-[18px] bg-card p-5 shadow-float max-sm:p-4">
-                    <Field label="或者从一个工厂起步" hint="复制它的行业、工厂和产线，下面再改">
+                    <Field label="或者从一个模板起步" hint="复制它的行业、工厂和产线，下面再改">
                       <Select value={from} onValueChange={pickTemplate}>
-                        <SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="选一个" /></SelectTrigger>
+                        <SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="选一个模板" /></SelectTrigger>
                         <SelectContent>
-                          <SelectGroup>
-                            <SelectLabel>现有客户</SelectLabel>
-                            {ov.companies.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {`${c.name}（${ov.industries.find((i) => i.id === c.industry)?.name ?? c.industry}，${c.plants.length} 个工厂）`}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
+                          {(['builtin', 'local', 'hub'] as const).map((src) => {
+                            const items = list.filter((t) => t.source === src);
+                            if (!items.length) return null;
+                            return (
+                              <SelectGroup key={src}>
+                                <SelectLabel>{SOURCE_LABEL[src]}</SelectLabel>
+                                {items.map((t) => (
+                                  <SelectItem key={`${src}:${t.id}`} value={`${src}:${t.id}`}>
+                                    {`${t.name}（${t.industryName}，${t.plants.length} 个工厂${t.author && src !== 'builtin' ? `，${t.author}` : ''}）`}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            );
+                          })}
+                          {!ov.single && ov.companies.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>现有{noun}</SelectLabel>
+                              {ov.companies.map((c) => (
+                                <SelectItem key={c.id} value={`company:${c.id}`}>
+                                  {`${c.name}（${ov.industries.find((i) => i.id === c.industry)?.name ?? c.industry}，${c.plants.length} 个工厂）`}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          )}
                           {unused.length > 0 && (
                             <SelectGroup>
                               <SelectLabel>空白，只用行业包</SelectLabel>
@@ -506,7 +582,7 @@ export default function Builder({ edit }: { edit?: string }) {
                   </section>
                 )}
                 <section className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.3fr)] gap-4 rounded-[18px] bg-card p-5 shadow-float max-md:grid-cols-2 max-sm:p-4">
-                  <Field label="客户名称" error={touched && !draft.name.trim() ? '填上客户的名称' : undefined} className="max-md:col-span-2">
+                  <Field label={`${noun}名称`} error={touched && !draft.name.trim() ? `填上${noun}的名称` : undefined} className="max-md:col-span-2">
                     <Input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="星河锻造集团" className="h-10 rounded-xl" autoFocus={!edit} />
                   </Field>
                   <Field label="简称" hint="顶栏徽标，最多 4 个字" error={shortLong ? '最多 4 个字' : touched && !draft.short.trim() ? '填一个简称' : undefined}>

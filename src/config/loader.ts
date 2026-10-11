@@ -78,7 +78,20 @@ function bundle(picked: CompanyEntry, all: CompanyEntry[], industries: Map<strin
   return { company, plants, directory: all.map((c) => ({ id: c.id, name: c.cfg ? c.name : `${c.name}（配置有误）`, short: c.short })) };
 }
 
+/** The companies the server this page came from runs; null when there is no such server (vite alone). */
+async function site(): Promise<string[] | null> {
+  try {
+    const r = await fetch('/api/site');
+    return r.ok ? ((await r.json()) as { companies: string[] }).companies : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadCompany(wanted: string | null): Promise<CompanyBundle> {
+  // a customer's own instance runs its company only: that is the page, whatever the link says
+  const runs = await site();
+  if (runs?.length && (!wanted || !runs.includes(wanted))) wanted = runs[0];
   // A broken file only blocks its own company; the others stay loadable from the switcher.
   const all = parseCompanies(await Promise.all(Object.entries(companyFiles).map(async ([path, load]) => [path, (await load()).default] as [string, unknown])));
   if (!all.length) throw new ConfigError('src/config/companies', ['没有任何公司配置，至少放一个 JSON 文件']);

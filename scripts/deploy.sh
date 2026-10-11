@@ -15,7 +15,8 @@ target=${1:-server}
 cd "$(dirname "$0")/.."
 
 case $target in
-  server) host=ops@192.168.123.65 unit=smartfactory ;;
+  # the platform (factory.superleo.cn) and every customer's own instance (smartfactory@<id>)
+  server) host=ops@192.168.123.65 unit='smartfactory $(systemctl list-units --plain --no-legend "smartfactory@*" | cut -d" " -f1)' ;;
   edge) host=ops@192.168.123.64 unit="smartfactory-edge smartfactory-devices" ;;
   *) echo "usage: $0 [server|edge]" >&2; exit 2 ;;
 esac
@@ -28,7 +29,8 @@ ssh "$host" "set -e
   echo '$sum  /tmp/smartfactory.new' | sha256sum -c --quiet
   [ -f /opt/smartfactory/bin/smartfactory ] && sudo cp /opt/smartfactory/bin/smartfactory /opt/smartfactory/bin/smartfactory.bak
   sudo install -m 755 /tmp/smartfactory.new /opt/smartfactory/bin/smartfactory && rm /tmp/smartfactory.new
-  sudo systemctl restart $unit && sleep 2 && systemctl is-active $unit | tr '\\n' ' '"
+  units=\"$unit\"
+  sudo systemctl restart \$units && sleep 2 && systemctl is-active \$units | tr '\\n' ' '"
 
 if [ "$target" = server ]; then
   curl -fsS http://192.168.123.65:44719/api/health | head -c 400; echo

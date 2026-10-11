@@ -245,7 +245,7 @@ function Remove({ c, open, onOpenChange }: { c: api.Company; open: boolean; onOp
   );
 }
 
-export default function Customer({ id }: { id: string }) {
+export default function Customer({ id, home = false }: { id: string; home?: boolean }) {
   const { ov } = useConsole();
   const path = usePath();
   const c = ov.companies.find((x) => x.id === id);
@@ -260,17 +260,17 @@ export default function Customer({ id }: { id: string }) {
   return (
     <>
       <PageHead
-        back={{ to: '/admin', label: '客户' }}
+        back={home ? undefined : { to: '/admin', label: '客户' }}
         title={<span className="flex items-center gap-3"><Badge text={c.short} className="h-10 min-w-11 text-[14px]" />{c.name}</span>}
         sub={`${industry?.name ?? c.industry}，${t.plants} 个工厂，${t.lines} 条产线，${t.machines} 台设备${c.builtin ? '，随应用内置' : ''}`}
       >
         <Button asChild variant="outline" className="h-10 rounded-xl font-bold"><a href={`/?company=${encodeURIComponent(c.id)}`}>打开孪生<ExternalLinkIcon /></a></Button>
         {!c.builtin && <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => go(`/admin/customers/${encodeURIComponent(c.id)}/edit`)}><PencilIcon />改场景</Button>}
-        {ov.me.everywhere && <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => go(`/admin/new?from=${encodeURIComponent(c.id)}`)}><CopyIcon />照它新建</Button>}
+        {ov.me.everywhere && !ov.runs && <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => go(`/admin/new?from=${encodeURIComponent(c.id)}`)}><CopyIcon />照它新建</Button>}
         {!c.builtin && <Button variant="ghost" size="icon" className="size-10 rounded-xl text-muted-foreground hover:bg-danger-soft hover:text-destructive" aria-label="删除" title="删除" onClick={() => setRemoving(true)}><Trash2Icon /></Button>}
       </PageHead>
       <Remove c={c} open={removing} onOpenChange={setRemoving} />
-      <Tabs value={tab} onValueChange={(v) => go(`/admin/customers/${encodeURIComponent(c.id)}${v === 'scene' ? '' : `?tab=${v}`}`, true)}>
+      <Tabs value={tab} onValueChange={(v) => go(`${home ? '/admin' : `/admin/customers/${encodeURIComponent(c.id)}`}${v === 'scene' ? '' : `?tab=${v}`}`, true)}>
         <TabsList variant="line" className="mb-5 h-10 w-full justify-start gap-1 overflow-x-auto border-b px-0 [scrollbar-width:none] max-sm:mb-3">
           {TABS.map((x) => (
             <TabsTrigger key={x.id} value={x.id} className="h-10 flex-none gap-1.5 px-3 text-[13.5px] font-bold data-active:text-primary">

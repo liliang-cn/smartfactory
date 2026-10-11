@@ -1160,6 +1160,21 @@
       ],
       "additionalProperties": false
     },
+    "Site": {
+      "type": "object",
+      "properties": {
+        "companies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "companies"
+      ],
+      "additionalProperties": false
+    },
     "Directory": {
       "type": "array",
       "items": {
@@ -3095,6 +3110,51 @@
         },
         "version": {
           "type": "string"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "up": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "url",
+              "up"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "single": {
+          "type": "boolean"
+        },
+        "hub": {
+          "type": "string"
+        },
+        "hubPublish": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -3103,7 +3163,10 @@
         "industries",
         "issue",
         "assistants",
-        "version"
+        "version",
+        "instances",
+        "single",
+        "hubPublish"
       ],
       "additionalProperties": false,
       "description": "GET /api/admin — administrators only (401 without a token, 403 below admin)"
@@ -3954,6 +4017,178 @@
         }
       ],
       "description": "One server-sent event of the console agent: `data: <ConsoleEvent JSON>`"
+    },
+    "Templates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TemplateSummary"
+      },
+      "description": "GET /api/admin/templates, and the hub's GET /api/hub/templates (public)"
+    },
+    "TemplateSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "builtin",
+            "local",
+            "hub"
+          ]
+        },
+        "industry": {
+          "type": "string"
+        },
+        "industryName": {
+          "type": "string"
+        },
+        "plants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "site": {
+                "type": "string",
+                "enum": [
+                  "hall",
+                  "outdoor"
+                ]
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "machines": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "site",
+              "lines",
+              "machines"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "created": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "source",
+        "industry",
+        "industryName",
+        "plants"
+      ],
+      "additionalProperties": false
+    },
+    "Template": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string"
+        },
+        "company": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "industries": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "created",
+        "company"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/admin/templates/{source}/{id}; POST /api/hub/templates takes one"
+    },
+    "SaveTemplate": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "company": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "industries": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
     },
     "Source": {
       "type": "object",

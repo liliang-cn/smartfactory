@@ -173,6 +173,16 @@ func (k *Keyring) CanIssue() bool {
 	return k.store != nil
 }
 
+// Bootstrap gives a new installation its first administrator: when no token is accepted at all,
+// it issues one for every company and returns it (shown once, by the caller); otherwise "".
+func (k *Keyring) Bootstrap() (string, error) {
+	if !k.Empty() {
+		return "", nil
+	}
+	token, _, err := k.Issue(Who{Name: "安装", Role: Admin}, "管理员", Admin, nil, "")
+	return token, err
+}
+
 var ErrNoStore = errors.New("this server keeps no data: tokens can only be added to the config file")
 
 // Issue makes a token for name, kept (as a hash) in the store and accepted at once. companies

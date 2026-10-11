@@ -29,6 +29,7 @@ import (
 	"smartfactory/internal/ops"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
+	"smartfactory/internal/templates"
 )
 
 // Protocol is the version of the browser protocol this server speaks (protocol/README.md); it
@@ -58,6 +59,12 @@ type Server struct {
 	Knowledge *knowledge.Base
 	// Ops is what the console does; built from the fields above when nil.
 	Ops *ops.Ops
+	// Instances are the customers' own servers (on the platform server).
+	Instances []config.Instance
+	// Saved, Market and HubStore are the templates: saved here, the hub read, the hub kept here.
+	Saved    *templates.Store
+	Market   *templates.Hub
+	HubStore *templates.Store
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -66,6 +73,10 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
+	// what this server is: the companies it runs, so a page opened without ?company shows its own
+	mux.HandleFunc("GET /api/site", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, map[string]any{"companies": append([]string{}, s.Engine.CompanyIDs()...)})
+	})
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		// each customer's factory is its own: the companies and equipment listed are the caller's
 		who := s.caller(r)
@@ -452,6 +463,28 @@ func (s *Server) sources() []tags.SourceStatus {
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Static)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// a customer with its own instance: its factory page is there
+		if r.URL.Path == "/" {
+			if id := r.URL.Query().Get("company"); id != "" {
+				for _, in := range s.Instances {
+					if in.ID == id {
+						q := r.URL.Query()
+						q.Del("company")
+						to := strings.TrimRight(in.URL, "/") + "/"
+						if len(q) > 0 {
+							to += "?" + q.Encode()
+						}
+						http.Redirect(w, r, to, http.StatusFound)
+						return
+					}
+				}
+			}
+			// a server that runs no factory of its own is the console
+			if len(s.Engine.CompanyIDs()) == 0 {
+				http.Redirect(w, r, "/admin", http.StatusFound)
+				return
+			}
+		}
 		p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if p == "" {
 			p = "index.html"
