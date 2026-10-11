@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -99,21 +100,52 @@ func (e *Error) Error() string {
 
 func (c *Client) request(ctx context.Context, method, p string, body any) (*http.Response, error) {
 	var rd io.Reader
+	ctype := ""
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		rd = bytes.NewReader(b)
+		rd, ctype = bytes.NewReader(b), "application/json"
 	}
+	return c.send(ctx, method, p, rd, ctype)
+}
+
+// Upload posts files as multipart/form-data "file" parts and decodes the answer into out.
+func (c *Client) Upload(ctx context.Context, p string, files []string, out any) error {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		w, err := mw.CreateFormFile("file", filepath.Base(f))
+		if err != nil {
+			return err
+		}
+		w.Write(b)
+	}
+	mw.Close()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	res, err := c.send(ctx, "POST", p, &buf, mw.FormDataContentType())
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return json.NewDecoder(res.Body).Decode(out)
+}
+
+func (c *Client) send(ctx context.Context, method, p string, rd io.Reader, ctype string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.Server+p, rd)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("X-SF-Via", "cli")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if ctype != "" {
+		req.Header.Set("Content-Type", ctype)
 	}
 	res, err := c.http.Do(req)
 	if err != nil {

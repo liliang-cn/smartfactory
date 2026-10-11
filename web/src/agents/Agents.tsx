@@ -445,8 +445,11 @@ function Work({ company, kind, info, docs, reloadDocs }: { company: string; kind
   const upload = async (files: FileList | null) => {
     for (const f of Array.from(files ?? [])) {
       try {
-        await api.uploadDoc(company, f.name.replace(/\.(md|markdown|txt)$/i, ''), await f.text());
-        toast.success(`已加入资料库：${f.name}`);
+        const r = await api.uploadFile(company, f);
+        if (!r.ok) throw new Error(r.error);
+        const d = r.doc!;
+        const what = [d.pages ? `${d.pages} 页` : '', `${d.parts} 段`].filter(Boolean).join('，');
+        toast.success(r.outcome === 'updated' ? `${f.name}：已更新为第 ${d.version} 版，${what}` : `已加入资料库：${f.name}，${what}`, { description: d.problems?.join('；') });
       } catch (e) {
         toast.error(`${f.name}：${(e as Error).message}`);
       }
@@ -461,7 +464,7 @@ function Work({ company, kind, info, docs, reloadDocs }: { company: string; kind
         <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11.5px] font-bold text-muted-foreground tabular-nums">{count}{kind === 'service' ? ' 未关闭' : ''}</span>
         {kind === 'docs' && api.can(info.role, 'admin') && (
           <>
-            <input ref={file} type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
+            <input ref={file} type="file" accept={api.DOC_ACCEPT} multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
             <Button size="sm" variant="ghost" className="ml-auto h-8 gap-1.5 rounded-lg text-primary hover:bg-brand-soft hover:text-primary" onClick={() => file.current?.click()}>
               <UploadIcon className="size-3.5" />上传
             </Button>

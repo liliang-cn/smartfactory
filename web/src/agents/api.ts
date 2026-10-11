@@ -74,6 +74,18 @@ export const deleteConversation = (c: string, id: string, conv: string) => call<
 export const getDocs = (c: string) => call<Doc[]>('GET', `${library(c)}/docs`);
 export const getDoc = (c: string, id: string) => call<DocView>('GET', `${library(c)}/docs/${id}`);
 export const uploadDoc = (c: string, title: string, body: string) => call<Doc>('POST', `${library(c)}/docs`, { title, body });
+export type UploadResult = z.infer<typeof P.UploadResults>[number];
+/** Uploads a file (PDF, Word, Excel, CSV, text) to the library; it is read on the server. */
+export async function uploadFile(c: string, file: File): Promise<UploadResult> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetch(`${library(c)}/files`, { method: 'POST', headers: headers(false), body: form });
+  const body = await res.json().catch(() => null) as UploadResult[] | { error?: string } | null;
+  if (!res.ok) throw new AgentError(res.status, (body as { error?: string } | null)?.error ?? `上传失败（${res.status}）`);
+  return (body as UploadResult[])[0];
+}
+/** The files the library reads. */
+export const DOC_ACCEPT = '.pdf,.docx,.xlsx,.xlsm,.csv,.md,.markdown,.txt';
 export const deleteDoc = (c: string, id: string) => call<{ ok: true }>('DELETE', `${library(c)}/docs/${id}`);
 export const getNotes = (c: string) => call<Note[]>('GET', `${library(c)}/notes`);
 export const deleteNote = (c: string, id: string) => call<{ ok: true }>('DELETE', `${library(c)}/notes/${id}`);

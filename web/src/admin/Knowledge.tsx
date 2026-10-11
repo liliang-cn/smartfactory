@@ -2,7 +2,7 @@
 // to look through, ask, and rebuild.
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowUpIcon, BookOpenTextIcon, ExternalLinkIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon, WorkflowIcon } from 'lucide-react';
+import { ArrowUpIcon, BookOpenTextIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon, WorkflowIcon } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import * as api from './api';
 import { GraphView, KIND } from './GraphView';
+import { Library } from './Library';
 
 const REL: Record<string, [string, string]> = {
   has_plant: ['有工厂', '属于公司'], has_line: ['有产线', '在工厂'], makes: ['生产', '由这条线生产'],
@@ -165,7 +166,6 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
           {st ? <>工艺 <b className="text-foreground tabular-nums">{st.process}</b> 段，文档 <b className="text-foreground tabular-nums">{st.docs}</b> 段（资料库 {st.library} 篇{st.library > st.indexed ? `，${st.library - st.indexed} 篇还没入库` : ''}）</> : ' '}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="rounded-lg font-bold text-muted-foreground"><a href={`/?company=${encodeURIComponent(company)}&view=agents`}>上传资料<ExternalLinkIcon /></a></Button>
           {admin && <Button variant="outline" size="sm" className="rounded-lg font-bold" disabled={rebuilding === 'busy'} onClick={() => setRebuilding('ask')}><RefreshCwIcon className={cn(rebuilding === 'busy' && 'animate-spin')} />重建</Button>}
         </div>
       </section>
@@ -203,6 +203,8 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
           </section>
         </div>
       </div>
+
+      <Library company={company} admin={admin} onChange={load} />
 
       <AlertDialog open={rebuilding === 'ask'} onOpenChange={(o) => !o && setRebuilding(null)}>
         <AlertDialogContent>

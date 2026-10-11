@@ -120,34 +120,6 @@ function AI({ c }: { c: api.Company }) {
   );
 }
 
-function Library({ c }: { c: api.Company }) {
-  const { ov } = useConsole();
-  const [docs, setDocs] = useState<Awaited<ReturnType<typeof api.docs>> | null>(null);
-  const [error, setError] = useState<string>();
-  useEffect(() => { if (ov.assistants) api.docs(c.id).then(setDocs, (e: Error) => setError(e.message)); }, [c.id, ov.assistants]);
-  return (
-    <Panel title="资料库" aside={<Button asChild variant="outline" size="sm" className="rounded-lg font-bold"><a href={`/?company=${encodeURIComponent(c.id)}&view=agents`}>上传资料<ExternalLinkIcon /></a></Button>}>
-      {error && <p className="text-[13px] text-destructive">{error}</p>}
-      {docs && !docs.length && <p className="py-6 text-center text-[13px] text-muted-foreground">还没有资料。上传后文档助手按段落检索它们回答问题。</p>}
-      {docs && docs.length > 0 && (
-        <Table>
-          <TableHeader><TableRow className="text-[12px]"><TableHead>标题</TableHead><TableHead className="text-right">段落</TableHead><TableHead className="text-right max-sm:hidden">大小</TableHead><TableHead className="max-sm:hidden">上传</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {docs.map((d) => (
-              <TableRow key={d.id} className="text-[13px]">
-                <TableCell className="font-bold">{d.title}</TableCell>
-                <TableCell className="text-right tabular-nums">{d.parts}</TableCell>
-                <TableCell className="text-right text-muted-foreground tabular-nums max-sm:hidden">{d.size >= 1024 ? `${(d.size / 1024).toFixed(1)} KB` : `${d.size} B`}</TableCell>
-                <TableCell className="text-muted-foreground max-sm:hidden">{d.by}，{fmtDay(d.created)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </Panel>
-  );
-}
-
 const PROTO: Record<string, string> = { mqtt: 'MQTT', modbus: 'Modbus TCP', opcua: 'OPC UA' };
 
 function Connect({ c }: { c: api.Company }) {
@@ -274,7 +246,6 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="ai"><AI c={c} /></TabsContent>
         <TabsContent value="knowledge" className="grid gap-5">
           <Suspense fallback={null}><KnowledgeBase company={c.id} admin={ov.me.role === 'admin'} /></Suspense>
-          <Library c={c} />
         </TabsContent>
         <TabsContent value="orders"><OrderBoard c={c} /></TabsContent>
         <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><Connect c={c} /></TabsContent>

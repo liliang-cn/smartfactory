@@ -231,11 +231,16 @@
 | `GET /api/library/{company}/docs` | — | `Docs` | 所有人 |
 | `GET /api/library/{company}/docs/{doc}` | — | `DocView {doc, body}` | 所有人 |
 | `POST /api/library/{company}/docs` | `DocUpload {title, body}`，正文是 Markdown 或纯文本 | `Doc` | 管理员 |
-| `DELETE /api/library/{company}/docs/{doc}` | — | `Done` | 管理员 |
+| `POST /api/library/{company}/files` | `multipart/form-data`：一个或多个 `file`；只传一个文件时可以在它前面放 `title` | `UploadResults` | 管理员 |
+| `GET /api/library/{company}/docs/{doc}/versions` | — | `DocVersions`，新的在前 | 所有人 |
+| `GET /api/library/{company}/docs/{doc}/file?version=` | — | 原文件（不带 `version` 是当前版本；手工输入的文档下载为 `.md`） | 成员 |
+| `DELETE /api/library/{company}/docs/{doc}` | — | `Done`，连同所有版本和原文件 | 管理员 |
 | `GET /api/library/{company}/notes` | — | `Notes` | 所有人 |
 | `DELETE /api/library/{company}/notes/{note}` | — | `Done` | 管理员 |
 | `GET /api/library/{company}/tickets` | — | `Tickets` | 所有人 |
 | `PATCH /api/library/{company}/tickets/{ticket}` | `TicketPatch {status}` | `Ticket` | 成员 |
+
+资料可以按文件上传：PDF（按页切成「第 N 页」小节，段落能指明页码）、Word `.docx`（标题按样式或手工排版的大号粗体识别，表格每行写成「表头=值」）、Excel `.xlsx`（每个工作表一节，每行「表头=值」）、CSV、Markdown 和文本（UTF-8、带 BOM 的 UTF-16、GBK / GB18030 自动识别）。每个文件不超过 50 MB，一次请求不超过 200 MB。没有文字层的扫描件照样保存，`problems` 里说明没有文字（暂不识别图片）；旧版 `.doc`、`.xls` 单独拒收，提示另存为新格式。同一家公司里标题或文件名相同的再传一次是这份资料的下一版：知识库换成新版的段落，旧版的原文件留着可以下载。入知识库时，段落按工位编号（`IH-101`、`ih101`、`IH 101` 都算）、设备代号后跟编号或「系列/型」（`HP-1xx`、`HP 系列`）、料号（含变型）、产线名（空格不计）、设备名、产品、供应商和客户连到工艺图；编号只按整词匹配，一个字的名字不连。
 
 不带 `conversation` 的提问开始一段新对话，第一个事件 `conversation` 给出它的 id；之后带上这个 id 继续问，助手记得前面说过的话。`AssistantEvent` 的 `kind`：
 

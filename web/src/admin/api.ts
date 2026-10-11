@@ -160,7 +160,59 @@ export const sendOrders = (c: string, list: OrderInput[]) => call<OrderResults>(
 export const cancelOrder = (c: string, no: string) => call<Order>('DELETE', `${ordersPath(c)}/${encodeURIComponent(no)}`);
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
-export const docs = (c: string) => call<z.infer<typeof P.Docs>>('GET', `/api/library/${encodeURIComponent(c)}/docs`);
+export type Doc = z.infer<typeof P.Doc>;
+export type DocVersion = z.infer<typeof P.DocVersion>;
+export type UploadResult = z.infer<typeof P.UploadResults>[number];
+const libPath = (c: string) => `/api/library/${encodeURIComponent(c)}`;
+export const docs = (c: string) => call<Doc[]>('GET', `${libPath(c)}/docs`);
+export const docVersions = (c: string, id: string) => call<DocVersion[]>('GET', `${libPath(c)}/docs/${encodeURIComponent(id)}/versions`);
+export const deleteDoc = (c: string, id: string) => call<{ ok: true }>('DELETE', `${libPath(c)}/docs/${encodeURIComponent(id)}`);
+
+/** Uploads one file to the library, reporting how much of it has gone (0–1). */
+export function uploadDoc(c: string, file: File, onProgress: (f: number) => void, signal?: AbortSignal): Promise<UploadResult> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', `${libPath(c)}/files`);
+    const t = token();
+    if (t) x.setRequestHeader('Authorization', `Bearer ${t}`);
+    x.setRequestHeader('X-SF-Via', 'page');
+    x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    x.onload = () => {
+      let body: unknown = null;
+      try { body = JSON.parse(x.responseText); } catch { /* not JSON */ }
+      if (x.status >= 300) {
+        reject(new ApiError(x.status, (body as { error?: string } | null)?.error ?? `上传失败（${x.status}）`));
+        return;
+      }
+      resolve((body as UploadResult[])[0]);
+    };
+    x.onerror = () => reject(new ApiError(0, '连不上服务器'));
+    x.onabort = () => reject(new ApiError(0, '已取消'));
+    signal?.addEventListener('abort', () => x.abort());
+    const form = new FormData();
+    form.append('file', file, file.name);
+    x.send(form);
+  });
+}
+
+/** Saves a document's original file (a version of it, or the current one). */
+export async function downloadDoc(c: string, id: string, name: string, version?: number) {
+  const t = token();
+  const res = await fetch(`${libPath(c)}/docs/${encodeURIComponent(id)}/file${version ? `?version=${version}` : ''}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+  if (!res.ok) {
+    const b = await res.json().catch(() => null) as { error?: string } | null;
+    throw new ApiError(res.status, b?.error ?? `下载失败（${res.status}）`);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** The files the library reads, for pickers. */
+export const DOC_ACCEPT = '.pdf,.docx,.xlsx,.xlsm,.csv,.md,.markdown,.txt';
 export const health = () => call<z.infer<typeof P.Health>>('GET', '/api/health');
 
 export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员' };
