@@ -118,7 +118,8 @@ func TestGuard(t *testing.T) {
 		t.Fatal("a machine nothing reports from counts as real")
 	}
 
-	g, err := guard.Open(t.TempDir(), eng, hub, trail, log)
+	guardDir := t.TempDir()
+	g, err := guard.Open(guardDir, eng, hub, trail, log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +300,7 @@ func TestGuard(t *testing.T) {
 	// autonomous: the rules alone
 	s.Level = guard.Autonomous
 	do(admin, "PUT", "/api/guard/jianghe", s)
-	if out := send("HP-101", "speed", f(1.4)); out["status"] != "refused" || !strings.Contains(fmt.Sprint(out["reason"]), "120%") {
+	if out := send("HP-101", "speed", f(1.4)); out["status"] != "refused" || !strings.Contains(fmt.Sprint(out["reason"]), "120%") || out["next"] == "" {
 		t.Errorf("autonomous, against the rules: %v", out)
 	}
 	if out := send("HP-101", "speed", f(1.1)); out["status"] != "sent" {
@@ -310,6 +311,16 @@ func TestGuard(t *testing.T) {
 	bad.Rules = append(bad.Rules, guard.Rule{Cmd: "start", When: "pressure > 3", Say: "x"})
 	if code, b := do(admin, "PUT", "/api/guard/jianghe", bad); code != 422 || !strings.Contains(string(b), "pressure") {
 		t.Errorf("a rule on a field that does not exist: %d %s", code, b)
+	}
+
+	// after a restart, before the press reports again, it is still a machine
+	g2, err := guard.Open(guardDir, eng, tags.NewHub(), trail, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer g2.Close()
+	if !g2.Real("jianghe", "p1", "HP-101") || g2.Real("jianghe", "p1", "IH-101") {
+		t.Error("the guard forgot which machines are real")
 	}
 
 	// the activity log: every command to the press, with its state and the verdict

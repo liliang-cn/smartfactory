@@ -182,6 +182,8 @@ type cmdOut struct {
 	// Request names a command that waits: ask command_request how it went.
 	Request string `json:"request,omitempty"`
 	Expires string `json:"expires,omitempty"`
+	// Next says what to do about a command that waits.
+	Next string `json:"next,omitempty"`
 }
 
 type reqIn struct {
@@ -322,10 +324,10 @@ func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log, cmds
 				case guardpkg.Failed:
 					return nil, cmdOut{}, errors.New(v.Msg)
 				case guardpkg.Refused:
-					return nil, cmdOut{Status: "refused", Reason: "the company's rules refuse it: " + v.Msg}, nil
+					return nil, cmdOut{Status: "refused", Reason: v.Msg, Next: "The company's rules refuse this command on the machine as it is now; nothing was sent. Tell the user why."}, nil
 				case guardpkg.Waiting:
-					return nil, cmdOut{Status: "waiting", Request: v.Request.ID, Expires: v.Request.Expires.Format(time.RFC3339),
-						Reason: v.Request.Reason + ". Nothing was done yet: a person approves or denies it in SmartFactory; ask command_request with this id (wait up to 120 s) to learn the outcome, and tell the user it is waiting."}, nil
+					return nil, cmdOut{Status: "waiting", Request: v.Request.ID, Expires: v.Request.Expires.Format(time.RFC3339), Reason: v.Request.Reason,
+						Next: "Nothing was done yet: an operator approves or denies it in SmartFactory. Tell the user it waits for approval; ask command_request with this id (wait up to 120 s) for the outcome."}, nil
 				}
 				return nil, cmdOut{Status: "sent", Sent: v.Msg}, nil
 			}

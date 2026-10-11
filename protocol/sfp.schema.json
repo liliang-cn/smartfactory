@@ -3597,7 +3597,8 @@
           "enum": [
             "member",
             "operator",
-            "admin"
+            "admin",
+            "erp"
           ]
         },
         "companies": {

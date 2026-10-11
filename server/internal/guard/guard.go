@@ -131,7 +131,9 @@ func Open(dir string, eng *engine.Engine, hub *tags.Hub, trail *audit.Log, log *
 			cmd TEXT NOT NULL, arg REAL, who TEXT NOT NULL, who_key TEXT NOT NULL, via TEXT NOT NULL, by TEXT NOT NULL,
 			reason TEXT NOT NULL, context TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL, status TEXT NOT NULL,
 			decided_by TEXT NOT NULL, decided_at INTEGER NOT NULL, result TEXT NOT NULL);
-		CREATE INDEX IF NOT EXISTS requests_company ON requests (company, status, created)`); err != nil {
+		CREATE INDEX IF NOT EXISTS requests_company ON requests (company, status, created);
+		CREATE TABLE IF NOT EXISTS machines (company TEXT NOT NULL, plant TEXT NOT NULL, asset TEXT NOT NULL, seen INTEGER NOT NULL,
+			PRIMARY KEY (company, plant, asset))`); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -191,9 +193,48 @@ func (g *Guard) SetSettings(company string, s Settings) error {
 	return nil
 }
 
+// Real reports whether a command for the asset reaches a machine: real equipment feeds it or
+// takes its commands now, or did once (a device that has not reported since a restart is still
+// a machine).
+func (g *Guard) Real(company, plant, asset string) bool {
+	if g.Hub != nil && g.Hub.Real(company, plant, asset) {
+		g.remember(company, plant+"/"+asset)
+		return true
+	}
+	var n int
+	g.db.QueryRow(`SELECT count(*) FROM machines WHERE company=? AND plant=? AND asset=?`, company, plant, asset).Scan(&n)
+	return n > 0
+}
+
+// Machines are the company's machines (plant/asset) real equipment feeds now or did once.
+func (g *Guard) Machines(company string) []string {
+	if g.Hub != nil {
+		for _, m := range g.Hub.RealAssets(company) {
+			g.remember(company, m)
+		}
+	}
+	out := []string{}
+	rows, err := g.db.Query(`SELECT plant || '/' || asset FROM machines WHERE company=? ORDER BY plant, asset`, company)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m string
+		rows.Scan(&m)
+		out = append(out, m)
+	}
+	return out
+}
+
+func (g *Guard) remember(company, plantAsset string) {
+	plant, asset, _ := strings.Cut(plantAsset, "/")
+	g.db.Exec(`INSERT INTO machines VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET seen=excluded.seen`, company, plant, asset, g.Now().UnixMilli())
+}
+
 // Send judges a command and carries it out when it may go: the twin first, then the equipment.
 func (g *Guard) Send(o Origin, c Command) Verdict {
-	real := g.Hub != nil && g.Hub.Real(c.Company, c.Plant, c.Asset)
+	real := g.Real(c.Company, c.Plant, c.Asset)
 	if !real {
 		v := g.exec(o, c, "")
 		g.record(o.Who, o.Via, c, "command", v, "")
@@ -466,6 +507,13 @@ func (g *Guard) Run(ctx context.Context) {
 			return
 		case <-t.C:
 			g.lapse()
+			if g.Hub != nil && g.Eng != nil {
+				for _, c := range g.Eng.CompanyIDs() {
+					for _, m := range g.Hub.RealAssets(c) {
+						g.remember(c, m)
+					}
+				}
+			}
 		}
 	}
 }

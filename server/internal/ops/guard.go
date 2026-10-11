@@ -49,12 +49,8 @@ func (o *Ops) Guard(who auth.Who, company string) (*GuardOverview, error) {
 	if err != nil {
 		return nil, err
 	}
-	ov := &GuardOverview{Settings: o.Commands.Settings(company), Defaults: guard.Defaults(), Commands: guard.Commands, Machines: []string{},
-		Waiting: len(waiting), Admin: who.Can(company, auth.Admin)}
-	if o.Hub != nil {
-		ov.Machines = o.Hub.RealAssets(company)
-	}
-	return ov, nil
+	return &GuardOverview{Settings: o.Commands.Settings(company), Defaults: guard.Defaults(), Commands: guard.Commands,
+		Machines: o.Commands.Machines(company), Waiting: len(waiting), Admin: who.Can(company, auth.Admin)}, nil
 }
 
 // SetGuard changes a company's guard.
