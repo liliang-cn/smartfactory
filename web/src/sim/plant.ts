@@ -1132,10 +1132,19 @@ export class PlantSim {
     // Measured values win over the model; alarms and wear below then run on the real numbers.
     const lv = liveFields(a);
     if (lv) {
+      // The model's prediction for what the machine says it is doing (its state word, when it
+      // sends one): the parameters are judged, not the twin's guess of when a part is there.
+      const ds = typeof lv.state === 'string' ? lv.state : undefined;
+      const mRun = ds !== undefined ? ds === 'running' : running;
+      const mOn = ds !== undefined ? ds === 'running' || ds === 'idle' || ds === 'blocked' : on;
+      let mTarget = AMBIENT;
+      if (mOn) mTarget += (mRun ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * 18;
+      const mPower = mOn ? s.pIdle + (mRun ? s.pRun * a.speed : 0) : ds === 'maint' ? 0 : 0.1;
+      const mVib = mRun ? s.vib * (0.7 + 0.3 * a.speed) * (1 + (1 - a.health) * 2.5) : mOn ? s.vib * 0.06 : 0;
       // the model keeps its own temperature alongside, from where the machine first reported
       const measured = typeof lv.temp === 'number' ? lv.temp : undefined;
       a.shadow ??= { temp: measured ?? a.temp };
-      a.shadow.temp += (target - a.shadow.temp) * k;
+      a.shadow.temp += (mTarget - a.shadow.temp) * k;
       if (!this.headless) {
         const tol = { temp: Math.max(2, 0.05 * (s.runRise || 10)), power: Math.max(0.5, 0.1 * (s.pIdle + s.pRun)), vib: Math.max(0.3, 0.15 * s.vib) };
         const add = (f: 'temp' | 'power' | 'vib', model: number, v: unknown) => {
@@ -1148,8 +1157,8 @@ export class PlantSim {
           if (Math.abs(e) <= tol[f]) r.ok += dt;
         };
         add('temp', a.shadow.temp, lv.temp);
-        add('power', powerModel, lv.power);
-        add('vib', vibModel, lv.vib);
+        add('power', mPower, lv.power);
+        add('vib', mVib, lv.vib);
       }
       if (typeof lv.temp === 'number') a.temp = lv.temp;
       if (typeof lv.power === 'number') a.power = lv.power;
