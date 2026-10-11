@@ -1,4 +1,4 @@
-// Copy the install command, open the live demo in place, remember the language picked.
+// Open the live demo in place, remember the language picked.
 (() => {
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -12,19 +12,6 @@
     return;
   }
   for (const a of document.querySelectorAll('.lang a')) a.addEventListener('click', () => store.set('sf-lang', a.hreflang));
-
-  for (const b of document.querySelectorAll('.cmd')) {
-    b.addEventListener('click', async () => {
-      const label = b.querySelector('.copy');
-      const was = label.textContent;
-      try {
-        await navigator.clipboard.writeText(b.dataset.copy);
-        b.classList.add('done');
-        label.textContent = b.dataset.done;
-        setTimeout(() => { b.classList.remove('done'); label.textContent = was; }, 1800);
-      } catch { /* no clipboard: the text is there to select */ }
-    });
-  }
 
   // the demo is a full 3D scene: on a wide screen it opens in place, on a phone in its own tab
   const stage = document.querySelector('.stage');

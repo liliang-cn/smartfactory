@@ -72,17 +72,7 @@ a:hover { color: var(--blue-deep); }
 .hero h1:lang(zh) { font-stretch: 100%; letter-spacing: 0; line-height: 1.12; max-width: 11em; font-weight: 800; }
 .hero .lede { margin: 22px 0 0; max-width: 58ch; font-size: clamp(17px, 2vw, 20px); color: var(--muted); }
 
-.install { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.cmd {
-  display: inline-flex; align-items: center; gap: 14px;
-  background: var(--ink); color: #e9edf8;
-  font: 500 15px/1 var(--mono);
-  padding: 15px 16px 15px 18px; border-radius: 12px; border: 0; cursor: pointer;
-  max-width: 100%;
-}
-.cmd .prompt { color: var(--lane); }
-.cmd .copy { font: 600 12.5px/1 var(--body); color: #aab3cf; padding: 6px 9px; border-radius: 7px; background: #2a3354; white-space: nowrap; }
-.cmd.done .copy { color: var(--ink); background: var(--lane); }
+.actions { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 14px 18px; border-radius: 12px;
@@ -181,23 +171,6 @@ a:hover { color: var(--blue-deep); }
   .flow .core::before, .flow .core::after { display: none; }
 }
 
-/* ---------- install: a real sequence ---------- */
-.steps { margin: 30px 0 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 14px; max-width: 860px; }
-.steps li { counter-increment: step; display: grid; grid-template-columns: 44px 1fr; gap: 4px 16px; align-items: start; }
-.steps li > * { grid-column: 2; min-width: 0; }
-.steps li::before {
-  content: counter(step); grid-column: 1; grid-row: 1 / span 3;
-  width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center;
-  background: var(--ink); color: var(--lane); font: 800 20px/1 var(--display);
-}
-.steps b { font-size: 17px; padding-top: 2px; }
-.steps pre {
-  margin: 4px 0 0; padding: 14px 16px; border-radius: 10px; overflow-x: auto;
-  background: var(--paper); box-shadow: 0 1px 0 var(--line);
-  font: 500 14px/1.6 var(--mono); color: var(--ink);
-}
-.steps p { margin: 0; color: var(--muted); font-size: 15.5px; }
-
 .ownership { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px 32px; margin-top: 26px; max-width: 980px; }
 .ownership div { padding-top: 14px; border-top: 2px solid var(--ink); }
 .ownership b { display: block; font-size: 16.5px; }
@@ -212,16 +185,12 @@ a:hover { color: var(--blue-deep); }
 
 @media (max-width: 560px) {
   body { font-size: 16px; }
-  .cmd { font-size: 13.5px; width: 100%; justify-content: space-between; }
-  .install .btn { flex: 1; justify-content: center; }
+  .actions .btn { flex: 1; justify-content: center; }
   .stage { aspect-ratio: 4 / 5; border-radius: 14px; }
   .stage img { object-position: 38% 40%; }
   .station > p { font-size: 16.5px; }
-  .steps li { grid-template-columns: 36px 1fr; gap: 4px 12px; }
-  .steps li::before { width: 36px; height: 36px; font-size: 17px; }
-  .steps pre { font-size: 12.5px; padding: 12px; }
 }
 
 code { font: 500 0.88em/1 var(--mono); background: var(--floor-deep); padding: 0.15em 0.4em; border-radius: 5px; }
-pre code, .cmd code { background: none; padding: 0; }
+pre code { background: none; padding: 0; }
 .station > p code { font-size: 0.85em; }

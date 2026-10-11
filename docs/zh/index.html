@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SmartFactory：跑在你自己服务器上的智能工厂</title>
-  <meta name="description" content="后台、实时 3D 孪生和 AI 助手，一个程序。装在一台 Linux 服务器上，从模板、一段描述或你自己的配置搭出工厂。">
+  <meta name="description" content="后台、实时 3D 孪生和 AI 助手，一个程序，跑在你自己的服务器上。从模板、一段描述或你自己的配置搭出工厂。">
   <meta name="theme-color" content="#eef1f8">
   <link rel="alternate" hreflang="en" href="https://liliang-cn.github.io/smartfactory/">
   <link rel="alternate" hreflang="zh" href="https://liliang-cn.github.io/smartfactory/zh/">
@@ -21,7 +21,6 @@
   <header class="wrap top">
     <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f55e8"/><path d="M16 16 28 9.5v13L16 29z" fill="#1f3bb3"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8cf4"/></svg>SmartFactory</a>
     <nav>
-      <a class="hide-sm" href="#install">安装</a>
       <a class="hide-sm" href="https://github.com/liliang-cn/smartfactory">GitHub</a>
       <span class="lang"><a href="../" hreflang="en" lang="en">EN</a><a href="./" hreflang="zh" aria-current="true">中文</a></span>
     </nav>
@@ -30,9 +29,8 @@
   <main>
     <section class="wrap hero">
       <h1>你的工厂，实时跑在你自己的服务器上。</h1>
-      <p class="lede">在后台把工厂搭出来，在 3D 孪生里看它运转，AI 助手熟悉它的工艺和工单。都在一个程序里。装在一台 Linux 服务器上，从模板、几句描述或你自己的配置开始。</p>
-      <div class="install">
-        <button class="cmd" type="button" data-copy="sudo ./smartfactory install" data-done="已复制" aria-label="复制安装命令"><span><span class="prompt">$</span> sudo ./smartfactory install</span><span class="copy">复制</span></button>
+      <p class="lede">在后台把工厂搭出来，在 3D 孪生里看它运转，AI 助手熟悉它的工艺和工单。都在一个程序里。从模板、几句描述或你自己的配置开始。</p>
+      <div class="actions">
         <a class="btn primary" href="https://github.com/liliang-cn/smartfactory/releases/latest">下载</a>
         <a class="btn" href="https://github.com/liliang-cn/smartfactory">源码</a>
       </div>
@@ -100,21 +98,25 @@
           </div>
         </section>
 
-        <section class="station" id="install">
-          <h2>装在一台 Linux 服务器上</h2>
-          <ol class="steps">
-            <li><b>下载对应架构的安装包</b><pre>tar xzf smartfactory-*-linux-amd64.tar.gz
-cd smartfactory-*-linux-amd64</pre></li>
-            <li><b>装成系统服务</b><pre>sudo ./smartfactory install</pre><p>systemd 服务，独立的系统用户，立即启动，开机自启。以后用新版本再执行一次就是升级。</p></li>
-            <li><b>登录，搭你的工厂</b><pre>sudo cat /var/lib/smartfactory/initial-admin-token</pre><p>用这个令牌打开 <code>http://你的服务器:4720/admin</code>。</p></li>
-          </ol>
-          <p>macOS、Windows 上直接运行 <code>smartfactory -config smartfactory.json</code>。要用 AI 助手，在 <code>/etc/smartfactory/env</code> 里配一个兼容 OpenAI 接口的大模型。</p>
+        <section class="station">
+          <h2>它还能做这些</h2>
+          <ul class="facts">
+            <li><b>实时指标</b><span>每个工厂、产线、设备的综合效率、产量、合格率和功率。</span></li>
+            <li><b>实测和仿真并存</b><span>接了数据的设备显示实测值，厂里其余部分照常仿真。</span></li>
+            <li><b>报警和维护</b><span>故障、计划保养，模具和刀具寿命逐件计数。</span></li>
+            <li><b>质量可追溯</b><span>测量值带 SPC 漂移报警，缺陷追到材料批次和供应商。</span></li>
+            <li><b>先试再改</b><span>把一个厂带着改动往后跑几遍，和不改的结果比一比。</span></li>
+            <li><b>能耗算成钱</b><span>电和燃气按峰、平、谷时段计价。</span></li>
+            <li><b>发运和客诉</b><span>完工的工单装车发运，客户投诉追回到对应的工单。</span></li>
+            <li><b>角色和操作记录</b><span>成员、操作员、管理员三种令牌，每次改动记下谁、从哪里改的。</span></li>
+            <li><b>手机上能用</b><span>孪生和后台在小屏幕上都能用。</span></li>
+          </ul>
         </section>
 
         <section class="station">
           <h2>工厂的数据留在你自己的服务器上</h2>
           <div class="ownership">
-            <div><b>一个目录</b><span>场景、仿真状态、账号、知识库和工单都在 <code>/var/lib/smartfactory</code>，备份它就是备份整个工厂。</span></div>
+            <div><b>一个目录</b><span>场景、仿真状态、账号、知识库和工单都在服务器上的一个目录里，备份它就是备份整个工厂。</span></div>
             <div><b>不往外报数据</b><span>服务器只连你接上的东西：你的设备、你的 ERP、你的大模型。</span></div>
             <div><b>AGPL-3.0</b><span>免费使用和修改。拿它给别人提供服务，就要公开你的修改。</span></div>
           </div>

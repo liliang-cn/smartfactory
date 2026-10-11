@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SmartFactory: a smart factory on your own server</title>
-  <meta name="description" content="An admin console, a live 3D twin and AI assistants in one program. Install it on a Linux server and build your factory from a template, a description or your own config.">
+  <meta name="description" content="An admin console, a live 3D twin and AI assistants in one program, on your own server. Build your factory from a template, a description or your own config.">
   <meta name="theme-color" content="#eef1f8">
   <link rel="alternate" hreflang="en" href="https://liliang-cn.github.io/smartfactory/">
   <link rel="alternate" hreflang="zh" href="https://liliang-cn.github.io/smartfactory/zh/">
@@ -21,7 +21,6 @@
   <header class="wrap top">
     <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f55e8"/><path d="M16 16 28 9.5v13L16 29z" fill="#1f3bb3"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8cf4"/></svg>SmartFactory</a>
     <nav>
-      <a class="hide-sm" href="#install">Install</a>
       <a class="hide-sm" href="https://github.com/liliang-cn/smartfactory">GitHub</a>
       <span class="lang"><a href="./" hreflang="en" aria-current="true">EN</a><a href="zh/" hreflang="zh" lang="zh">中文</a></span>
     </nav>
@@ -30,9 +29,8 @@
   <main>
     <section class="wrap hero">
       <h1>Your factory, live, on your own server.</h1>
-      <p class="lede">A console to build it, a 3D twin to watch it run, and AI assistants that know it, in one program. Install it on a Linux server and start from a template, a few sentences, or your own config.</p>
-      <div class="install">
-        <button class="cmd" type="button" data-copy="sudo ./smartfactory install" data-done="Copied" aria-label="Copy the install command"><span><span class="prompt">$</span> sudo ./smartfactory install</span><span class="copy">Copy</span></button>
+      <p class="lede">A console to build it, a 3D twin to watch it run, and AI assistants that know it, in one program. Start from a template, a few sentences, or your own config.</p>
+      <div class="actions">
         <a class="btn primary" href="https://github.com/liliang-cn/smartfactory/releases/latest">Download</a>
         <a class="btn" href="https://github.com/liliang-cn/smartfactory">Source</a>
       </div>
@@ -100,21 +98,25 @@
           </div>
         </section>
 
-        <section class="station" id="install">
-          <h2>Install on a Linux server</h2>
-          <ol class="steps">
-            <li><b>Download the package for your server</b><pre>tar xzf smartfactory-*-linux-amd64.tar.gz
-cd smartfactory-*-linux-amd64</pre></li>
-            <li><b>Install it as a service</b><pre>sudo ./smartfactory install</pre><p>A systemd service with its own user, started now and on every boot. Run it again with a newer package to upgrade.</p></li>
-            <li><b>Sign in and build your factory</b><pre>sudo cat /var/lib/smartfactory/initial-admin-token</pre><p>Open <code>http://your-server:4720/admin</code> with this token.</p></li>
-          </ol>
-          <p>On macOS or Windows, run <code>smartfactory -config smartfactory.json</code>. For the assistants, add an OpenAI-compatible model in <code>/etc/smartfactory/env</code>.</p>
+        <section class="station">
+          <h2>What else it does</h2>
+          <ul class="facts">
+            <li><b>Live numbers</b><span>OEE, output, yield and power for every plant, line and machine.</span></li>
+            <li><b>Real and simulated, side by side</b><span>A machine that reports its readings shows them; the rest of the plant keeps simulating around it.</span></li>
+            <li><b>Alarms and upkeep</b><span>Breakdowns, planned maintenance, and die and tool life counted part by part.</span></li>
+            <li><b>Quality you can trace</b><span>Measurements with SPC drift alarms, defects traced to the material lot and its supplier.</span></li>
+            <li><b>Try a change first</b><span>Run a plant ahead with a change, several times over, and compare it with leaving it as it is.</span></li>
+            <li><b>Energy in money</b><span>Power and fuel priced by peak, flat and valley hours.</span></li>
+            <li><b>Shipments and complaints</b><span>Finished orders leave by truck; a customer complaint comes back to the order it was about.</span></li>
+            <li><b>Roles and a record</b><span>Member, operator and administrator tokens, and every change logged with who made it and from where.</span></li>
+            <li><b>On a phone</b><span>The twin and the console both work on a small screen.</span></li>
+          </ul>
         </section>
 
         <section class="station">
           <h2>Your factory stays on your server</h2>
           <div class="ownership">
-            <div><b>One folder</b><span>Scenes, simulation state, accounts, knowledge and orders live in <code>/var/lib/smartfactory</code>. Back it up and you have backed up the factory.</span></div>
+            <div><b>One folder</b><span>Scenes, simulation state, accounts, knowledge and orders live in one folder on your server. Back it up and you have backed up the factory.</span></div>
             <div><b>Nothing calls home</b><span>The server talks to what you connect: your machines, your ERP, your model provider.</span></div>
             <div><b>AGPL-3.0</b><span>Free to run and change. Offer it as a service to others and you share your changes.</span></div>
           </div>
