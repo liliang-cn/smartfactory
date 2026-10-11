@@ -20,6 +20,7 @@ import (
 func RunMQTT(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.Logger) {
 	log = log.With("adapter", src.Name)
 	hub.Source(src.Name, "mqtt", src.URL, len(src.Points))
+	register(hub, src)
 
 	handle := func(topic string, payload []byte) {
 		if src.Convention != "" {

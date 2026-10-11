@@ -27,6 +27,7 @@ import (
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
+	"smartfactory/internal/guard"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
@@ -68,6 +69,8 @@ type Server struct {
 	Production *erp.Service
 	// Calib fits machines' parameters from their stored readings (nil without data).
 	Calib *calib.Service
+	// Guard judges commands that would reach a machine (nil: they go straight on).
+	Guard *guard.Guard
 	// Series is the readings equipment sent (nil without data).
 	Series *series.Store
 
@@ -140,6 +143,7 @@ func (s *Server) Handler() http.Handler {
 	s.seriesRoutes(mux)
 	s.erpRoutes(mux)
 	s.calibRoutes(mux)
+	s.guardRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())
@@ -153,7 +157,8 @@ func (s *Server) caller(r *http.Request) auth.Who { return s.Keys.Of(r) }
 func (s *Server) requireToken(next http.Handler) http.Handler {
 	verify := func(_ context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
 		w, ok := s.Keys.Lookup(token)
-		if !ok {
+		if !ok || w.Role == auth.ERP {
+			// an ERP token is for the order API alone
 			return nil, mcpauth.ErrInvalidToken
 		}
 		return &mcpauth.TokenInfo{UserID: w.Key, Extra: map[string]any{"who": w}}, nil
@@ -275,6 +280,17 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				bucket--
+			}
+			if op && s.Guard != nil {
+				// an operator's command: judged by the company's guard when it reaches a machine
+				v := s.Guard.Send(guard.Origin{Who: who, Via: "live", By: "operator", Browser: m.O},
+					guard.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: m.Cmd, Arg: m.Arg})
+				msg := v.Msg
+				if v.Outcome == guard.Refused {
+					msg = "没有执行：" + msg
+				}
+				send(map[string]any{"type": "result", "ok": v.Outcome == guard.Sent, "msg": msg})
+				return
 			}
 			res := s.Engine.Command(company, m.Plant, m.Asset, m.Cmd, m.Arg)
 			if op {

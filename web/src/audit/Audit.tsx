@@ -175,6 +175,7 @@ function Row({ e, onLocate }: { e: Entry; onLocate(): void }) {
         {e.via === 'assistant' && e.detail && <span className="text-muted-foreground"> · 经{e.detail}</span>}
       </p>
       {!e.ok && e.error && <p className="mt-0.5 text-[12px] text-destructive">没有成功：{e.error}</p>}
+                    {e.context && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">当时：{e.context}</p>}
     </li>
   );
 }

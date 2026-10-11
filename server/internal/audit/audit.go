@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -34,6 +35,9 @@ type Entry struct {
 	Detail string `json:"detail,omitempty"`
 	OK     bool   `json:"ok"`
 	Error  string `json:"error,omitempty"`
+	// Context is what was true when it happened, for a command to equipment: the machine's
+	// state, temperature and alarms, the guard's verdict, who approved it.
+	Context string `json:"context,omitempty"`
 }
 
 // Log is the audit log. A nil *Log records nothing.
@@ -58,6 +62,11 @@ func Open(dir string, log *slog.Logger) (*Log, error) {
 		db.Close()
 		return nil, err
 	}
+	// logs from before entries had a context
+	if _, err := db.Exec(`ALTER TABLE audit ADD COLUMN context TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		db.Close()
+		return nil, err
+	}
 	if log == nil {
 		log = slog.Default()
 	}
@@ -74,15 +83,20 @@ func (l *Log) Close() error {
 // Record keeps one change made by w. A failure to write is logged, never returned: the change
 // has already happened.
 func (l *Log) Record(w auth.Who, via, company, action, target, detail string, err error) {
+	l.RecordWith(w, via, company, action, target, detail, "", err)
+}
+
+// RecordWith keeps one change with what was true when it happened (context).
+func (l *Log) RecordWith(w auth.Who, via, company, action, target, detail, context string, err error) {
 	if l == nil {
 		return
 	}
-	e := Entry{At: time.Now(), Who: w.Name, Role: w.Role, Key: w.Key, Via: via, Company: company, Action: action, Target: target, Detail: detail, OK: err == nil}
+	e := Entry{At: time.Now(), Who: w.Name, Role: w.Role, Key: w.Key, Via: via, Company: company, Action: action, Target: target, Detail: detail, OK: err == nil, Context: context}
 	if err != nil {
 		e.Error = err.Error()
 	}
-	if _, xerr := l.db.Exec(`INSERT INTO audit (at, who, role, key, via, company, action, target, detail, ok, error) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		e.At.UnixMilli(), e.Who, e.Role.String(), e.Key, e.Via, e.Company, e.Action, e.Target, e.Detail, e.OK, e.Error); xerr != nil {
+	if _, xerr := l.db.Exec(`INSERT INTO audit (at, who, role, key, via, company, action, target, detail, ok, error, context) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		e.At.UnixMilli(), e.Who, e.Role.String(), e.Key, e.Via, e.Company, e.Action, e.Target, e.Detail, e.OK, e.Error, e.Context); xerr != nil {
 		l.log.Error("audit", "err", xerr, "who", e.Who, "action", e.Action, "target", e.Target)
 	}
 }
@@ -100,7 +114,7 @@ func (l *Log) List(ctx context.Context, company string, before int64, limit int)
 	if before <= 0 {
 		before = 1<<63 - 1
 	}
-	q := `SELECT id, at, who, role, key, via, company, action, target, detail, ok, error FROM audit WHERE id < ?`
+	q := `SELECT id, at, who, role, key, via, company, action, target, detail, ok, error, context FROM audit WHERE id < ?`
 	args := []any{before}
 	if company != "" {
 		q += ` AND company = ?`
@@ -115,7 +129,7 @@ func (l *Log) List(ctx context.Context, company string, before int64, limit int)
 		var e Entry
 		var at int64
 		var role string
-		if err := rows.Scan(&e.ID, &at, &e.Who, &role, &e.Key, &e.Via, &e.Company, &e.Action, &e.Target, &e.Detail, &e.OK, &e.Error); err != nil {
+		if err := rows.Scan(&e.ID, &at, &e.Who, &role, &e.Key, &e.Via, &e.Company, &e.Action, &e.Target, &e.Detail, &e.OK, &e.Error, &e.Context); err != nil {
 			return nil, err
 		}
 		e.At = time.UnixMilli(at)

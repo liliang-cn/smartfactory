@@ -15,6 +15,7 @@ import { useAgents } from '@/agents/store';
 import { useLive } from '@/live/client';
 import { liveFields } from '@/sim/plant';
 import { ALL, goToAsset, groupsOf, runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
+import { Approvals } from './Approvals';
 import { groupFigures } from './group';
 import { CHIP, STATE_LABEL, hhmm } from './status';
 
@@ -351,7 +352,7 @@ function AlarmBell() {
   );
 }
 
-const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员' } as const;
+const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' } as const;
 
 const AuditSheet = lazy(() => import('@/audit/Audit'));
 
@@ -416,6 +417,7 @@ export function TopBar() {
       <LiveLinks />
       <BusinessEntry />
       <LiveClock />
+      <Approvals />
       <AlarmBell />
       <Me />
     </header>

@@ -18,6 +18,7 @@ import (
 func RunOPCUA(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.Logger) {
 	log = log.With("adapter", src.Name)
 	hub.Source(src.Name, "opcua", src.URL, len(src.Points))
+	register(hub, src)
 
 	ids := make([]*ua.NodeID, len(src.Points))
 	for i, p := range src.Points {

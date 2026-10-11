@@ -19,6 +19,7 @@ import (
 	"smartfactory/internal/calib"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
+	"smartfactory/internal/guard"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/tags"
@@ -41,6 +42,8 @@ type Ops struct {
 	Production *erp.Service
 	// Calib fits machines' parameters from their stored readings.
 	Calib *calib.Service
+	// Commands is the guard in front of the companies' machines.
+	Commands *guard.Guard
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

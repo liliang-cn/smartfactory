@@ -19,8 +19,8 @@ const str = z.string();
  * What a caller may do in a company. No token: visitor. A token carries one role and the
  * companies it covers; elsewhere its holder is a visitor.
  */
-export const Role = z.enum(['visitor', 'member', 'operator', 'admin']).meta({
-  description: 'visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants',
+export const Role = z.enum(['visitor', 'member', 'operator', 'admin', 'erp']).meta({
+  description: 'visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants · erp: a business system\'s token for the order API of its companies, a visitor everywhere else',
 });
 
 export const Command = z.enum(['start', 'stop', 'speed', 'reset', 'maint', 'fault', 'restock', 'ship', 'retool', 'toollimit']).meta({
@@ -546,13 +546,15 @@ export const AuditEntry = z.object({
   id: num, at: time, who: str, role: Role,
   /** which token: the start of its hash ("token" for the original single token) */
   key: str,
-  /** api: another system (the ERP) calling the order API with its own token */
-  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api']),
+  /** api: another system (the ERP) calling the order API with its own token · guard: the command guard itself (a request lapsing) */
+  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
+  /** what was true when it happened, for a command to a machine: its state, temperature and alarms, the rule that refused it, who asked and who approved */
+  context: str.optional(),
 });
 export const AuditLog = z.array(AuditEntry).meta({ description: "A company's changes, newest first (GET /api/audit/{company}?before=&limit=)" });
 
@@ -621,7 +623,7 @@ export const Account = z.object({
 });
 export const Accounts = z.array(Account).meta({ description: 'GET /api/admin/tokens — the tokens of the companies the caller administers' });
 export const IssueToken = z.object({
-  name: str, role: z.enum(['member', 'operator', 'admin']),
+  name: str, role: z.enum(['member', 'operator', 'admin', 'erp']),
   /** null: every company (only an administrator of every company) */
   companies: z.array(str).nullable(),
   expires: str.optional(),
@@ -834,6 +836,48 @@ export const CalibOutcomes = z.array(z.object({ machine: str, ok: z.boolean(), p
   .meta({ description: 'POST /api/admin/calib/{company}/apply | revert — each machine answered on its own' });
 export const Residuals = z.array(z.object({ t: num, seconds: num, mean: num, mae: num, within: num }))
   .meta({ description: 'GET /api/calib/{company}/residuals?machine=&field=temp|power|vib&from=&to=&step= — by step seconds (a minute at least); members and above' });
+// ---------- the command guard (/api/guard/{company}) ----------
+
+/** advisory: AI proposes, a person confirms every command to a machine · guarded: AI's commands pass the rules, the listed kinds wait for a person · autonomous: the rules alone */
+export const GuardLevel = z.enum(['advisory', 'guarded', 'autonomous']);
+/**
+ * Refuses a command when its conditions hold for the machine now. when: conditions joined by
+ * "and", each a field (state temp warn trip speed health alarms arg maint changing), an operator
+ * (= != > >= < <=) and a number, word or field. say: the reason, with {temp} {warn} {trip} {speed}
+ * {arg} {state} {alarms} filled in.
+ */
+export const GuardRule = z.object({ cmd: z.union([Command, z.literal('*')]), when: str, say: str });
+export const GuardSettings = z.object({
+  level: GuardLevel,
+  /** at guarded, the commands an AI sends that wait for a person */
+  approve: z.array(Command),
+  rules: z.array(GuardRule),
+  /** minutes a command waits for a person before it lapses */
+  expire: num,
+}).meta({ description: 'PUT /api/guard/{company} (administrators); answers GuardOverview' });
+export const GuardOverview = z.object({
+  settings: GuardSettings, defaults: GuardSettings, commands: z.array(Command),
+  /** the company's machines (plant/asset) fed by real equipment: their commands are judged */
+  machines: z.array(str),
+  /** how many commands wait for a person */
+  waiting: num,
+  /** the caller may change the settings */
+  admin: z.boolean(),
+}).meta({ description: 'GET /api/guard/{company} — operators and above' });
+/** A command an AI sent that waits for a person, and what became of it. */
+export const CommandRequest = z.object({
+  id: str, company: str, plant: str, asset: str, cmd: Command, arg: num.optional(),
+  /** who sent it, and how (mcp, assistant) */
+  who: str, via: str,
+  /** why it waits, and the machine's state when it was sent */
+  reason: str, context: str,
+  created: time, expires: time,
+  status: z.enum(['waiting', 'deciding', 'sent', 'refused', 'denied', 'expired', 'failed']),
+  decidedBy: str.optional(), decidedAt: time.optional(),
+  /** the twin's answer, or why it was refused, denied or lapsed */
+  result: str.optional(),
+}).meta({ description: 'POST /api/guard/{company}/requests/{id}/approve | deny {reason?} — operators and above; MCP command_request' });
+export const CommandRequests = z.array(CommandRequest).meta({ description: 'GET /api/guard/{company}/requests?status= — waiting first, then the newest' });
 
 // ---------- the console agent (/api/admin/agent) ----------
 
@@ -868,6 +912,7 @@ export const DEFS = {
   Templates, TemplateSummary, Template, SaveTemplate,
   Order, Orders, OrderInput, OrderResults, OrderCallback, ERPConfig, ERPOverview, PullResult,
   CalibMachine, Calibration, CalibRequest, CalibOutcomes, Residuals,
+  GuardSettings, GuardOverview, CommandRequest, CommandRequests,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

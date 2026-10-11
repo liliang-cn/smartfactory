@@ -11,8 +11,26 @@ import (
 	"smartfactory/internal/erp"
 )
 
-// A company's ERP connection: members read its orders, operators (the ERP's own token among
-// them) send and withdraw orders, administrators set the connection up.
+// A company's ERP connection: the ERP's own token (role erp), members to read and operators to
+// send and withdraw use its orders; administrators set the connection up.
+
+// orders lets the order API through: the company's ERP token, members to read, operators to
+// send and withdraw.
+func (o *Ops) orders(who auth.Who, company string, write bool) error {
+	if err := o.erp(who, company, auth.Visitor); err != nil {
+		return err
+	}
+	if !who.Orders(company, write) {
+		if who.Key == "" {
+			return fail(401, "用令牌登录")
+		}
+		if write {
+			return fail(403, "发、撤工单要公司 %s 的 ERP 接口令牌或操作员以上的令牌", company)
+		}
+		return fail(403, "看工单要公司 %s 的 ERP 接口令牌或成员以上的令牌", company)
+	}
+	return nil
+}
 
 func (o *Ops) erp(who auth.Who, company string, need auth.Role) error {
 	if o.Production == nil {
@@ -163,14 +181,14 @@ func (o *Ops) PullERP(ctx context.Context, who auth.Who, via, company string, dr
 
 // Orders are a company's production orders: running, then queued in turn, then the rest.
 func (o *Ops) Orders(who auth.Who, company string, f erp.Filter) ([]erp.Order, error) {
-	if err := o.erp(who, company, auth.Member); err != nil {
+	if err := o.orders(who, company, false); err != nil {
 		return nil, err
 	}
 	return o.Production.Store.List(company, f)
 }
 
 func (o *Ops) Order(who auth.Who, company, no string) (*erp.Order, error) {
-	if err := o.erp(who, company, auth.Member); err != nil {
+	if err := o.orders(who, company, false); err != nil {
 		return nil, err
 	}
 	ord, err := o.Production.Store.Get(company, no)
@@ -182,7 +200,7 @@ func (o *Ops) Order(who auth.Who, company, no string) (*erp.Order, error) {
 
 // SubmitOrders stores orders sent to the twin; each is answered on its own.
 func (o *Ops) SubmitOrders(who auth.Who, via, company string, raw []map[string]any) ([]erp.Result, error) {
-	if err := o.erp(who, company, auth.Operator); err != nil {
+	if err := o.orders(who, company, true); err != nil {
 		return nil, err
 	}
 	if len(raw) == 0 || len(raw) > 1000 {
@@ -248,7 +266,7 @@ func clipList(xs []string, n int) []string {
 
 // CancelOrder withdraws an order; a line running it moves on.
 func (o *Ops) CancelOrder(who auth.Who, via, company, no string) (*erp.Order, error) {
-	if err := o.erp(who, company, auth.Operator); err != nil {
+	if err := o.orders(who, company, true); err != nil {
 		return nil, err
 	}
 	ord, err := o.Production.Cancel(company, no)

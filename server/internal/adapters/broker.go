@@ -46,7 +46,7 @@ func StartBroker(cfg config.Broker, hub *tags.Hub, log *slog.Logger) (*mqtt.Serv
 
 	// Every publishing client is its own data source, named by its client id; the hook sees the
 	// publisher (an inline subscription would only see itself).
-	if err := s.AddHook(&clientStatus{hub: hub, prefix: cfg.Prefix, url: "mqtt://" + cfg.Listen, log: log}, nil); err != nil {
+	if err := s.AddHook(&clientStatus{hub: hub, prefix: cfg.Prefix, url: "mqtt://" + cfg.Listen, log: log, public: cfg.Public}, nil); err != nil {
 		return nil, err
 	}
 	hub.OnCommand(func(c tags.Command) {
@@ -78,6 +78,8 @@ type clientStatus struct {
 	prefix string
 	url    string
 	log    *slog.Logger
+	// public: the broker's devices are emulated
+	public bool
 }
 
 func (h *clientStatus) ID() string { return "smartfactory-client-status" }
@@ -98,6 +100,7 @@ func (h *clientStatus) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Pa
 	if len(ts) > 0 {
 		if !h.hub.HasSource(cl.ID) {
 			h.hub.Source(cl.ID, "mqtt", h.url, 0)
+			h.hub.SetPublic(cl.ID, h.public)
 		}
 		h.hub.SetConnected(cl.ID, true, nil)
 	}

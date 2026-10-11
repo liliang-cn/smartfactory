@@ -9,6 +9,7 @@ package main
 //	smartfactory kb <company> | kb <company> search "问题" | entity <名字> | docs | upload <文件>… | rebuild
 //	smartfactory orders <company> | orders <company> show <工单号> | send -f orders.json | cancel <工单号> | pull [-dry] | erp
 //	smartfactory calib <company> | calib <company> show <设备> | fit [-hours 24] [设备…] | apply [设备…] | revert [设备…]
+//	smartfactory guard <company> | guard <company> set -level guarded -approve start,speed | pending | approve <编号> | deny <编号>
 //	smartfactory activity [-company id] [-n 30]
 //	smartfactory agent ["一句话"]
 //
@@ -36,7 +37,7 @@ import (
 var cliCommands = map[string]func(ctx context.Context, args []string) error{
 	"login": cliLogin, "logout": cliLogout, "whoami": cliWhoami,
 	"company": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
-	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "activity": cliActivity, "agent": cliAgent,
+	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "activity": cliActivity, "agent": cliAgent,
 }
 
 // ---- output ----
@@ -530,6 +531,7 @@ var toolNames = map[string]string{
 	"propose_revoke_token": "提出撤销令牌", "propose_rebuild_knowledge": "提出重建知识库", "propose_industry": "检查新写的行业包",
 	"list_orders": "看工单", "erp_status": "看 ERP 对接", "propose_cancel_order": "提出撤回工单",
 	"check_industry": "检查行业包", "propose_create_industry": "提出保存行业包",
+	"guard_status": "看指令把关", "propose_approve_command": "提出批准指令", "propose_deny_command": "提出拒绝指令",
 }
 
 func toolLabel(tool string, args map[string]any) string {
@@ -664,7 +666,7 @@ func cliIndustries(ctx context.Context, args []string) error {
 func cliTokens(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("tokens", flag.ExitOnError)
 	name := fs.String("name", "", "who holds it")
-	role := fs.String("role", "member", "member | operator | admin")
+	role := fs.String("role", "member", "member | operator | admin | erp (the order API only)")
 	company := fs.String("company", "", "companies it covers, comma-separated; * for every company")
 	expires := fs.String("expires", "", "last day it works, YYYY-MM-DD")
 	all := fs.Bool("all", false, "list revoked tokens too")

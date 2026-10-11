@@ -440,6 +440,25 @@ function snapshot(c: string): string {
   return JSON.stringify({ company: { id: c, name: co.bundle.company.name }, timeScale: co.timeScale, plants: co.plants.map((p) => p.snapshot()) });
 }
 
+/**
+ * One asset as the command guard judges a command for it: its state, temperature and limits,
+ * speed, active alarms, and which source its readings come from ("" when simulated). "null"
+ * when there is no such asset.
+ */
+function assetState(c: string, plant: string, asset: string): string {
+  const p = get(c)?.byId[plant];
+  const a = p?.assets.get(asset);
+  if (!p || !a) return 'null';
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  return JSON.stringify({
+    id: a.id, name: a.name, type: a.type, state: a.fault ? 'fault' : a.state, fault: a.fault?.text ?? '',
+    temp: r1(a.temp), warn: a.spec?.warn ?? 0, trip: a.spec?.trip ?? 0, speed: r1(a.speed), health: r1(a.health),
+    maint: a.maint > 0, changing: (a.changing ?? 0) > 0,
+    alarms: p.alarms.filter((x) => x.active && x.asset === a.id).map((x) => x.text),
+    live: a.live?.src ?? '',
+  });
+}
+
 function command(c: string, plant: string, asset: string, cmd: Command, arg: number | null): string {
   const p = get(c)?.byId[plant];
   if (!p) return JSON.stringify({ ok: false, msg: `找不到 ${c}/${plant}` });
@@ -799,7 +818,7 @@ function list(): string {
 }
 
 (globalThis as Record<string, unknown>).SF = {
-  init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
+  init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams,
 };
