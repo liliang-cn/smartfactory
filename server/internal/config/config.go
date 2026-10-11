@@ -182,9 +182,21 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
+	if s == "" {
+		d.Duration = 0
+		return nil
+	}
 	v, err := time.ParseDuration(s)
 	d.Duration = v
 	return err
+}
+
+// MarshalJSON writes it the way it is read ("1s"), so a config written out reads back.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	if d.Duration == 0 {
+		return []byte(`""`), nil
+	}
+	return json.Marshal(d.Duration.String())
 }
 
 func (d Duration) Or(def time.Duration) time.Duration {

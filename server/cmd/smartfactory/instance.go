@@ -155,8 +155,12 @@ func runInstance(args []string) error {
 	}
 
 	b, _ := json.MarshalIndent(out, "", "  ")
-	if err := os.WriteFile(filepath.Join(*dir, "smartfactory.json"), b, 0o600); err != nil {
+	cfgPath := filepath.Join(*dir, "smartfactory.json")
+	if err := os.WriteFile(cfgPath, b, 0o600); err != nil {
 		return err
+	}
+	if _, err := config.Load(cfgPath); err != nil {
+		return fmt.Errorf("the config written does not read back: %w", err)
 	}
 	fmt.Printf("instance of %s in %s: http %s, mqtt %s, %d sources, %d history, copied %s\n",
 		c, *dir, *httpAddr, cmpOr(*mqtt, "none"), len(out.Sources), len(out.History), strings.Join(copied, ", "))
