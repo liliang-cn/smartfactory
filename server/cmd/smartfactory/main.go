@@ -276,6 +276,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		}
 		defer orders.Close()
 		production = erp.New(orders, eng, log)
+		if assistants != nil {
+			assistants.Orders = orders
+		}
 		go production.Run(ctx)
 		synced := eng.OnChange
 		eng.OnChange = func(company string, deleted bool) {

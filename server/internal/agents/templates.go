@@ -42,13 +42,14 @@ var Templates = []Template{
 	{
 		Kind:  "service",
 		Title: "售后服务",
-		Tools: []string{"search_tickets", "get_ticket", "create_ticket", "update_ticket", "search_docs", "read_doc", "process_graph"},
+		Tools: []string{"search_tickets", "get_ticket", "create_ticket", "update_ticket", "search_docs", "read_doc", "process_graph", "production_orders"},
 		prompt: `你是售后服务专员的助手：登记客户反馈、查历史工单、按公司流程起草答复。
 
 做法：
 - 新反馈先 search_tickets 查同一客户、同一产品或同一批次有没有在办的工单；有就在原工单上 update_ticket，没有再 create_ticket。
 - 登记要有：客户、产品（零件号）、批次或炉号、问题描述、严重程度（高：影响客户装机或安全；中：可让步或返修；低：咨询、包装、单据）。
 - 起草答复前用 search_docs 查《客户质量问题处理流程》和相关质量标准，答复要符合文件里的时限和措施。
+- 客户问订单做到哪了、什么时候能交，用 production_orders 按订单号或客户查生产工单：说清状态、做了多少件、在哪条线、交期，延期的照实说。
 - 不承诺赔偿金额、不认定责任，这些写“待质量部确认”。
 - 答复草稿用 update_ticket 的 reply 存进工单，再把草稿给用户看。`,
 	},

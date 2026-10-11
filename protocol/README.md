@@ -333,7 +333,7 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `POST /api/admin/erp/{company}/pull?dry=1` | → `PullResult` | 现在拉一次；`dry` 只看读到什么、会排到哪条线，不存 |
 | `POST /api/admin/erp/{company}/secret` | → `{secret}` | 换回调签名密钥 |
 
-命令行：`smartfactory orders <company>`（`show`、`send -f`、`cancel`、`pull [-dry]`、`erp`）。工作台助手有 `list_orders`、`erp_status`，撤回工单要管理员确认。
+命令行：`smartfactory orders <company>`（`show`、`send -f`、`cancel`、`pull [-dry]`、`erp`）。工作台助手有 `list_orders`、`erp_status`，撤回工单要管理员确认。孪生里的售后服务助手用 `production_orders` 回答客户问的订单进度。
 
 ## 6. MCP `POST /mcp`
 

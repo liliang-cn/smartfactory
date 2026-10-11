@@ -20,6 +20,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
 )
 
@@ -45,6 +46,8 @@ type Runner struct {
 	Audit *audit.Log
 	// KB is the companies' knowledge bases; without one the assistants search the library alone.
 	KB *knowledge.Base
+	// Orders are the production orders the companies' ERPs sent.
+	Orders *erp.Store
 
 	dir string
 	llm domain.Generator
@@ -149,9 +152,16 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 			all[t.name] = t
 		}
 	}
+	if r.Orders != nil {
+		t := ordersTool(r.Orders, a.Company)
+		all[t.name] = t
+	}
 	writes := map[string]bool{}
 	for _, name := range t.Tools {
-		tl := all[name]
+		tl, ok := all[name]
+		if !ok {
+			continue // a part this server does not have (no ERP orders, no knowledge base)
+		}
 		writes[name] = tl.write
 		svc.AddToolWithMetadata(tl.name, tl.desc, tl.params, func(ctx context.Context, m map[string]any) (any, error) {
 			res, err := tl.run(ctx, args(m))
