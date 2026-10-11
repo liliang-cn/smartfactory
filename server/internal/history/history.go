@@ -138,6 +138,8 @@ type batch struct {
 		Run, Idle, Blocked, Fault, Maint, Changeover, Stopped float64
 		Cycles, Scrap, Rework                                 int
 		Kwh, Fuel, PowerCost, FuelCost                        float64
+		// Measured is the seconds the equipment reported the machine's readings.
+		Measured float64
 	} `json:"machineHours"`
 	LineHours []struct {
 		Line, Hour                             string
@@ -145,6 +147,8 @@ type batch struct {
 		NeckCycles                             int
 		Started, Produced, Good, Rework, Scrap int
 		GoodKg, InputKg, IdealCycle            float64
+		// MachineS and MeasuredS are the line's machine-seconds and those the equipment reported.
+		MachineS, MeasuredS float64
 	} `json:"lineHours"`
 	Quality []struct {
 		Machine, Hour, Feature, Unit string
@@ -152,6 +156,8 @@ type batch struct {
 		Mean, Sd, Min, Max           float64
 		Lsl, Usl                     *float64
 		Out                          int
+		// Measured is the units whose reading the equipment reported.
+		Measured int
 	} `json:"quality"`
 	Stock []struct {
 		Item, Label, Hour string
@@ -254,26 +260,28 @@ func (s *Store) Write(ctx context.Context, raw string, now time.Time) (rows int,
 	}
 	for plant, x := range plants {
 		for _, r := range x.MachineHours {
-			b.Queue(`INSERT INTO machine_hours (machine_id, hour, run_s, idle_s, blocked_s, fault_s, maint_s, changeover_s, stopped_s, cycles, scrap, rework, energy_kwh, fuel, power_cost, fuel_cost)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			b.Queue(`INSERT INTO machine_hours (machine_id, hour, run_s, idle_s, blocked_s, fault_s, maint_s, changeover_s, stopped_s, cycles, scrap, rework, energy_kwh, fuel, power_cost, fuel_cost, measured_s)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 				ON CONFLICT (machine_id, hour) DO UPDATE SET run_s=machine_hours.run_s+$3, idle_s=machine_hours.idle_s+$4,
 				blocked_s=machine_hours.blocked_s+$5, fault_s=machine_hours.fault_s+$6, maint_s=machine_hours.maint_s+$7,
 				changeover_s=machine_hours.changeover_s+$8, stopped_s=machine_hours.stopped_s+$9, cycles=machine_hours.cycles+$10,
 				scrap=machine_hours.scrap+$11, rework=machine_hours.rework+$12, energy_kwh=machine_hours.energy_kwh+$13, fuel=machine_hours.fuel+$14,
-				power_cost=machine_hours.power_cost+$15, fuel_cost=machine_hours.fuel_cost+$16`,
-				r.Machine, cal(r.Hour), r.Run, r.Idle, r.Blocked, r.Fault, r.Maint, r.Changeover, r.Stopped, r.Cycles, r.Scrap, r.Rework, r.Kwh, r.Fuel, r.PowerCost, r.FuelCost)
+				power_cost=machine_hours.power_cost+$15, fuel_cost=machine_hours.fuel_cost+$16, measured_s=machine_hours.measured_s+$17`,
+				r.Machine, cal(r.Hour), r.Run, r.Idle, r.Blocked, r.Fault, r.Maint, r.Changeover, r.Stopped, r.Cycles, r.Scrap, r.Rework, r.Kwh, r.Fuel, r.PowerCost, r.FuelCost, r.Measured)
 		}
 		for _, r := range x.LineHours {
-			b.Queue(`INSERT INTO line_hours (line_id, hour, planned_s, run_s, started, produced, good, rework, scrap, good_kg, input_kg, ideal_cycle_s, neck_cycles)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			b.Queue(`INSERT INTO line_hours (line_id, hour, planned_s, run_s, started, produced, good, rework, scrap, good_kg, input_kg, ideal_cycle_s, neck_cycles, machine_s, measured_s)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 				ON CONFLICT (line_id, hour) DO UPDATE SET planned_s=line_hours.planned_s+$3, run_s=line_hours.run_s+$4,
 				started=line_hours.started+$5, produced=line_hours.produced+$6, good=line_hours.good+$7, rework=line_hours.rework+$8,
-				scrap=line_hours.scrap+$9, good_kg=line_hours.good_kg+$10, input_kg=line_hours.input_kg+$11, neck_cycles=line_hours.neck_cycles+$13`,
-				r.Line, cal(r.Hour), r.Planned, r.Run, r.Started, r.Produced, r.Good, r.Rework, r.Scrap, r.GoodKg, r.InputKg, r.IdealCycle, r.NeckCycles)
+				scrap=line_hours.scrap+$9, good_kg=line_hours.good_kg+$10, input_kg=line_hours.input_kg+$11, neck_cycles=line_hours.neck_cycles+$13,
+				machine_s=line_hours.machine_s+$14, measured_s=line_hours.measured_s+$15`,
+				r.Line, cal(r.Hour), r.Planned, r.Run, r.Started, r.Produced, r.Good, r.Rework, r.Scrap, r.GoodKg, r.InputKg, r.IdealCycle, r.NeckCycles, r.MachineS, r.MeasuredS)
 		}
 		for _, r := range x.Quality {
-			b.Queue(`INSERT INTO quality_hours VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`,
-				r.Machine, cal(r.Hour), r.Feature, r.Unit, r.N, r.Mean, r.Sd, r.Min, r.Max, r.Lsl, r.Usl, r.Out)
+			b.Queue(`INSERT INTO quality_hours (machine_id, hour, feature, unit, n, mean, sd, min, max, lsl, usl, out_of_spec, measured_n)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT DO NOTHING`,
+				r.Machine, cal(r.Hour), r.Feature, r.Unit, r.N, r.Mean, r.Sd, r.Min, r.Max, r.Lsl, r.Usl, r.Out, r.Measured)
 		}
 		for _, r := range x.Stock {
 			b.Queue(`INSERT INTO stock_hours VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,

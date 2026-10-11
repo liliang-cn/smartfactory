@@ -92,6 +92,10 @@ dimensions:
   - {name: heat_no,       entity: lot,         column: heat_no,     type: categorical, synonyms: [炉号, 炉批号, 材料批次]}
   - {name: defect_supplier, entity: defect,    column: supplier,    type: categorical, synonyms: [缺陷件的钢厂]}
   - {name: defect_heat_no,  entity: defect,    column: heat_no,     type: categorical, synonyms: [缺陷件的炉号]}
+  # measured: the equipment reported the readings; simulated: the twin made them up; mixed: part of the hour each
+  - {name: line_data_source,    entity: line_hour,    column: source, type: categorical, synonyms: [数据来源, 产线数据来源, 实测还是仿真]}
+  - {name: machine_data_source, entity: machine_hour, column: source, type: categorical, synonyms: [设备数据来源, 设备实测还是仿真]}
+  - {name: quality_data_source, entity: quality_hour, column: source, type: categorical, synonyms: [检测数据来源, 检测值实测还是仿真]}
 
 metrics:
   # ---- output and quality (line grain) ----
@@ -128,6 +132,23 @@ metrics:
     description: "废品率 = 报废件数 / 完成件数。"
     synonyms: [废品率, 报废率]
     formula: "1.0 * scrap_units / nullif(produced_units, 0)"
+    additivity: non_additive
+  - name: line_machine_hours
+    description: "产线上各工位的记录时间之和（小时），用于算产线数据的实测占比。"
+    synonyms: [产线设备时间]
+    entity: line_hour
+    agg: sum
+    expr: "machine_s / 3600.0"
+  - name: line_reported_machine_hours
+    description: "产线上各工位数据来自设备实测的时间之和（小时）。"
+    synonyms: [产线实测设备时间]
+    entity: line_hour
+    agg: sum
+    expr: "measured_s / 3600.0"
+  - name: line_reported_share
+    description: "产线数据实测占比 = 实测的工位时间 / 全部工位时间；产量、OEE 等产线指标有多少来自真实设备。"
+    synonyms: [产线实测占比, 产线数据实测率]
+    formula: "line_reported_machine_hours / nullif(line_machine_hours, 0)"
     additivity: non_additive
   - name: good_tonnes
     description: "合格锻件重量（吨）。"
@@ -223,6 +244,23 @@ metrics:
     entity: machine_hour
     agg: sum
     expr: "maint_s / 3600.0"
+  - name: machine_recorded_hours
+    description: "设备有记录的时间（小时）：加工、空等、堵料、故障、维护、换模、停机之和。"
+    synonyms: [设备记录时间]
+    entity: machine_hour
+    agg: sum
+    expr: "(run_s + idle_s + blocked_s + fault_s + maint_s + changeover_s + stopped_s) / 3600.0"
+  - name: machine_reported_hours
+    description: "设备数据来自设备实测（不是仿真）的时间（小时）。"
+    synonyms: [设备实测时间, 实测时间]
+    entity: machine_hour
+    agg: sum
+    expr: "measured_s / 3600.0"
+  - name: machine_reported_share
+    description: "设备数据实测占比 = 实测时间 / 记录时间；1 是全部来自设备，0 是全部仿真。看某个结论能不能代表真实工厂，先看它。"
+    synonyms: [设备实测占比, 实测占比, 实测比例, 数据实测率]
+    formula: "machine_reported_hours / nullif(machine_recorded_hours, 0)"
+    additivity: non_additive
   - name: strokes
     description: "设备加工次数（锻压机即打击/锻造次数）。"
     synonyms: [加工次数, 打击次数, 锻造次数]
@@ -335,6 +373,17 @@ metrics:
     entity: quality_hour
     agg: sum
     expr: "n"
+  - name: reported_inspections
+    description: "检测值由设备上报（不是仿真）的检测件数。"
+    synonyms: [实测检测数, 设备上报检测数]
+    entity: quality_hour
+    agg: sum
+    expr: "measured_n"
+  - name: inspection_reported_share
+    description: "检测值实测占比 = 设备上报的检测件数 / 检测件数。"
+    synonyms: [检测实测占比, 检测数据实测率]
+    formula: "1.0 * reported_inspections / nullif(measured_units, 0)"
+    additivity: non_additive
   - name: out_of_spec_units
     description: "检测超差件数。"
     synonyms: [超差数, 超差件数]

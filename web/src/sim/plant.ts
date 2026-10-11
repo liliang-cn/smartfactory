@@ -586,8 +586,8 @@ export class PlantSim {
     return this.record(a, m.target + dev, quiet);
   }
 
-  /** Records one measured unit (simulated, or reported by the equipment) and checks for drift. */
-  private record(a: Asset, v: number, quiet = false): boolean {
+  /** Records one measured unit (simulated, or reported by the equipment: `measured`) and checks for drift. */
+  private record(a: Asset, v: number, quiet = false, measured = false): boolean {
     const m = a.measure!;
     if (!quiet) {
       this.mcount.set(a.id, ((this.mcount.get(a.id) ?? 0) + 1) % 65536);
@@ -600,7 +600,7 @@ export class PlantSim {
     a.reading = { v, ok, at: this.elapsed };
     if (quiet) return ok;
     if (!ok) a.rejects++;
-    this.history?.measure(a, v, ok);
+    this.history?.measure(a, v, ok, measured);
 
     if (h.length >= 5) {
       const mean = h.slice(-5).reduce((x, y) => x + y, 0) / 5;
@@ -1480,12 +1480,12 @@ export class PlantSim {
         break;
       case 'measure':
         // one message per measured unit (MQTT)
-        if (a.measure && Number.isFinite(num)) this.record(a, num);
+        if (a.measure && Number.isFinite(num)) this.record(a, num, false, true);
         break;
       case 'mcount': {
         // polled protocols: a new unit was measured when the counter moved
         const last = a.live.f.lastMeasure;
-        if (a.measure && prev !== undefined && Number(prev) !== num && typeof last === 'number') this.record(a, last);
+        if (a.measure && prev !== undefined && Number(prev) !== num && typeof last === 'number') this.record(a, last, false, true);
         break;
       }
       case 'stock':
@@ -1585,9 +1585,11 @@ export class PlantSim {
       kpis: {
         oee: r2(k.oee), avail: r2(k.avail), perf: r2(k.perf), quality: r2(k.quality),
         throughputPerHour: r2(k.tp), good: k.good, scrap: k.scrap, powerKW: r2(k.power), energyKWh: r2(k.energy), clock: hhmm(this.clock),
+        // share of the stations whose readings come from the equipment, the rest simulated
+        measuredShare: r2(k.measured),
       },
       lines: this.lines.map((l, i) => ({
-        id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: r2(k.lines[i].tp),
+        id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: r2(k.lines[i].tp), measuredShare: r2(k.lines[i].measured),
         good: l.good, scrap: l.scrap,
       })),
       alarms: this.alarms.slice(0, 60).map((x) => ({ asset: x.asset, text: x.text, prio: x.prio, at: hhmm(x.at), active: x.active, acked: x.acked })),
@@ -1769,7 +1771,8 @@ export class PlantSim {
     const perf = Math.min(1, (line.doneTimes.length * Math.max(...line.stations.map((s) => s.cycle))) / span);
     const avail = line.stations.reduce((s, a) => s + a.avail, 0) / line.stations.length;
     const quality = line.good / Math.max(1, line.good + line.scrap);
-    return { tp, perf, avail, quality, oee: avail * perf * quality, good: line.good, scrap: line.scrap };
+    const measured = line.stations.filter((a) => liveFields(a)).length / line.stations.length;
+    return { tp, perf, avail, quality, oee: avail * perf * quality, good: line.good, scrap: line.scrap, measured };
   }
 
   kpis(): Kpis {
@@ -1777,8 +1780,10 @@ export class PlantSim {
     const avg = (k: keyof LineKpi) => per.reduce((s, x) => s + x[k], 0) / per.length;
     const good = per.reduce((s, x) => s + x.good, 0);
     const scrap = per.reduce((s, x) => s + x.scrap, 0);
+    const stations = this.lines.reduce((n, l) => n + l.stations.length, 0);
     return {
       lines: per,
+      measured: this.lines.reduce((n, l, i) => n + per[i].measured * l.stations.length, 0) / Math.max(1, stations),
       oee: avg('oee'), avail: avg('avail'), perf: avg('perf'), quality: good / Math.max(1, good + scrap),
       tp: per.reduce((s, x) => s + x.tp, 0), good, scrap,
       power: this.powerKW, energy: this.energyKWh, span: Math.max(...this.lines.map(countSpan)),

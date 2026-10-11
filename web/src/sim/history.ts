@@ -5,7 +5,7 @@
 // its own state. Times are local (Asia/Shanghai) wall-clock strings: the database stores them
 // without a zone, and every bucket boundary is a local hour.
 import type { Asset, AssetState, Job, Line, Product } from './types';
-import type { PlantSim } from './plant';
+import { liveFields, type PlantSim } from './plant';
 
 const TZ_MS = 8 * 3600_000;
 const HOUR = 3600_000;
@@ -16,6 +16,14 @@ const hourOf = (ms: number) => Math.floor(ms / HOUR) * HOUR;
 
 /** a part number's row in the parts table: the family, or family:part number */
 export const partId = (line: Line, j?: Job) => (j ? `${line.layout.product.key}:${j.partNo}` : line.layout.product.key);
+
+/** Where a row's numbers came from: equipment that reported them, the simulation, or both. */
+export type Source = 'measured' | 'simulated' | 'mixed';
+
+/** The source of a row from the share of it that was measured (0..1). */
+export const sourceOf = (share: number): Source => (share >= 0.999 ? 'measured' : share <= 0.001 ? 'simulated' : 'mixed');
+
+const share = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 1000 : 0);
 
 const DOWN: Partial<Record<AssetState, string>> = { fault: '设备故障', maint: '计划维护', changeover: '换模换型', stopped: '人为停机' };
 
@@ -28,16 +36,25 @@ interface MachineHour {
   cycles: number; scrap: number; rework: number; kwh: number; fuel: number;
   /** 元: electricity at the hour's tariff, and fuel */
   powerCost: number; fuelCost: number;
+  /** seconds of the hour the machine's readings came from the equipment */
+  measured: number;
+  measuredShare?: number; source?: Source;
 }
 interface LineHour {
   line: string; hour: string; planned: number; run: number;
   /** units the bottleneck machine finished: what performance counts (setup pieces scrapped upstream never reach it) */
   neckCycles: number;
   started: number; produced: number; good: number; rework: number; scrap: number; goodKg: number; inputKg: number; idealCycle: number;
+  /** machine-seconds of the line's stations, and how many of them were measured */
+  machineS: number; measuredS: number;
+  measuredShare?: number; source?: Source;
 }
 interface QualityHour {
   machine: string; hour: string; feature: string; unit: string; n: number; sum: number; sq: number; min: number; max: number;
   lsl: number | null; usl: number | null; out: number;
+  /** units whose reading the equipment reported */
+  measured: number;
+  measuredShare?: number; source?: Source;
 }
 interface StockHour { item: string; label: string; hour: string; min: number; end: number; cap: number }
 interface Downtime { machine: string; line: string; start: string; end: string; category: string; reason: string }
@@ -115,7 +132,10 @@ export class History {
       lh.planned += dt;
       const neck = this.neck(line);
       if (neck.state === 'running') lh.run += dt;
-      for (const a of line.stations) this.machineStep(a, line, dt, now);
+      for (const a of line.stations) {
+        lh.machineS += dt;
+        if (this.machineStep(a, line, dt, now)) lh.measuredS += dt;
+      }
     }
     for (const it of this.sim.inventory) {
       const k = it.key;
@@ -131,10 +151,15 @@ export class History {
     return line.stations.reduce((m, a) => (a.cycle > m.cycle ? a : m), line.stations[0]);
   }
 
-  private machineStep(a: Asset, line: Line, dt: number, now: number) {
+  /** Adds dt of a's state to its hour; says whether the equipment reported it. */
+  private machineStep(a: Asset, line: Line, dt: number, now: number): boolean {
     const h = this.machineHour(a);
     const st = a.state === 'running' ? 'run' : a.state;
-    if (STATES.has(st)) h[st as StateKey] += dt;
+    const measured = !!liveFields(a);
+    if (STATES.has(st)) {
+      h[st as StateKey] += dt;
+      if (measured) h.measured += dt;
+    }
     h.kwh += (a.power * dt) / 3600;
     h.powerCost += ((a.power * dt) / 3600) * this.price;
     const fuel = a.machine?.fuel;
@@ -145,7 +170,7 @@ export class History {
     }
     // downtime and changeovers from state transitions
     const prev = this.open.get(a.id);
-    if (prev && prev.state === a.state) return;
+    if (prev && prev.state === a.state) return measured;
     if (prev) this.close(a, line, prev, now);
     if (DOWN[a.state]) {
       const t = a.tool;
@@ -159,6 +184,7 @@ export class History {
     } else {
       this.open.delete(a.id);
     }
+    return measured;
   }
 
   private close(a: Asset, line: Line, o: Open, now: number) {
@@ -216,12 +242,13 @@ export class History {
     }
   }
 
-  measure(a: Asset, v: number, ok: boolean) {
+  /** one unit's reading; `measured` when the equipment reported it */
+  measure(a: Asset, v: number, ok: boolean, measured = false) {
     const m = a.measure!;
     const key = a.id;
     let q = this.qh.get(key);
     if (!q) {
-      q = { machine: this.id(a), hour: localTime(this.hour), feature: m.label, unit: m.unit, n: 0, sum: 0, sq: 0, min: v, max: v, lsl: m.lo ?? null, usl: m.hi ?? null, out: 0 };
+      q = { machine: this.id(a), hour: localTime(this.hour), feature: m.label, unit: m.unit, n: 0, sum: 0, sq: 0, min: v, max: v, lsl: m.lo ?? null, usl: m.hi ?? null, out: 0, measured: 0 };
       this.qh.set(key, q);
     }
     q.n++;
@@ -230,6 +257,7 @@ export class History {
     q.min = Math.min(q.min, v);
     q.max = Math.max(q.max, v);
     if (!ok) q.out++;
+    if (measured) q.measured++;
   }
 
   private lot(line: Line, p: Product) {
@@ -255,7 +283,7 @@ export class History {
     if (!h) {
       h = {
         machine: this.id(a), hour: localTime(this.hour), run: 0, idle: 0, blocked: 0, fault: 0, maint: 0, changeover: 0, stopped: 0,
-        cycles: 0, scrap: 0, rework: 0, kwh: 0, fuel: 0, powerCost: 0, fuelCost: 0,
+        cycles: 0, scrap: 0, rework: 0, kwh: 0, fuel: 0, powerCost: 0, fuelCost: 0, measured: 0,
       };
       this.mh.set(a.id, h);
     }
@@ -267,7 +295,7 @@ export class History {
     if (!h) {
       h = {
         line: this.id(line), hour: localTime(this.hour), planned: 0, run: 0, neckCycles: 0, started: 0, produced: 0, good: 0, rework: 0, scrap: 0,
-        goodKg: 0, inputKg: 0, idealCycle: this.neck(line).cycle,
+        goodKg: 0, inputKg: 0, idealCycle: this.neck(line).cycle, machineS: 0, measuredS: 0,
       };
       this.lh.set(line.id, h);
     }
@@ -285,17 +313,27 @@ export class History {
     const r1 = (x: number) => Math.round(x * 10) / 10;
     const r3 = (x: number) => Math.round(x * 1000) / 1000;
     for (const h of this.mh.values()) {
+      const total = h.run + h.idle + h.blocked + h.fault + h.maint + h.changeover + h.stopped;
+      const ms = share(h.measured, total);
       this.out.machineHours.push({
         ...h, run: r1(h.run), idle: r1(h.idle), blocked: r1(h.blocked), fault: r1(h.fault), maint: r1(h.maint),
         changeover: r1(h.changeover), stopped: r1(h.stopped), kwh: r3(h.kwh), fuel: r3(h.fuel), powerCost: r3(h.powerCost), fuelCost: r3(h.fuelCost),
+        measured: r1(h.measured), measuredShare: ms, source: sourceOf(ms),
       });
     }
-    for (const h of this.lh.values()) this.out.lineHours.push({ ...h, planned: r1(h.planned), run: r1(h.run), goodKg: r3(h.goodKg), inputKg: r3(h.inputKg) });
+    for (const h of this.lh.values()) {
+      const ms = share(h.measuredS, h.machineS);
+      this.out.lineHours.push({
+        ...h, planned: r1(h.planned), run: r1(h.run), goodKg: r3(h.goodKg), inputKg: r3(h.inputKg),
+        machineS: r1(h.machineS), measuredS: r1(h.measuredS), measuredShare: ms, source: sourceOf(ms),
+      });
+    }
     for (const q of this.qh.values()) {
       const mean = q.sum / q.n;
       const sd = q.n > 1 ? Math.sqrt(Math.max(0, (q.sq - q.n * mean * mean) / (q.n - 1))) : 0;
       const { sum: _s, sq: _q, ...rest } = q;
-      this.out.quality.push({ ...rest, mean: Math.round(mean * 1e4) / 1e4, sd: Math.round(sd * 1e5) / 1e5 });
+      const ms = share(q.measured, q.n);
+      this.out.quality.push({ ...rest, mean: Math.round(mean * 1e4) / 1e4, sd: Math.round(sd * 1e5) / 1e5, measuredShare: ms, source: sourceOf(ms) });
     }
     for (const s of this.sh.values()) this.out.stock.push({ ...s });
     this.mh.clear();
