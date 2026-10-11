@@ -355,6 +355,31 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 命令行：`smartfactory orders <company>`（`show`、`send -f`、`cancel`、`pull [-dry]`、`erp`）。工作台助手有 `list_orders`、`erp_status`，撤回工单要管理员确认。孪生里的售后服务助手用 `production_orders` 回答客户问的订单进度。
 
+### 仿真校准 `/api/admin/calib/{company}`、`/api/calib/{company}/residuals`
+
+接了实测数据的设备，孪生用实测值代替仿真值，同时让模型自己接着算一份，记下"模型 − 实测"的偏差（残差）：温度按模型自己的升温过程算，功率和振动按当前状态和速度算。残差按分钟存在数据目录的 `calib.db`。
+
+拟合从存下的读数（时序库）出发，按仿真用的同一套公式估计每台设备的参数：
+
+- 待机、运行温升和升温时间常数：按记录的状态序列把温度模型重放一遍，时间常数网格搜索，两个温升最小二乘；状态切换少于 3 次时时间常数沿用模板。
+- 待机功率、运行加功率、运行振动：各状态下的中位数（按速度、健康度折算到满速满健康）。
+- 节拍：要设备上报 `cycles`（累计件数），用运行时长除以件数。
+- 故障间隔和修复时间：从 `state` 的故障事件统计，至少 3 次。
+
+每个参数带依据的读数（或事件）个数、可信度（`good` / `fair` / `poor`）；读数太少、覆盖时间太短、设备没上报状态时不拟合，`note` 说明缺什么。拟合结果附回放误差：同一段时间用模板参数和拟合参数各算一遍，和实测比平均绝对误差。
+
+拟合不会改变仿真。管理员应用后，这台设备在仿真里改用拟合的参数（只替换拟合出来的那些），存档里带着它，推演（`simulate_plan`）也按它算，并在结果的 `校准` 里列出哪些设备哪些参数是拟合的。随时可以撤销，恢复模板。公司的配置文件不变。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/admin/calib/{company}` | `Calibration` | 每台设备：模板、拟合、在用的参数，回放误差，近 24 小时的残差；管理员 |
+| `POST /api/admin/calib/{company}/fit` | `CalibRequest {machines?, hours?}` → `Calibration` | 按最近 `hours`（默认 24）小时的读数拟合；不给 `machines` 就是所有存了读数的设备 |
+| `POST /api/admin/calib/{company}/apply` | `CalibRequest {machines?}` → `CalibOutcomes` | 应用拟合的参数；不给就是所有拟合过的设备 |
+| `POST /api/admin/calib/{company}/revert` | `CalibRequest {machines?}` → `CalibOutcomes` | 撤销，恢复模板参数；不给就是全部 |
+| `GET /api/calib/{company}/residuals?machine=&field=&from=&to=&step=` | `Residuals` | 一台设备一个字段（`temp`、`power`、`vib`）的残差，按 `step` 秒（至少一分钟）汇总；成员以上 |
+
+设备用编号（`HP-101`）或 `工厂/编号`（`p1/HP-101`）指定。审计记录 `calib.fit`、`calib.apply`、`calib.revert`。命令行：`smartfactory calib <company>`（`show <设备>`、`fit [-hours 24]`、`apply`、`revert`）。工作台助手有 `calibration` 看校准，`propose_apply_calibration` 提出应用（`ConsoleAction` 的 `apply_calibration {company, machines?}`），要管理员确认。
+
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。

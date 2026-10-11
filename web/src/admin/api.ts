@@ -31,6 +31,9 @@ export type OrderResults = z.infer<typeof P.OrderResults>;
 export type ERPConfig = z.infer<typeof P.ERPConfig>;
 export type ERPOverview = z.infer<typeof P.ERPOverview>;
 export type PullResult = z.infer<typeof P.PullResult>;
+export type CalibMachine = z.infer<typeof P.CalibMachine>;
+export type CalibOutcomes = z.infer<typeof P.CalibOutcomes>;
+export type ResidualPoint = z.infer<typeof P.Residuals>[number];
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -159,6 +162,14 @@ export const orders = (c: string, status: string[] = [], q = '') =>
 export const order = (c: string, no: string) => call<Order>('GET', `${ordersPath(c)}/${encodeURIComponent(no)}`);
 export const sendOrders = (c: string, list: OrderInput[]) => call<OrderResults>('POST', ordersPath(c), list);
 export const cancelOrder = (c: string, no: string) => call<Order>('DELETE', `${ordersPath(c)}/${encodeURIComponent(no)}`);
+
+const calibPath = (c: string) => `/api/admin/calib/${encodeURIComponent(c)}`;
+export const calibration = (c: string) => call<CalibMachine[]>('GET', calibPath(c));
+export const fitCalibration = (c: string, machines: string[], hours: number) => call<CalibMachine[]>('POST', `${calibPath(c)}/fit`, { machines, hours });
+export const applyCalibration = (c: string, machines: string[]) => call<CalibOutcomes>('POST', `${calibPath(c)}/apply`, { machines });
+export const revertCalibration = (c: string, machines: string[]) => call<CalibOutcomes>('POST', `${calibPath(c)}/revert`, { machines });
+export const residuals = (c: string, machine: string, field: string, from: number, step: number) =>
+  call<ResidualPoint[]>('GET', `/api/calib/${encodeURIComponent(c)}/residuals?machine=${encodeURIComponent(machine)}&field=${field}&from=${from}&step=${step}`);
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;
