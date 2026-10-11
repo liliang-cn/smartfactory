@@ -98,6 +98,20 @@ type Machine struct {
 	Faults   []string `json:"faults"`
 	Measured bool     `json:"measured"`
 	Tooling  bool     `json:"tooling"`
+	// Trip is the temperature (°C) it stops at, Power its running power (kW), Vib its vibration
+	// (mm/s) at full speed; Measure the spec of what it measures. Zero when it has none.
+	Trip    float64      `json:"trip,omitempty"`
+	Power   float64      `json:"power,omitempty"`
+	Vib     float64      `json:"vib,omitempty"`
+	Measure *MeasureSpec `json:"measure,omitempty"`
+}
+
+// MeasureSpec is what a machine measures on each unit: the target, the limits, the spread.
+type MeasureSpec struct {
+	Target float64  `json:"target"`
+	Lo     *float64 `json:"lo,omitempty"`
+	Hi     *float64 `json:"hi,omitempty"`
+	Sigma  float64  `json:"sigma"`
 }
 
 // Node is the OPC UA node id of a machine field.

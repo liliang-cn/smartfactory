@@ -23,7 +23,27 @@ type Tag struct {
 	// T is At in unix milliseconds, for clients.
 	T  int64     `json:"t"`
 	At time.Time `json:"-"`
+	// Q flags a reading that is kept but not believed (FlagRange, FlagSpike) or whose own time
+	// could not be used (FlagClock).
+	Q uint8 `json:"q,omitempty"`
 }
+
+// Quality flags.
+const (
+	// FlagRange: outside the plausible range of the field.
+	FlagRange uint8 = 1 << iota
+	// FlagSpike: changed faster than the field can.
+	FlagSpike
+	// FlagClock: the device's timestamp was unusable (in the future); it carries arrival time.
+	FlagClock
+)
+
+// Doubtful is a flag that keeps a reading from the twin.
+const Doubtful = FlagRange | FlagSpike
+
+// Late is how old a reading may be and still count as live: older ones (a gateway replaying
+// what it buffered) are kept but do not move the twin.
+const Late = time.Minute
 
 func (t Tag) key() string { return t.Company + "/" + t.Plant + "/" + t.Asset + "/" + t.Field }
 
@@ -58,6 +78,9 @@ type SourceStatus struct {
 	Points    int       `json:"points"`
 	Received  uint64    `json:"received"`
 	LastAt    time.Time `json:"lastAt"`
+	// Flagged readings were kept but not given to the twin; LastFlag says why the last one was.
+	Flagged  uint64 `json:"flagged,omitempty"`
+	LastFlag string `json:"lastFlag,omitempty"`
 	// Targets are the assets this source feeds, as company/plant/asset.
 	Targets []string `json:"targets"`
 	// Labels name each target for people ("华锻集团 一厂 · HP-101"); filled by the web layer.
@@ -71,6 +94,12 @@ type Sub struct {
 }
 
 type Hub struct {
+	// Check judges a reading before it is published (sets Q, returns why when it flags it).
+	Check func(t *Tag) string
+	// Tap sees every reading, flagged and late ones included (the series store keeps them). It
+	// must not block.
+	Tap func(Tag)
+
 	mu      sync.RWMutex
 	last    map[string]Tag
 	subs    map[*Sub]struct{}
@@ -82,20 +111,42 @@ func NewHub() *Hub {
 	return &Hub{last: map[string]Tag{}, subs: map[*Sub]struct{}{}, sources: map[string]*SourceStatus{}}
 }
 
-// Publish records a value and fans it out.
+// Publish records a value and fans it out. A doubtful or late reading only reaches Tap: the
+// twin, the browsers and the current values carry on with the last good one.
 func (h *Hub) Publish(t Tag) {
+	now := time.Now()
 	if t.At.IsZero() {
-		t.At = time.Now()
+		t.At = now
+	}
+	why := ""
+	if h.Check != nil {
+		why = h.Check(&t)
 	}
 	t.T = t.At.UnixMilli()
+	live := t.Q&Doubtful == 0 && now.Sub(t.At) < Late
 	h.mu.Lock()
-	h.last[t.key()] = t
+	if prev, ok := h.last[t.key()]; live && (!ok || !t.At.Before(prev.At)) {
+		h.last[t.key()] = t
+	} else {
+		live = live && !ok
+	}
 	if s := h.sources[t.Source]; s != nil {
 		s.Received++
-		s.LastAt = t.At
+		if t.At.After(s.LastAt) {
+			s.LastAt = t.At
+		}
+		if t.Q&Doubtful != 0 {
+			s.Flagged++
+			s.LastFlag = why
+		}
 	}
 	h.mu.Unlock()
-	h.broadcast(Event{Type: "tag", Tag: &t})
+	if h.Tap != nil {
+		h.Tap(t)
+	}
+	if live {
+		h.broadcast(Event{Type: "tag", Tag: &t})
+	}
 }
 
 // Command hands an operator action to every adapter that can act on it and to every browser.

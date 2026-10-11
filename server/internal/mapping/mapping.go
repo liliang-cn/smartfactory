@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"smartfactory/internal/config"
 	"smartfactory/internal/tags"
@@ -97,6 +98,117 @@ func Extract(payload []byte, path string) (any, error) {
 	return cur, nil
 }
 
+// Future is how far ahead of the server's clock a device's timestamp may be: further, and the
+// reading is taken to have arrived now (and flagged).
+const Future = 5 * time.Minute
+
+// ParseTime reads when a device took a reading: epoch milliseconds or seconds (a number or a
+// numeric string), or RFC 3339.
+func ParseTime(v any) (time.Time, bool) {
+	var n float64
+	switch x := v.(type) {
+	case float64:
+		n = x
+	case json.Number:
+		f, err := x.Float64()
+		if err != nil {
+			return time.Time{}, false
+		}
+		n = f
+	case string:
+		s := strings.TrimSpace(x)
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			n = f
+			break
+		}
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02 15:04:05.000", "2006-01-02 15:04:05"} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t, true
+			}
+		}
+		return time.Time{}, false
+	default:
+		return time.Time{}, false
+	}
+	switch {
+	case n <= 0:
+		return time.Time{}, false
+	case n > 1e14: // microseconds
+		return time.UnixMicro(int64(n)), true
+	case n > 1e11: // milliseconds
+		return time.UnixMilli(int64(n)), true
+	}
+	sec, frac := math.Modf(n)
+	return time.Unix(int64(sec), int64(frac*1e9)), true
+}
+
+// Stamp sets when a reading was taken from a device timestamp, keeping arrival time (and
+// flagging the reading) when the timestamp is in the future.
+func Stamp(t *tags.Tag, v any, now time.Time) {
+	at, ok := ParseTime(v)
+	if !ok {
+		return
+	}
+	if at.After(now.Add(Future)) {
+		t.At = now
+		t.Q |= tags.FlagClock
+		return
+	}
+	t.At = at
+}
+
+// timed splits {"v": x, "t": when} (or "value") into the value and its timestamp.
+func timed(v any) (val any, ts any) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return v, nil
+	}
+	for _, k := range []string{"v", "value"} {
+		if x, ok := m[k]; ok {
+			return x, firstOf(m, "t", "ts", "time")
+		}
+	}
+	return v, nil
+}
+
+func firstOf(m map[string]any, keys ...string) any {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			return v
+		}
+	}
+	return nil
+}
+
+// ExtractTimed is Extract plus when the reading was taken: from timePath when given, else from
+// "t" beside "v"/"value" in an object payload; nil when the payload does not say.
+func ExtractTimed(payload []byte, path, timePath string) (any, any, error) {
+	if timePath != "" {
+		v, err := Extract(payload, path)
+		if err != nil {
+			return nil, nil, err
+		}
+		ts, err := Extract(payload, timePath)
+		if err != nil {
+			return v, nil, nil
+		}
+		return v, ts, nil
+	}
+	if path == "" {
+		s := strings.TrimSpace(string(payload))
+		if strings.HasPrefix(s, "{") {
+			var doc any
+			if err := json.Unmarshal(payload, &doc); err != nil {
+				return nil, nil, fmt.Errorf("payload is not JSON: %w", err)
+			}
+			v, ts := timed(doc)
+			return v, ts, nil
+		}
+	}
+	v, err := Extract(payload, path)
+	return v, nil, err
+}
+
 // Convert applies an enumeration map, then scale and offset to numbers.
 func Convert(v any, p config.Point) any {
 	if len(p.Map) > 0 {
@@ -146,8 +258,15 @@ func toFloat(v any) (float64, bool) {
 }
 
 // Convention parses {prefix}/{company}/{plant}/{asset}[/{field}] topics. A topic ending in
-// /cmd is a command the server itself publishes and is ignored.
+// /cmd is a command the server itself publishes and is ignored. A reading carries the device's
+// own time when the payload gives one: {"v": 61.5, "t": 1760000000000} on a field topic, a "t"
+// (or "ts") member of an asset topic's object for all its fields, or {"v", "t"} as one field's value.
 func Convention(prefix, topic string, payload []byte, src string) ([]tags.Tag, error) {
+	return ConventionAt(prefix, topic, payload, src, time.Now())
+}
+
+// ConventionAt is Convention with the server's clock given.
+func ConventionAt(prefix, topic string, payload []byte, src string, now time.Time) ([]tags.Tag, error) {
 	parts := strings.Split(topic, "/")
 	if len(parts) < 4 || parts[0] != prefix {
 		return nil, nil
@@ -158,25 +277,36 @@ func Convention(prefix, topic string, payload []byte, src string) ([]tags.Tag, e
 		if parts[4] == "cmd" {
 			return nil, nil
 		}
-		v, err := Extract(payload, "")
+		v, ts, err := ExtractTimed(payload, "", "")
 		if err != nil {
 			return nil, err
 		}
-		return []tags.Tag{{Company: c, Plant: p, Asset: a, Field: parts[4], Value: v, Source: src}}, nil
+		t := tags.Tag{Company: c, Plant: p, Asset: a, Field: parts[4], Value: v, Source: src}
+		Stamp(&t, ts, now)
+		return []tags.Tag{t}, nil
 	case 4:
 		var m map[string]any
 		if err := json.Unmarshal(payload, &m); err != nil {
 			return nil, fmt.Errorf("%s: expected a JSON object of fields: %w", topic, err)
 		}
+		at := firstOf(m, "t", "ts")
 		// alphabetical, so a fault's text arrives before the fault state and a reading before its counter
 		fields := make([]string, 0, len(m))
 		for f := range m {
-			fields = append(fields, f)
+			if f != "t" && f != "ts" {
+				fields = append(fields, f)
+			}
 		}
 		sort.Strings(fields)
 		out := make([]tags.Tag, 0, len(m))
 		for _, f := range fields {
-			out = append(out, tags.Tag{Company: c, Plant: p, Asset: a, Field: f, Value: m[f], Source: src})
+			v, ts := timed(m[f])
+			if ts == nil {
+				ts = at
+			}
+			t := tags.Tag{Company: c, Plant: p, Asset: a, Field: f, Value: v, Source: src}
+			Stamp(&t, ts, now)
+			out = append(out, t)
 		}
 		return out, nil
 	}
