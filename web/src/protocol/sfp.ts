@@ -550,7 +550,7 @@ export const AuditEntry = z.object({
   via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
 });
@@ -797,11 +797,49 @@ export const PullResult = z.object({
   created: num, updated: num, failed: num,
 }).meta({ description: 'POST /api/admin/erp/{company}/pull?dry=1 — what a pull reads and where each order would run (dry: nothing stored)' });
 
+// ---------- calibration (/api/admin/calib/{company}, /api/calib/{company}/residuals) ----------
+
+/** A machine's simulation parameter: the template's value, the one fitted from its readings, the one in force. */
+export const CalibParam = z.object({
+  /** idleRise · runRise · tau · pIdle · pRun (what running adds at full speed) · vib · cycle · mtbf · repairMin · repairMax */
+  name: str, label: str, unit: str, template: num,
+  /** absent when the readings do not allow it: note says why */
+  fitted: num.optional(),
+  applied: num.optional(),
+  /** readings (or events) it was fitted from */
+  n: num,
+  quality: z.enum(['good', 'fair', 'poor']).optional(),
+  note: str.optional(),
+});
+/** The fitted period played back: the model's mean absolute error with the template's parameters and with the fitted ones. */
+export const CalibReplay = z.object({ field: z.enum(['temp', 'power', 'vib']), before: num, after: num, n: num });
+/** How far a machine's model was from what it measured (model − measured): mean, mean absolute, share of the time within tolerance. */
+export const ResidualSummary = z.object({ field: str, seconds: num, mean: num, mae: num, within: num });
+
+export const CalibMachine = z.object({
+  plant: str, plantName: str, line: str, asset: str, name: str, label: str,
+  /** reporting now · has readings stored to fit from */
+  live: z.boolean(), stored: z.boolean(),
+  params: z.array(CalibParam),
+  replay: z.array(CalibReplay),
+  fittedAt: time.optional(), from: time.optional(), to: time.optional(),
+  appliedAt: time.optional(), appliedBy: str.optional(),
+  /** over the last 24 hours */
+  residual: z.array(ResidualSummary),
+});
+export const Calibration = z.array(CalibMachine).meta({ description: 'GET /api/admin/calib/{company}; POST …/fit answers the machines it fitted — administrators' });
+/** POST /api/admin/calib/{company}/fit | apply | revert: the machines ("plant/asset" or the asset id; none: all), and for a fit the hours of readings (default 24) */
+export const CalibRequest = z.object({ machines: z.array(str).optional(), hours: num.optional() });
+export const CalibOutcomes = z.array(z.object({ machine: str, ok: z.boolean(), params: num.optional(), error: str.optional() }))
+  .meta({ description: 'POST /api/admin/calib/{company}/apply | revert — each machine answered on its own' });
+export const Residuals = z.array(z.object({ t: num, seconds: num, mean: num, mae: num, within: num }))
+  .meta({ description: 'GET /api/calib/{company}/residuals?machine=&field=temp|power|vib&from=&to=&step= — by step seconds (a minute at least); members and above' });
+
 // ---------- the console agent (/api/admin/agent) ----------
 
 /** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
 export const ConsoleAction = z.object({
-  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order']),
+  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [
@@ -829,6 +867,7 @@ export const DEFS = {
   KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, ConsoleAction, ConsoleEvent,
   Templates, TemplateSummary, Template, SaveTemplate,
   Order, Orders, OrderInput, OrderResults, OrderCallback, ERPConfig, ERPOverview, PullResult,
+  CalibMachine, Calibration, CalibRequest, CalibOutcomes, Residuals,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

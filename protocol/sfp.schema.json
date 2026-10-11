@@ -4130,7 +4130,8 @@
             "issue_token",
             "revoke_token",
             "rebuild_knowledge",
-            "cancel_order"
+            "cancel_order",
+            "apply_calibration"
           ]
         },
         "title": {
@@ -4995,6 +4996,255 @@
       ],
       "additionalProperties": false,
       "description": "POST /api/admin/erp/{company}/pull?dry=1 — what a pull reads and where each order would run (dry: nothing stored)"
+    },
+    "CalibMachine": {
+      "type": "object",
+      "properties": {
+        "plant": {
+          "type": "string"
+        },
+        "plantName": {
+          "type": "string"
+        },
+        "line": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "live": {
+          "type": "boolean"
+        },
+        "stored": {
+          "type": "boolean"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "template": {
+                "type": "number"
+              },
+              "fitted": {
+                "type": "number"
+              },
+              "applied": {
+                "type": "number"
+              },
+              "n": {
+                "type": "number"
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "good",
+                  "fair",
+                  "poor"
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "label",
+              "unit",
+              "template",
+              "n"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "replay": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "temp",
+                  "power",
+                  "vib"
+                ]
+              },
+              "before": {
+                "type": "number"
+              },
+              "after": {
+                "type": "number"
+              },
+              "n": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "field",
+              "before",
+              "after",
+              "n"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "fittedAt": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "appliedAt": {
+          "type": "string"
+        },
+        "appliedBy": {
+          "type": "string"
+        },
+        "residual": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "seconds": {
+                "type": "number"
+              },
+              "mean": {
+                "type": "number"
+              },
+              "mae": {
+                "type": "number"
+              },
+              "within": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "field",
+              "seconds",
+              "mean",
+              "mae",
+              "within"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "plant",
+        "plantName",
+        "line",
+        "asset",
+        "name",
+        "label",
+        "live",
+        "stored",
+        "params",
+        "replay",
+        "residual"
+      ],
+      "additionalProperties": false
+    },
+    "Calibration": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CalibMachine"
+      },
+      "description": "GET /api/admin/calib/{company}; POST …/fit answers the machines it fitted — administrators"
+    },
+    "CalibRequest": {
+      "type": "object",
+      "properties": {
+        "machines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hours": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CalibOutcomes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "params": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "machine",
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "description": "POST /api/admin/calib/{company}/apply | revert — each machine answered on its own"
+    },
+    "Residuals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "number"
+          },
+          "seconds": {
+            "type": "number"
+          },
+          "mean": {
+            "type": "number"
+          },
+          "mae": {
+            "type": "number"
+          },
+          "within": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "seconds",
+          "mean",
+          "mae",
+          "within"
+        ],
+        "additionalProperties": false
+      },
+      "description": "GET /api/calib/{company}/residuals?machine=&field=temp|power|vib&from=&to=&step= — by step seconds (a minute at least); members and above"
     },
     "Source": {
       "type": "object",

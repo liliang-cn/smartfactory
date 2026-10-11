@@ -26,8 +26,9 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 看：list_customers、get_customer（配置和知识库概况）、list_industries、get_industry、list_tokens、activity（操作记录）。
 - 知识库：knowledge_search（文档和工艺）、knowledge_entity（工艺图里一样东西的上下游和关系）。
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
+- 仿真校准：calibration（每台设备的模型参数：模板值、按实测拟合的值、在用的值，拟合回放的误差，最近一天模型和实测差多少）。拟合要管理员在后台点；你可以 propose_apply_calibration 提出应用拟合好的参数，说清楚哪些参数会变、误差能降多少。
 - 写配置：check_company 检查一份公司配置（不创建）；check_industry 检查一个行业包（不保存）。
-- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
+- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order、propose_apply_calibration。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
 规则：
 - 用中文，简洁。数字、编号、名称以工具返回为准，不要编。
@@ -153,6 +154,34 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			}},
 		{"erp_status", "一家公司的 ERP 对接：开没开、没工单时停线还是仿真、拉取地址和上次结果、回调成功失败数、各状态工单数。", obj(map[string]any{"company": str("公司 id")}, "company"),
 			func(m map[string]any) (any, error) { return o.ERP(who, s(m, "company")) }},
+		{"calibration", "一家公司每台设备的仿真参数：模板值、按实测拟合的值（附依据的读数个数和可信度，拟合不了的说明缺什么）、在用的值；拟合期间回放的误差（模板 vs 拟合）；最近一天模型和实测差多少。只列有实测数据或在用校准的设备。", obj(map[string]any{"company": str("公司 id")}, "company"),
+			func(m map[string]any) (any, error) {
+				all, err := o.Calibration(who, s(m, "company"))
+				if err != nil {
+					return nil, err
+				}
+				var out []any
+				for _, x := range all {
+					if x.Stored || x.AppliedAt != nil || len(x.Residual) > 0 {
+						out = append(out, x)
+					}
+				}
+				if out == nil {
+					return map[string]any{"machines": []any{}, "note": "没有设备上报过实测数据，没有可校准的"}, nil
+				}
+				return map[string]any{"machines": out}, nil
+			}},
+		{"propose_apply_calibration", "提出应用拟合好的仿真参数（只应用拟合出来的那些），交管理员确认。machines 不给就是所有拟合过的设备。", obj(map[string]any{
+			"company":  str("公司 id"),
+			"machines": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "设备编号，如 HP-101，或 plant/asset；可省"},
+		}, "company"),
+			func(m map[string]any) (any, error) {
+				args := map[string]any{"company": s(m, "company")}
+				if ms, ok := m["machines"].([]any); ok && len(ms) > 0 {
+					args["machines"] = ms
+				}
+				return propose(Action{Kind: "apply_calibration", Args: args, Detail: "仿真改用拟合的参数，推演也按它算；随时可以在后台撤销"})
+			}},
 		{"propose_cancel_order", "提出撤回一张工单（在做的产线会停下它转做下一张），交管理员确认。", obj(map[string]any{"company": str("公司 id"), "no": str("工单号")}, "company", "no"),
 			func(m map[string]any) (any, error) {
 				return propose(Action{Kind: "cancel_order", Args: map[string]any{"company": s(m, "company"), "no": s(m, "no")}, Detail: "在做的产线停下它，转做下一张；ERP 再发一次同号工单会重新排队"})

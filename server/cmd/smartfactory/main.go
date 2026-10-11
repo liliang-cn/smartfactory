@@ -37,6 +37,7 @@ import (
 	"smartfactory/internal/agents"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
+	"smartfactory/internal/calib"
 	"smartfactory/internal/config"
 	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
@@ -365,9 +366,31 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			}
 		}
 	}
+	// each machine's model held against its measurements, and parameters fitted from them
+	var calibration *calib.Service
+	if cfg.Data != "" && readings != nil {
+		st, err := calib.Open(cfg.Data)
+		if err != nil {
+			return fmt.Errorf("calibration: %w", err)
+		}
+		defer st.Close()
+		calibration = calib.New(st, eng, readings, log)
+		go calibration.Run(ctx)
+		changed := eng.OnChange
+		eng.OnChange = func(company string, deleted bool) {
+			if changed != nil {
+				changed(company, deleted)
+			}
+			if !deleted {
+				if err := calibration.Push(company); err != nil {
+					log.Error("calibration", "company", company, "err", err)
+				}
+			}
+		}
+	}
 	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Series: readings, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

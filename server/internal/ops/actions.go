@@ -12,7 +12,7 @@ import (
 // An Action is a change the console agent proposes and a person carries out: the page shows it
 // with a button, the command line asks y/N, and either runs it here as the person who confirmed.
 type Action struct {
-	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order
+	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order | apply_calibration
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
 	Title  string         `json:"title"`
@@ -51,6 +51,8 @@ func (o *Ops) Do(ctx context.Context, who auth.Who, via string, a Action) (any, 
 		return o.KnowledgeRebuild(ctx, who, via, str("company"))
 	case "cancel_order":
 		return o.CancelOrder(who, via, str("company"), str("no"))
+	case "apply_calibration":
+		return o.ApplyCalibration(who, via, str("company"), strs(a.Args["machines"]))
 	}
 	return nil, fail(400, "没有这种操作：%s", a.Kind)
 }
@@ -99,8 +101,31 @@ func (o *Ops) describe(a *Action) error {
 		a.Title = "重建" + named(str("company")) + "的知识库"
 	case "cancel_order":
 		a.Title = "撤回工单 " + str("no")
+	case "apply_calibration":
+		ms := strs(a.Args["machines"])
+		which := "所有拟合过的设备"
+		if len(ms) > 0 {
+			which = strings.Join(ms, "、")
+		}
+		a.Title = fmt.Sprintf("应用%s %s的校准参数", named(str("company")), which)
 	default:
 		return fail(400, "没有这种操作：%s", a.Kind)
 	}
 	return nil
+}
+
+// strs reads a list of strings from an action's arguments.
+func strs(v any) []string {
+	var out []string
+	switch x := v.(type) {
+	case []any:
+		for _, e := range x {
+			if s, ok := e.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+	case []string:
+		out = x
+	}
+	return out
 }

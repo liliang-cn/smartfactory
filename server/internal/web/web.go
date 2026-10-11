@@ -23,6 +23,7 @@ import (
 	"smartfactory/internal/agents"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
+	"smartfactory/internal/calib"
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
@@ -65,6 +66,8 @@ type Server struct {
 	Saved *templates.Store
 	// Production is the companies' ERP connections and production orders (nil without data).
 	Production *erp.Service
+	// Calib fits machines' parameters from their stored readings (nil without data).
+	Calib *calib.Service
 	// Series is the readings equipment sent (nil without data).
 	Series *series.Store
 
@@ -136,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	s.adminRoutes(mux)
 	s.seriesRoutes(mux)
 	s.erpRoutes(mux)
+	s.calibRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())

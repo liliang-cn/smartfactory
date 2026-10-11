@@ -63,6 +63,9 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     case 'token.issue': return { text: `发令牌给${titleOf(e.target)}（${ROLE[e.detail as Entry['role']] ?? e.detail}）` };
     case 'token.revoke': return { text: `撤销${titleOf(e.target)}的令牌` };
     case 'knowledge.rebuild': return { text: `重建 ${e.target} 的知识库` };
+    case 'calib.fit': return { text: `按实测拟合 ${e.target || '所有设备'}（${e.detail}）` };
+    case 'calib.apply': return { text: `应用 ${e.target} 的校准参数` };
+    case 'calib.revert': return { text: `撤销 ${e.target} 的校准，恢复模板参数` };
     case 'erp.config': return { text: `设置 ERP 对接：${e.detail}` };
     case 'erp.secret': return { text: '换 ERP 回调的签名密钥' };
     case 'erp.pull': return { text: `从 ERP 拉取工单：${e.detail}` };

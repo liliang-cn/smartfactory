@@ -16,6 +16,7 @@ import (
 	"smartfactory/internal/agents"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
+	"smartfactory/internal/calib"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
@@ -38,6 +39,8 @@ type Ops struct {
 	Saved *templates.Store
 	// Production is the companies' ERP connections and production orders.
 	Production *erp.Service
+	// Calib fits machines' parameters from their stored readings.
+	Calib *calib.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.
