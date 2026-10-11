@@ -534,15 +534,10 @@ export const AdminOverview = z.object({
   /** the server runs the companies' assistants */
   assistants: z.boolean(),
   version: str,
-  /** the companies this server is limited to: a customer's own instance (absent when any) */
+  /** the companies this server is limited to (absent when any: the demo) */
   runs: z.array(str).optional(),
-  /** the customers' own servers, on the platform server, and whether each answers */
-  instances: z.array(z.object({ id: str, name: str, url: str, up: z.boolean(), version: str.optional() })),
-  /** a self-hosted instance of one company: empty (no companies) until its factory is built */
+  /** a company's own installation: one company, none until its factory is built */
   single: z.boolean(),
-  /** the template hub this instance reads, and whether it can publish there (it has an account) */
-  hub: str.optional(),
-  hubPublish: z.boolean(),
 }).meta({ description: 'GET /api/admin — administrators only (401 without a token, 403 below admin)' });
 
 /** A company the engine accepted (POST /api/admin/companies, same id replaces). */
@@ -593,24 +588,24 @@ export const ComposeEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('error'), text: str }),
 ]).meta({ description: 'One server-sent event of the scene architect: `data: <ComposeEvent JSON>`' });
 
-// ---------- templates (/api/admin/templates, the hub at /api/hub/templates) ----------
+// ---------- templates (/api/admin/templates) ----------
 
 /** A factory to start from, as lists show it. */
 export const TemplateSummary = z.object({
   id: str, name: str, description: str.optional(), author: str.optional(),
-  /** builtin · local (saved on this instance) · hub (the public template hub) */
-  source: z.enum(['builtin', 'local', 'hub']),
+  /** builtin · local (saved or imported on this installation) */
+  source: z.enum(['builtin', 'local']),
   industry: str, industryName: str,
   plants: z.array(z.object({ id: str, name: str, site: z.enum(['hall', 'outdoor']), lines: z.array(str), machines: num })),
   created: time.optional(),
 });
-export const Templates = z.array(TemplateSummary).meta({ description: 'GET /api/admin/templates, and the hub\'s GET /api/hub/templates (public)' });
+export const Templates = z.array(TemplateSummary).meta({ description: 'GET /api/admin/templates' });
 /** A template whole: a company config (its id the template's) and the industry packs it needs that are not built in. */
 export const Template = z.object({
   id: str, name: str, description: str.optional(), author: str.optional(), created: time,
   company: z.record(str, z.unknown()),
   industries: z.record(str, z.record(str, z.unknown())).optional(),
-}).meta({ description: 'GET /api/admin/templates/{source}/{id}; POST /api/hub/templates takes one' });
+}).meta({ description: 'GET /api/admin/templates/{source}/{id} (the file a template is exported as); POST /api/admin/templates/import takes one' });
 /** POST /api/admin/templates: a template of a running company (from) or of a config (company). */
 export const SaveTemplate = z.object({
   id: str, name: str, description: str.optional(), from: str.optional(),

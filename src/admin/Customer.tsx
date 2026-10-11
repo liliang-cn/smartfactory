@@ -253,14 +253,14 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
   const [removing, setRemoving] = useState(false);
   const tab = (query(path).get('tab') ?? 'scene') as Tab;
   if (!c) {
-    return <PageHead title="找不到这家公司" sub={`没有 ${id}，或者你的令牌不包括它`} back={{ to: '/admin', label: '客户' }} />;
+    return <PageHead title="找不到这家公司" sub={`没有 ${id}，或者你的令牌不包括它`} back={{ to: '/admin', label: '公司' }} />;
   }
   const t = totals(c);
   const industry = ov.industries.find((i) => i.id === c.industry);
   return (
     <>
       <PageHead
-        back={home ? undefined : { to: '/admin', label: '客户' }}
+        back={home ? undefined : { to: '/admin', label: '公司' }}
         title={<span className="flex items-center gap-3"><Badge text={c.short} className="h-10 min-w-11 text-[14px]" />{c.name}</span>}
         sub={`${industry?.name ?? c.industry}，${t.plants} 个工厂，${t.lines} 条产线，${t.machines} 台设备${c.builtin ? '，随应用内置' : ''}`}
       >

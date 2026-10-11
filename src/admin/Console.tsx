@@ -27,7 +27,7 @@ const ConsoleCtx = createContext<Ctx | null>(null);
 export const useConsole = () => useContext(ConsoleCtx)!;
 
 const NAV: { path: string; label: string; icon: LucideIcon; also?: string[] }[] = [
-  { path: '/admin', label: '客户', icon: Building2Icon, also: ['/admin/customers', '/admin/new'] },
+  { path: '/admin', label: '公司', icon: Building2Icon, also: ['/admin/customers', '/admin/new'] },
   { path: '/admin/templates', label: '模板', icon: LayoutTemplateIcon },
   { path: '/admin/industries', label: '行业包', icon: LayersIcon },
   { path: '/admin/accounts', label: '账号', icon: KeyRoundIcon },
@@ -56,7 +56,7 @@ function SignIn({ problem, onDone }: { problem?: string; onDone(): void }) {
           <Mark className="size-8" />
           <div className="leading-tight">
             <h1 className="text-[17px] font-extrabold">SmartFactory 工作台</h1>
-            <p className="text-[12.5px] text-muted-foreground">搭建客户的智能工厂</p>
+            <p className="text-[12.5px] text-muted-foreground">你的智能工厂</p>
           </div>
         </div>
         <label htmlFor="token" className="mt-6 block text-[13px] font-bold">管理员令牌</label>

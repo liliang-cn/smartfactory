@@ -1,17 +1,14 @@
 // Package templates keeps factory templates: a company's structure (plants, lines, machines)
 // with the industry packs it needs that are not built in, so it can start a factory on any
-// instance. An instance keeps the ones its administrators save; the template hub (the platform
-// server) keeps the ones anyone publishes, for everyone. A template holds no data: no state,
+// installation. An installation keeps the ones its administrators save or import; exported as a
+// file, a template moves to another installation. A template holds no data: no state,
 // documents, notes, tickets or records.
 package templates
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,10 +23,9 @@ type Template struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	// Author is who made it; AuthorKey their token (the hub lets only them replace it).
-	Author    string    `json:"author,omitempty"`
-	AuthorKey string    `json:"authorKey,omitempty"`
-	Created   time.Time `json:"created"`
+	// Author is who made it.
+	Author  string    `json:"author,omitempty"`
+	Created time.Time `json:"created"`
 	// Company is the company config; its id is the template's own, replaced when used.
 	Company json.RawMessage `json:"company"`
 	// Industries are the packs it uses that are not built in.
@@ -42,7 +38,7 @@ type Summary struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Author      string `json:"author,omitempty"`
-	// Source: builtin | local (saved on this instance) | hub (the public template hub)
+	// Source: builtin | local (saved or imported on this installation)
 	Source       string     `json:"source"`
 	Industry     string     `json:"industry"`
 	IndustryName string     `json:"industryName"`
@@ -127,101 +123,4 @@ func (s *Store) Delete(id string) error {
 		return os.ErrNotExist
 	}
 	return os.Remove(s.path(id))
-}
-
-// ---- the hub, from an instance ----
-
-// Hub is the public template hub an instance reads from (and publishes to, with a token).
-type Hub struct {
-	URL   string
-	Token string
-
-	mu     sync.Mutex
-	cached []Summary
-	at     time.Time
-}
-
-var client = &http.Client{Timeout: 6 * time.Second}
-
-// List is the hub's templates, remembered for five minutes; nil when it cannot be reached.
-func (h *Hub) List(ctx context.Context) []Summary {
-	if h == nil || h.URL == "" {
-		return nil
-	}
-	h.mu.Lock()
-	if time.Since(h.at) < 5*time.Minute && h.cached != nil {
-		defer h.mu.Unlock()
-		return h.cached
-	}
-	h.mu.Unlock()
-	req, _ := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(h.URL, "/")+"/api/hub/templates", nil)
-	res, err := client.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer res.Body.Close()
-	var list []Summary
-	if res.StatusCode != 200 || json.NewDecoder(res.Body).Decode(&list) != nil {
-		return nil
-	}
-	for i := range list {
-		list[i].Source = "hub"
-	}
-	h.mu.Lock()
-	h.cached, h.at = list, time.Now()
-	h.mu.Unlock()
-	return list
-}
-
-// Get is one of the hub's templates.
-func (h *Hub) Get(ctx context.Context, id string) (*Template, error) {
-	if h == nil || h.URL == "" {
-		return nil, errors.New("没有配置模板市场")
-	}
-	req, _ := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(h.URL, "/")+"/api/hub/templates/"+id, nil)
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("连不上模板市场：%w", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode == 404 {
-		return nil, nil
-	}
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("模板市场答 %s", res.Status)
-	}
-	var t Template
-	return &t, json.NewDecoder(res.Body).Decode(&t)
-}
-
-// Publish puts t on the hub under the hub token's name.
-func (h *Hub) Publish(ctx context.Context, t *Template) error {
-	if h == nil || h.URL == "" || h.Token == "" {
-		return errors.New("要发布到模板市场，先在配置里填 templateHub 和 hubToken（模板市场的令牌）")
-	}
-	b, _ := json.Marshal(t)
-	req, _ := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(h.URL, "/")+"/api/hub/templates", bytes.NewReader(b))
-	req.Header.Set("Authorization", "Bearer "+h.Token)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("连不上模板市场：%w", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		var e struct{ Error string }
-		json.NewDecoder(res.Body).Decode(&e)
-		return fmt.Errorf("模板市场没有收下：%s", cmpOr(e.Error, res.Status))
-	}
-	h.mu.Lock()
-	h.cached = nil
-	h.mu.Unlock()
-	return nil
-}
-
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }

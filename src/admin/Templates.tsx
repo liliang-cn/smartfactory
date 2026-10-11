@@ -1,8 +1,10 @@
-// 模板: factories to start from — built in, saved here, and the template hub, where anyone
-// publishes theirs. A template is structure only: plants, lines, machines; never a company's data.
+// 模板: factories to start from — built in, or saved here (from a factory, or imported from a file
+// another installation exported). A template is structure only: plants, lines, machines; never a
+// company's data.
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowRightIcon, GlobeIcon, LoaderCircleIcon, PackageIcon, SaveIcon, Trash2Icon, UploadCloudIcon } from 'lucide-react';
+import { useRef } from 'react';
+import { ArrowRightIcon, DownloadIcon, FileUpIcon, LoaderCircleIcon, PackageIcon, SaveIcon, Trash2Icon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -19,9 +21,19 @@ import { link, PageHead, useConsole } from './Console';
 
 const SOURCE: Record<api.TemplateSummary['source'], { label: string; tone: string }> = {
   builtin: { label: '内置', tone: 'bg-surface text-muted-foreground' },
-  local: { label: '这里存的', tone: 'bg-brand-soft text-primary' },
-  hub: { label: '模板市场', tone: 'bg-success-soft text-success' },
+  local: { label: '这里的', tone: 'bg-brand-soft text-primary' },
 };
+
+/** A template as a file, for another installation to import. */
+async function download(t: api.TemplateSummary) {
+  const full = await api.template(t.source, t.id);
+  const url = URL.createObjectURL(new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${t.id}.smartfactory-template.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const plans = new Map<string, Promise<PlantLayout[]>>();
 
@@ -55,21 +67,20 @@ function usePlan(t: api.TemplateSummary) {
 }
 
 function TemplateCard({ t, canUse, onChanged }: { t: api.TemplateSummary; canUse: boolean; onChanged(): void }) {
-  const { ov } = useConsole();
   const plants = usePlan(t);
-  const [busy, setBusy] = useState<'publish' | 'delete' | null>(null);
+  const [busy, setBusy] = useState(false);
   const lines = t.plants.reduce((n, p) => n + p.lines.length, 0);
   const machines = t.plants.reduce((n, p) => n + p.machines, 0);
-  const act = async (what: 'publish' | 'delete') => {
-    setBusy(what);
+  const remove = async () => {
+    setBusy(true);
     try {
-      if (what === 'publish') { await api.publishTemplate(t.id); toast.success(`${t.name} 已发布到模板市场`); }
-      else { await api.deleteTemplate(t.id); toast.success(`${t.name} 已删除`); }
+      await api.deleteTemplate(t.id);
+      toast.success(`${t.name} 已删除`);
       onChanged();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
   return (
@@ -92,13 +103,11 @@ function TemplateCard({ t, canUse, onChanged }: { t: api.TemplateSummary; canUse
           {canUse && (
             <Button asChild className="h-9 rounded-xl font-bold"><a {...link(`/admin/new?template=${t.source}:${encodeURIComponent(t.id)}`)}>用它建工厂<ArrowRightIcon /></a></Button>
           )}
-          {t.source === 'local' && ov.hubPublish && (
-            <Button variant="outline" className="h-9 rounded-xl font-bold" disabled={!!busy} onClick={() => act('publish')}>
-              {busy === 'publish' ? <LoaderCircleIcon className="animate-spin" /> : <UploadCloudIcon />}发布
-            </Button>
-          )}
+          <Button variant="outline" className="h-9 rounded-xl font-bold" title="存成文件，给别的工厂导入" onClick={() => download(t).catch((e: Error) => toast.error(e.message))}>
+            <DownloadIcon />导出
+          </Button>
           {t.source === 'local' && (
-            <Button variant="ghost" size="icon" className="ml-auto size-9 rounded-xl text-muted-foreground hover:bg-danger-soft hover:text-destructive" aria-label="删除模板" title="删除模板" disabled={!!busy} onClick={() => act('delete')}>
+            <Button variant="ghost" size="icon" className="ml-auto size-9 rounded-xl text-muted-foreground hover:bg-danger-soft hover:text-destructive" aria-label="删除模板" title="删除模板" disabled={busy} onClick={remove}>
               <Trash2Icon />
             </Button>
           )}
@@ -185,43 +194,52 @@ export function TemplateGallery({ embedded = false }: { embedded?: boolean }) {
   const load = () => { api.templates().then(setList, (e: Error) => { toast.error(e.message); setList([]); }); };
   useEffect(load, []);
   const canUse = ov.me.everywhere && (ov.single ? ov.companies.length === 0 : !ov.runs);
-  const counts = useMemo(() => Object.fromEntries((['builtin', 'local', 'hub'] as const).map((k) => [k, (list ?? []).filter((t) => t.source === k).length])), [list]);
+  const counts = useMemo(() => Object.fromEntries((['builtin', 'local'] as const).map((k) => [k, (list ?? []).filter((t) => t.source === k).length])), [list]);
+  const file = useRef<HTMLInputElement>(null);
+  const importFile = async (f: File) => {
+    try {
+      const t = await api.importTemplate(JSON.parse(await f.text()));
+      toast.success(`${t.name} 已导入`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof SyntaxError ? '这不是模板文件（不是 JSON）' : (e as Error).message);
+    }
+  };
   const shown = (list ?? []).filter((t) => src === 'all' || t.source === src);
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup type="single" value={src} onValueChange={(v) => v && setSrc(v as typeof src)} className="rounded-xl bg-card p-0.5 shadow-float">
           <ToggleGroupItem value="all" className="h-8 rounded-lg px-3 text-[12.5px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary">全部</ToggleGroupItem>
-          {(['builtin', 'local', 'hub'] as const).filter((k) => counts[k] > 0).map((k) => (
+          {(['builtin', 'local'] as const).filter((k) => counts[k] > 0).map((k) => (
             <ToggleGroupItem key={k} value={k} className="h-8 gap-1.5 rounded-lg px-3 text-[12.5px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary">
-              {k === 'hub' ? <GlobeIcon className="size-3.5" /> : k === 'local' ? <SaveIcon className="size-3.5" /> : <PackageIcon className="size-3.5" />}
+              {k === 'local' ? <SaveIcon className="size-3.5" /> : <PackageIcon className="size-3.5" />}
               {SOURCE[k].label} <span className="tabular-nums opacity-60">{counts[k]}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        {!embedded && ov.companies.length > 0 && (
-          <Button className="ml-auto h-9 rounded-xl font-bold" onClick={() => setSaving(true)}><SaveIcon />把工厂存成模板</Button>
-        )}
+        <div className="ml-auto flex gap-2">
+          <input ref={file} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
+          <Button variant="outline" className="h-9 rounded-xl font-bold" onClick={() => file.current?.click()}><FileUpIcon />导入模板</Button>
+          {!embedded && ov.companies.length > 0 && (
+            <Button className="h-9 rounded-xl font-bold" onClick={() => setSaving(true)}><SaveIcon />把工厂存成模板</Button>
+          )}
+        </div>
       </div>
       {!list && <div className="grid h-40 place-items-center"><LoaderCircleIcon className="animate-spin text-muted-foreground" /></div>}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5 max-sm:grid-cols-1 max-sm:gap-3">
         {shown.map((t) => <TemplateCard key={`${t.source}:${t.id}`} t={t} canUse={canUse} onChanged={load} />)}
       </div>
-      {ov.hub && !counts.hub && list && <p className="text-[12.5px] text-muted-foreground">模板市场（{ov.hub.replace(/^https?:\/\//, '')}）现在连不上，或者还没有人发布。</p>}
       <SaveDialog open={saving} onOpenChange={setSaving} onSaved={load} />
     </div>
   );
 }
 
 export default function Templates() {
-  const { ov } = useConsole();
   return (
     <>
-      <PageHead title="模板" sub={`建工厂的起点：内置的、这里存的${ov.hub ? '、模板市场上大家发布的' : ''}。模板只有结构，没有任何公司的数据`} />
+      <PageHead title="模板" sub="建工厂的起点：内置的，和这里存的、导入的。模板只有结构（工厂、产线、设备），不带任何公司的数据，导出成文件就能给别的工厂用" />
       <TemplateGallery />
-      {!ov.hubPublish && ov.hub && (
-        <p className="mt-6 text-[12.5px] text-muted-foreground">要把模板发布到模板市场，在配置里填上 <code className="rounded bg-card px-1 font-mono">hubToken</code>（模板市场的账号令牌）。</p>
-      )}
     </>
   );
 }

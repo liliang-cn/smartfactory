@@ -9,35 +9,42 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
-	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/tags"
 )
 
-// A customer's own instance runs its company and nothing else; the platform server, which runs
-// none, sends a factory page of a customer with an instance there and is otherwise the console.
+// A company's own installation runs its company and nothing else; a new one is empty and opens
+// on its console until its factory is built, and then runs that one.
 func TestInstances(t *testing.T) {
 	if _, err := os.Stat("../engine/js/engine.js"); err != nil {
 		t.Skip("engine bundle not built (npm run build:engine)")
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	serve := func(only []string, instances []config.Instance) (*engine.Engine, *httptest.Server) {
+	// only nil: a self-hosted installation (one company, empty until built)
+	serve := func(only []string, _ any) (*engine.Engine, *httptest.Server) {
 		eng, err := engine.New(log)
 		if err != nil {
 			t.Fatal(err)
 		}
 		eng.Dir = t.TempDir()
-		if err := eng.Only(only); err != nil {
+		if only == nil {
+			err = eng.Single()
+		} else {
+			err = eng.Only(only)
+		}
+		if err != nil {
 			t.Fatal(err)
 		}
 		eng.LoadConfigs()
 		ctx, cancel := context.WithCancel(t.Context())
-		t.Cleanup(cancel)
+		// the engine writes its state when it stops: let it finish before the directory goes
+		t.Cleanup(func() { cancel(); <-eng.Done })
 		go eng.Run(ctx)
-		srv := &Server{Hub: tags.NewHub(), Engine: eng, Keys: keyring(t, ""), Log: log, Instances: instances,
+		srv := &Server{Hub: tags.NewHub(), Engine: eng, Keys: keyring(t, ""), Log: log,
 			Static: fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}, "admin.html": {Data: []byte("<!doctype html>")}}}
 		ts := httptest.NewServer(srv.Handler())
 		t.Cleanup(ts.Close)
@@ -65,25 +72,20 @@ func TestInstances(t *testing.T) {
 		t.Errorf("site: %v", site.Companies)
 	}
 
-	// a platform server whose data still holds a company created at run time runs none of it
-	pf, platform := serve([]string{}, []config.Instance{{ID: "huaduan", Name: "华锻集团", URL: "https://huaduan.factory.superleo.cn"}})
-	if r := pf.CreateCompany(cfg); r.OK {
-		t.Error("the platform server created a company")
+	// an installation whose factory is not built yet opens on its console
+	empty, ets := serve(nil, nil)
+	if ids := empty.CompanyIDs(); len(ids) != 0 {
+		t.Fatalf("a new installation runs %v", ids)
 	}
-	if ids := pf.CompanyIDs(); len(ids) != 0 {
-		t.Errorf("the platform server runs %v", ids)
-	}
-	res, err = noFollow.Get(platform.URL + "/?company=huaduan&plant=p2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode != 302 || res.Header.Get("Location") != "https://huaduan.factory.superleo.cn/?plant=p2" {
-		t.Errorf("an old link: %d → %s", res.StatusCode, res.Header.Get("Location"))
-	}
-	res, _ = noFollow.Get(platform.URL + "/")
+	res, _ = noFollow.Get(ets.URL + "/")
 	res.Body.Close()
 	if res.StatusCode != 302 || res.Header.Get("Location") != "/admin" {
-		t.Errorf("the platform's own page: %d → %s", res.StatusCode, res.Header.Get("Location"))
+		t.Errorf("a new installation's page: %d → %s", res.StatusCode, res.Header.Get("Location"))
+	}
+	if r := empty.CreateCompany(cfg); !r.OK {
+		t.Fatalf("a new installation could not build its factory: %v", r.Errors)
+	}
+	if r := empty.CreateCompany([]byte(strings.Replace(string(cfg), `"xinghe"`, `"other"`, 1))); r.OK {
+		t.Error("an installation built a second company")
 	}
 }

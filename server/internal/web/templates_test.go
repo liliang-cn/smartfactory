@@ -20,43 +20,32 @@ import (
 	"smartfactory/internal/templates"
 )
 
-// A self-hosted instance starts empty and builds its one factory from a template; its
-// administrator saves the factory as a template and publishes it to the hub, where anyone reads
-// it and only its author replaces it; another instance starts from it.
+// A company's new installation builds its one factory from a built-in template; its
+// administrator saves the factory as a template (without the company's name), exports it as a
+// file, and another installation imports it and builds from it.
 func TestTemplates(t *testing.T) {
 	if _, err := os.Stat("../engine/js/engine.js"); err != nil {
 		t.Skip("engine bundle not built (npm run build:engine)")
 	}
 	std := sfptest.Load(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	type node struct {
-		eng *engine.Engine
-		ts  *httptest.Server
-	}
-	start := func(single, hub bool, market *templates.Hub, keys *auth.Keyring) node {
+	type node struct{ ts *httptest.Server }
+	start := func(keys *auth.Keyring) node {
 		eng, err := engine.New(log)
 		if err != nil {
 			t.Fatal(err)
 		}
 		eng.Dir = t.TempDir()
-		if single {
-			eng.Single()
-		} else {
-			eng.Only([]string{})
-		}
+		eng.Single()
 		ctx, cancel := context.WithCancel(t.Context())
-		t.Cleanup(cancel)
+		t.Cleanup(func() { cancel(); <-eng.Done })
 		go eng.Run(ctx)
 		trail, _ := audit.Open(t.TempDir(), log)
 		t.Cleanup(func() { trail.Close() })
 		saved, _ := templates.Open(t.TempDir())
-		srv := &Server{Hub: tags.NewHub(), Engine: eng, Keys: keys, Audit: trail, Log: log, Saved: saved, Market: market}
-		if hub {
-			srv.HubStore, _ = templates.Open(t.TempDir())
-		}
-		ts := httptest.NewServer(srv.Handler())
+		ts := httptest.NewServer((&Server{Hub: tags.NewHub(), Engine: eng, Keys: keys, Audit: trail, Log: log, Saved: saved}).Handler())
 		t.Cleanup(ts.Close)
-		return node{eng, ts}
+		return node{ts}
 	}
 	do := func(n node, token, method, path string, body any) (int, []byte) {
 		t.Helper()
@@ -78,25 +67,17 @@ func TestTemplates(t *testing.T) {
 		return res.StatusCode, b
 	}
 
-	// the hub: anyone with an account there publishes
-	alice, ak := auth.NewToken("小李", auth.Member, nil, "")
-	bob, bk := auth.NewToken("老王", auth.Member, nil, "")
-	hub := start(false, true, nil, keyring(t, "", ak, bk))
-
-	// an instance with an account on the hub
 	admin, adk := auth.NewToken("厂长", auth.Admin, nil, "")
-	inst := start(true, false, &templates.Hub{URL: hub.ts.URL, Token: alice}, keyring(t, "", adk))
-
+	inst := start(keyring(t, "", adk))
 	_, b := do(inst, admin, "GET", "/api/admin", nil)
 	std.Check("AdminOverview", b)
 	var ov struct {
-		Single     bool
-		Companies  []any
-		HubPublish bool
+		Single    bool
+		Companies []any
 	}
 	json.Unmarshal(b, &ov)
-	if !ov.Single || len(ov.Companies) != 0 || !ov.HubPublish {
-		t.Fatalf("a new instance: %s", b)
+	if !ov.Single || len(ov.Companies) != 0 {
+		t.Fatalf("a new installation: %s", b)
 	}
 	_, b = do(inst, admin, "GET", "/api/admin/templates", nil)
 	std.Check("Templates", b)
@@ -106,7 +87,7 @@ func TestTemplates(t *testing.T) {
 		t.Fatalf("the built-in templates are not offered: %s", b)
 	}
 
-	// build the factory from a built-in template, under the customer's own id
+	// build the factory from a built-in template, under the company's own id
 	_, b = do(inst, admin, "GET", "/api/admin/templates/builtin/huaduan", nil)
 	std.Check("Template", b)
 	var tpl struct{ Company map[string]any }
@@ -117,44 +98,37 @@ func TestTemplates(t *testing.T) {
 	}
 	other := map[string]any{"id": "another", "name": "另一家", "short": "另", "industry": "forging", "plants": tpl.Company["plants"]}
 	if got, _ := do(inst, admin, "POST", "/api/admin/companies", other); got != 422 {
-		t.Errorf("a second company on a self-hosted instance: %d", got)
+		t.Errorf("a second company on an installation: %d", got)
 	}
 
-	// save it as a template, without the customer's name, and publish it
+	// save it as a template, without the company's name, and export it
 	if got, b := do(inst, admin, "POST", "/api/admin/templates", map[string]any{"id": "forge-3plants", "name": "三厂锻造", "from": "jianghe"}); got != 200 {
 		t.Fatalf("save: %d %s", got, b)
 	} else if strings.Contains(string(b), "江河") {
-		t.Errorf("the customer's name went into the template: %s", b)
+		t.Errorf("the company's name went into the template: %s", b)
 	}
-	if got, b := do(inst, admin, "POST", "/api/admin/templates/forge-3plants/publish", nil); got != 200 {
-		t.Fatalf("publish: %d %s", got, b)
+	got, file := do(inst, admin, "GET", "/api/admin/templates/local/forge-3plants", nil)
+	if got != 200 || strings.Contains(string(file), "江河") {
+		t.Fatalf("export: %d %s", got, file)
 	}
-	got, b := do(hub, "", "GET", "/api/hub/templates", nil)
-	std.Check("Templates", b)
-	if got != 200 || !strings.Contains(string(b), `"forge-3plants"`) || !strings.Contains(string(b), "小李") {
-		t.Errorf("the hub lists: %d %s", got, b)
-	}
-	var mine templates.Template
-	_, b = do(hub, "", "GET", "/api/hub/templates/forge-3plants", nil)
-	json.Unmarshal(b, &mine)
-	if got, _ := do(hub, bob, "POST", "/api/hub/templates", mine); got != 409 {
-		t.Errorf("someone else replaced a published template: %d", got)
-	}
-	if got, _ := do(hub, "", "POST", "/api/hub/templates", mine); got != 401 {
-		t.Errorf("published without an account: %d", got)
-	}
+	std.Check("Template", file)
 
-	// a second instance starts from the published template
+	// another installation imports the file and builds from it
 	admin2, adk2 := auth.NewToken("厂长", auth.Admin, nil, "")
-	inst2 := start(true, false, &templates.Hub{URL: hub.ts.URL}, keyring(t, "", adk2))
-	_, b = do(inst2, admin2, "GET", "/api/admin/templates", nil)
-	if !strings.Contains(string(b), `"forge-3plants"`) {
-		t.Errorf("the hub's template is not offered to another instance: %s", b)
+	inst2 := start(keyring(t, "", adk2))
+	var exported map[string]any
+	json.Unmarshal(file, &exported)
+	if got, b := do(inst2, admin2, "POST", "/api/admin/templates/import", exported); got != 200 {
+		t.Fatalf("import: %d %s", got, b)
 	}
-	if got, b := do(inst2, admin2, "GET", "/api/admin/templates/hub/forge-3plants", nil); got != 200 {
-		t.Errorf("read the hub's template: %d %s", got, b)
+	if got, _ := do(inst2, admin2, "POST", "/api/admin/templates/import", map[string]any{"id": "x"}); got != 400 {
+		t.Errorf("imported something that is not a template: %d", got)
 	}
-	if got, _ := do(inst2, admin2, "POST", "/api/admin/templates/forge-3plants/publish", nil); got != 404 {
-		t.Errorf("published a template it does not have: %d", got)
+	_, b = do(inst2, admin2, "GET", "/api/admin/templates/local/forge-3plants", nil)
+	var again struct{ Company map[string]any }
+	json.Unmarshal(b, &again)
+	again.Company["id"], again.Company["name"], again.Company["short"] = "hehai", "河海锻造", "河海"
+	if got, b := do(inst2, admin2, "POST", "/api/admin/companies", again.Company); got != 200 {
+		t.Errorf("build from the imported template: %d %s", got, b)
 	}
 }

@@ -1,4 +1,4 @@
-// 客户: every company the token covers, each with its first plant drawn as a plan.
+// 公司: every company this server runs (one, on a company's own installation), each with its first plant drawn as a plan.
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { PlusIcon, RadioTowerIcon, SearchIcon, SparklesIcon, TrendingUpIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -68,29 +68,6 @@ function Card({ c, industry }: { c: api.Company; industry?: api.IndustrySummary 
   );
 }
 
-/** A customer's own server, as the platform lists it. */
-function InstanceCard({ i }: { i: api.Overview['instances'][number] }) {
-  const host = i.url.replace(/^https?:\/\//, '');
-  return (
-    <div className="flex flex-col gap-4 rounded-[18px] bg-card p-5 shadow-float">
-      <div className="flex items-center gap-3">
-        <span className={cn('size-2.5 shrink-0 rounded-full', i.up ? 'bg-success' : 'bg-destructive')} title={i.up ? '在运行' : '没有响应'} />
-        <span className="grid min-w-0 flex-1 leading-tight">
-          <b className="truncate text-[15.5px] font-extrabold">{i.name}</b>
-          <small className="truncate font-mono text-[12px] text-muted-foreground">{host}</small>
-        </span>
-        <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold', i.up ? 'bg-success-soft text-success' : 'bg-danger-soft text-destructive')}>
-          {i.up ? i.version ?? '在运行' : '没有响应'}
-        </span>
-      </div>
-      <div className="mt-auto flex gap-2">
-        <Button asChild variant="outline" className="h-9 flex-1 rounded-xl font-bold"><a href={i.url}>工厂</a></Button>
-        <Button asChild className="h-9 flex-1 rounded-xl font-bold"><a href={`${i.url.replace(/\/$/, '')}/admin`}>后台</a></Button>
-      </div>
-    </div>
-  );
-}
-
 export default function Customers() {
   const { ov } = useConsole();
   // a self-hosted instance: its one factory, or, before there is one, where to start it from
@@ -107,33 +84,21 @@ export default function Customers() {
   }
   // a customer's own server: its customer is the only one, and a new customer is a new server
   const canCreate = ov.me.everywhere && !ov.runs;
-  if (!ov.companies.length && ov.instances.length) {
-    const up = ov.instances.filter((i) => i.up).length;
-    return (
-      <>
-        <PageHead title="客户" sub={`${ov.instances.length} 个客户，各自一个实例，${up} 个在运行`} />
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5 max-sm:grid-cols-1 max-sm:gap-3">
-          {ov.instances.map((i) => <InstanceCard key={i.id} i={i} />)}
-        </div>
-        <p className="mt-6 text-[12.5px] leading-relaxed text-muted-foreground">新客户：在服务器上起一个新实例（不写 <code className="rounded bg-card px-1 font-mono">companies</code> 就是空的单公司实例，第一次启动在 <code className="rounded bg-card px-1 font-mono">data/initial-admin-token</code> 留管理员令牌），加进这里配置的 <code className="rounded bg-card px-1 font-mono">instances</code>，再到它自己的后台用模板建工厂。</p>
-      </>
-    );
-  }
   const [q, setQ] = useState('');
   const industries = useMemo(() => new Map(ov.industries.map((i) => [i.id, i])), [ov.industries]);
   const shown = ov.companies.filter((c) => !q || `${c.name}${c.short}${c.id}${industries.get(c.industry)?.name ?? ''}`.toLowerCase().includes(q.toLowerCase()));
   const all = ov.companies.reduce((a, c) => { const t = totals(c); return { lines: a.lines + t.lines, machines: a.machines + t.machines }; }, { lines: 0, machines: 0 });
   return (
     <>
-      <PageHead title="客户" sub={`${ov.companies.length} 家公司，${all.lines} 条产线，${all.machines} 台设备在孪生里运行`}>
+      <PageHead title="公司" sub={`${ov.companies.length} 家公司，${all.lines} 条产线，${all.machines} 台设备在孪生里运行`}>
         {ov.companies.length > 6 && (
           <div className="relative">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="找客户" className="h-10 w-56 rounded-xl pl-9" aria-label="找客户" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="找公司" className="h-10 w-56 rounded-xl pl-9" aria-label="找公司" />
           </div>
         )}
         {canCreate && (
-          <Button asChild className="h-10 rounded-xl px-4 font-bold"><a {...link('/admin/new')}><PlusIcon />新建客户</a></Button>
+          <Button asChild className="h-10 rounded-xl px-4 font-bold"><a {...link('/admin/new')}><PlusIcon />新建公司</a></Button>
         )}
       </PageHead>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 max-sm:grid-cols-1 max-sm:gap-3">
@@ -143,13 +108,13 @@ export default function Customers() {
             className="grid min-h-[300px] place-items-center rounded-[18px] border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50 hover:bg-brand-soft/40 hover:text-primary max-sm:min-h-[120px]">
             <span className="grid justify-items-center gap-2">
               <span className="grid size-11 place-items-center rounded-full bg-card shadow-float"><PlusIcon className="size-5" /></span>
-              <b className="text-[14px]">新建客户</b>
-              <small className="text-[12px]">从现有的工厂起步，改成客户的样子</small>
+              <b className="text-[14px]">新建公司</b>
+              <small className="text-[12px]">从一个模板起步</small>
             </span>
           </a>
         )}
       </div>
-      {!shown.length && q && <p className="mt-10 text-center text-[13px] text-muted-foreground">没有叫「{q}」的客户</p>}
+      {!shown.length && q && <p className="mt-10 text-center text-[13px] text-muted-foreground">没有叫「{q}」的公司</p>}
     </>
   );
 }

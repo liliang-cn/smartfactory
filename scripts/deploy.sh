@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the single binary and roll it out.
 #
-#   scripts/deploy.sh          twin server on dell VM 105 apps
-#                              https://factory.superleo.cn → aliyun Caddy → tailnet → apps Caddy :44719 → 127.0.0.1:44720
+#   scripts/deploy.sh          the demo installations on dell VM 105 apps, one per demo company:
+#                              https://<id>.factory.superleo.cn → aliyun Caddy → tailnet → apps Caddy :44719 → smartfactory@<id>
 #   scripts/deploy.sh edge     dell VM 104 infra, two services from the same binary:
 #                              smartfactory-edge     protocol gateway in front of the dell host's real sensors
 #                                                    (node_exporter on 192.168.123.98:9100)
@@ -15,8 +15,8 @@ target=${1:-server}
 cd "$(dirname "$0")/.."
 
 case $target in
-  # the platform (factory.superleo.cn) and every customer's own instance (smartfactory@<id>)
-  server) host=ops@192.168.123.65 unit='smartfactory $(systemctl list-units --plain --no-legend "smartfactory@*" | cut -d" " -f1)' ;;
+  # the demo companies, each its own installation (smartfactory@<id>, https://<id>.factory.superleo.cn)
+  server) host=ops@192.168.123.65 unit='$(systemctl list-units --plain --no-legend "smartfactory@*" | cut -d" " -f1)' ;;
   edge) host=ops@192.168.123.64 unit="smartfactory-edge smartfactory-devices" ;;
   *) echo "usage: $0 [server|edge]" >&2; exit 2 ;;
 esac
@@ -33,5 +33,5 @@ ssh "$host" "set -e
   sudo systemctl restart \$units && sleep 2 && systemctl is-active \$units | tr '\\n' ' '"
 
 if [ "$target" = server ]; then
-  curl -fsS http://192.168.123.65:44719/api/health | head -c 400; echo
+  curl -fsS -H "Host: huaduan.factory.superleo.cn" http://192.168.123.65:44719/api/site | tr -d ' \n'; echo
 fi

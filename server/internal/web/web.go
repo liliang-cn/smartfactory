@@ -59,12 +59,8 @@ type Server struct {
 	Knowledge *knowledge.Base
 	// Ops is what the console does; built from the fields above when nil.
 	Ops *ops.Ops
-	// Instances are the customers' own servers (on the platform server).
-	Instances []config.Instance
-	// Saved, Market and HubStore are the templates: saved here, the hub read, the hub kept here.
-	Saved    *templates.Store
-	Market   *templates.Hub
-	HubStore *templates.Store
+	// Saved are the templates saved or imported here.
+	Saved *templates.Store
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -463,23 +459,8 @@ func (s *Server) sources() []tags.SourceStatus {
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Static)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// a customer with its own instance: its factory page is there
 		if r.URL.Path == "/" {
-			if id := r.URL.Query().Get("company"); id != "" {
-				for _, in := range s.Instances {
-					if in.ID == id {
-						q := r.URL.Query()
-						q.Del("company")
-						to := strings.TrimRight(in.URL, "/") + "/"
-						if len(q) > 0 {
-							to += "?" + q.Encode()
-						}
-						http.Redirect(w, r, to, http.StatusFound)
-						return
-					}
-				}
-			}
-			// a server that runs no factory of its own is the console
+			// an installation whose factory is not built yet: its console is where to build it
 			if len(s.Engine.CompanyIDs()) == 0 {
 				http.Redirect(w, r, "/admin", http.StatusFound)
 				return

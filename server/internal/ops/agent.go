@@ -19,7 +19,7 @@ import (
 // answers with the console's own operations. It changes nothing itself: a change comes back as
 // an Action for the person to confirm, and runs as them.
 
-const consolePrompt = `你是 SmartFactory 工作台的助手，帮平台管理员搭建和管理客户的智能工厂（数字孪生）。
+const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司的管理员搭建和管理自己的智能工厂（数字孪生）。
 
 你能做的事都通过工具：
 - 看：list_customers、get_customer（配置和知识库概况）、list_industries、get_industry、list_tokens、activity（操作记录）。
@@ -78,9 +78,9 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 		return map[string]any{"proposed": a.Title, "note": "已交给管理员确认，确认后才会执行"}, nil
 	}
 	tools := []tool{
-		{"list_customers", "管理员能管的客户（公司）：工厂、产线、设备数，是否内置，实时数据点数。", obj(map[string]any{}),
+		{"list_customers", "这台服务器上的公司（一家公司自己部署的只有它自己）：工厂、产线、设备数，是否内置，实时数据点数。", obj(map[string]any{}),
 			func(map[string]any) (any, error) { return o.Companies(who) }},
-		{"get_customer", "一个客户的完整配置，和它知识库里有多少工艺节点、文档。", obj(map[string]any{"id": str("公司 id")}, "id"),
+		{"get_customer", "一家公司的完整配置，和它知识库里有多少工艺节点、文档。", obj(map[string]any{"id": str("公司 id")}, "id"),
 			func(m map[string]any) (any, error) {
 				cfg, err := raw(o.CompanyConfig(who, s(m, "id")))
 				if err != nil {
@@ -111,11 +111,13 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				n, _ := m["limit"].(float64)
 				return o.Activity(ctx, who, s(m, "company"), 0, max(10, min(int(n), 100)))
 			}},
-		{"knowledge_search", "在一个客户的知识库里搜：文档段落和工艺说明。", obj(map[string]any{"company": str("公司 id"), "query": str("问题")}, "company", "query"),
-			func(m map[string]any) (any, error) { return o.KnowledgeSearch(ctx, who, s(m, "company"), s(m, "query"), 6) }},
+		{"knowledge_search", "在一家公司的知识库里搜：文档段落和工艺说明。", obj(map[string]any{"company": str("公司 id"), "query": str("问题")}, "company", "query"),
+			func(m map[string]any) (any, error) {
+				return o.KnowledgeSearch(ctx, who, s(m, "company"), s(m, "query"), 6)
+			}},
 		{"knowledge_entity", "工艺图里一样东西（工位编号、设备名、产线、产品、供应商、客户）和它的关系。", obj(map[string]any{"company": str("公司 id"), "name": str("名字")}, "company", "name"),
 			func(m map[string]any) (any, error) { return o.KnowledgeEntity(ctx, who, s(m, "company"), s(m, "name")) }},
-		{"propose_create_company", "提出新建（或同 id 替换）一个客户，交管理员确认。先 check_company 通过。", obj(map[string]any{"config": map[string]any{"type": "object"}}, "config"),
+		{"propose_create_company", "提出新建（或同 id 替换）一家公司的工厂，交管理员确认。先 check_company 通过。", obj(map[string]any{"config": map[string]any{"type": "object"}}, "config"),
 			func(m map[string]any) (any, error) {
 				cfg, ok := m["config"].(map[string]any)
 				if !ok {
@@ -126,7 +128,7 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				}
 				return propose(Action{Kind: "create_company", Args: map[string]any{"config": cfg}, Detail: "立即开始仿真"})
 			}},
-		{"propose_delete_company", "提出删除一个运行时建的客户，交管理员确认。", obj(map[string]any{"id": str("公司 id")}, "id"),
+		{"propose_delete_company", "提出删除一家运行时建的公司，交管理员确认。", obj(map[string]any{"id": str("公司 id")}, "id"),
 			func(m map[string]any) (any, error) {
 				return propose(Action{Kind: "delete_company", Args: map[string]any{"id": s(m, "id")}, Detail: "停止仿真、删除配置；助手、资料和记录保留"})
 			}},
@@ -146,7 +148,7 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			func(m map[string]any) (any, error) {
 				return propose(Action{Kind: "revoke_token", Args: map[string]any{"key": s(m, "key")}, Detail: "立即失效"})
 			}},
-		{"propose_rebuild_knowledge", "提出重建一个客户的知识库（工艺图和文档重新写入），交管理员确认。", obj(map[string]any{"company": str("公司 id")}, "company"),
+		{"propose_rebuild_knowledge", "提出重建一家公司的知识库（工艺图和文档重新写入），交管理员确认。", obj(map[string]any{"company": str("公司 id")}, "company"),
 			func(m map[string]any) (any, error) {
 				return propose(Action{Kind: "rebuild_knowledge", Args: map[string]any{"company": s(m, "company")}})
 			}},

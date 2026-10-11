@@ -178,7 +178,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 		answer(w, v, err)
 	})
 
-	// templates: built in, saved here, on the hub
+	// templates: built in, and saved or imported here
 	mux.HandleFunc("GET /api/admin/templates", func(w http.ResponseWriter, r *http.Request) {
 		v, err := o.Templates(r.Context(), s.caller(r))
 		answer(w, v, err)
@@ -198,27 +198,15 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/admin/templates/{id}", func(w http.ResponseWriter, r *http.Request) {
 		answer(w, done, o.DeleteTemplate(s.caller(r), via(r), r.PathValue("id")))
 	})
-	mux.HandleFunc("POST /api/admin/templates/{id}/publish", func(w http.ResponseWriter, r *http.Request) {
-		answer(w, done, o.PublishTemplate(r.Context(), s.caller(r), via(r), r.PathValue("id")))
+	// a template exported from another installation
+	mux.HandleFunc("POST /api/admin/templates/import", func(w http.ResponseWriter, r *http.Request) {
+		var t templates.Template
+		if !read(w, r, &t) {
+			return
+		}
+		v, err := o.ImportTemplate(s.caller(r), via(r), &t)
+		answer(w, v, err)
 	})
-	// the template hub: anyone reads it, anyone with an account here publishes to it
-	if s.HubStore != nil {
-		mux.HandleFunc("GET /api/hub/templates", func(w http.ResponseWriter, r *http.Request) {
-			v, err := o.HubTemplates()
-			answer(w, v, err)
-		})
-		mux.HandleFunc("GET /api/hub/templates/{id}", func(w http.ResponseWriter, r *http.Request) {
-			v, err := o.HubTemplate(r.PathValue("id"))
-			answer(w, v, err)
-		})
-		mux.HandleFunc("POST /api/hub/templates", func(w http.ResponseWriter, r *http.Request) {
-			var t templates.Template
-			if !read(w, r, &t) {
-				return
-			}
-			answer(w, done, o.HubPublish(s.caller(r), &t))
-		})
-	}
 
 	// a company's knowledge base
 	mux.HandleFunc("GET /api/knowledge/{company}", func(w http.ResponseWriter, r *http.Request) {
@@ -273,8 +261,8 @@ func writeOpError(w http.ResponseWriter, err error) {
 // ops is the operations behind the console, built from the server's parts unless given.
 func (s *Server) ops() *ops.Ops {
 	if s.Ops == nil {
-		s.Ops = &ops.Ops{Engine: s.Engine, Keys: s.Keys, Audit: s.Audit, Agents: s.Agents, KB: s.Knowledge, Hub: s.Hub, Advisors: s.Advisors, Version: s.Version, Instances: s.Instances,
-			Saved: s.Saved, Market: s.Market, HubStore: s.HubStore}
+		s.Ops = &ops.Ops{Engine: s.Engine, Keys: s.Keys, Audit: s.Audit, Agents: s.Agents, KB: s.Knowledge, Hub: s.Hub, Advisors: s.Advisors, Version: s.Version,
+			Saved: s.Saved}
 	}
 	return s.Ops
 }

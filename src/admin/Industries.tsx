@@ -139,7 +139,7 @@ export default function Industries({ open }: { open?: string }) {
   if (open) return <Detail id={open} />;
   return (
     <>
-      <PageHead title="行业包" sub="一类工厂由什么组成：产品、设备、工艺路线。新客户从这里选一个起步">
+      <PageHead title="行业包" sub="一类工厂由什么组成：产品、设备、工艺路线。建工厂时从这里选一个起步">
         {ov.me.everywhere && <Button className="h-10 rounded-xl font-bold" onClick={() => setImporting(true)}><UploadIcon />导入行业包</Button>}
       </PageHead>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5 max-sm:grid-cols-1 max-sm:gap-3">
@@ -163,7 +163,7 @@ export default function Industries({ open }: { open?: string }) {
                 {i.products.length} 种产品，{machines.length} 种设备：{machines.slice(0, 5).join('、')}{machines.length > 5 ? ' 等' : ''}
               </p>
               <p className="mt-auto border-t pt-3 text-[12.5px]">
-                {users.length ? <>在用：<b>{users.map((u) => u.name).join('、')}</b></> : <span className="text-muted-foreground">还没有客户在用</span>}
+                {users.length ? <>在用：<b>{users.map((u) => u.name).join('、')}</b></> : <span className="text-muted-foreground">还没有公司在用</span>}
               </p>
             </a>
           );

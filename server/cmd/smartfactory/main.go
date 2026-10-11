@@ -7,7 +7,7 @@
 //	smartfactory token -name 张工 -role operator -company huaduan
 //	smartfactory version
 //
-// and, against a running server, the console's commands (cli.go): login, customers, industries,
+// and, against a running server, the console's commands (cli.go): login, company, industries,
 // tokens, kb, activity, agent.
 package main
 
@@ -259,26 +259,16 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			}
 		}()
 	}
-	// templates: the ones saved here, the public hub, and the hub's own when this server is it
-	var saved, hubStore *templates.Store
-	var market *templates.Hub
+	// templates saved or imported on this installation
+	var saved *templates.Store
 	if cfg.Data != "" {
 		if saved, err = templates.Open(filepath.Join(cfg.Data, "templates")); err != nil {
 			return err
 		}
-		if cfg.Hub {
-			if hubStore, err = templates.Open(filepath.Join(cfg.Data, "hub")); err != nil {
-				return err
-			}
-		}
-	}
-	if cfg.TemplateHub != "" {
-		market = &templates.Hub{URL: cfg.TemplateHub, Token: cfg.HubToken}
 	}
 	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Instances: cfg.Instances,
-		Saved: saved, Market: market, HubStore: hubStore, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

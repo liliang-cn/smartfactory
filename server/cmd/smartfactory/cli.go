@@ -3,7 +3,7 @@ package main
 // The command line for administrators: everything the console does, against a running server.
 //
 //	smartfactory login -server https://factory.superleo.cn
-//	smartfactory customers | customers show <id> | customers new -f cfg.json | customers new -ai "描述" | customers rm <id>
+//	smartfactory company | company show <id> | company new -f cfg.json | company new -ai "描述" | company rm <id>
 //	smartfactory industries | industries show <id>
 //	smartfactory tokens | tokens issue -name 张工 -role operator -company huaduan | tokens revoke <key>
 //	smartfactory kb <company> | kb <company> search "问题" | kb <company> entity <名字> | kb <company> rebuild
@@ -33,7 +33,7 @@ import (
 
 var cliCommands = map[string]func(ctx context.Context, args []string) error{
 	"login": cliLogin, "logout": cliLogout, "whoami": cliWhoami,
-	"customers": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
+	"company": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
 	"kb": cliKB, "activity": cliActivity, "agent": cliAgent,
 }
 
@@ -245,10 +245,10 @@ func cliWhoami(ctx context.Context, args []string) error {
 	return nil
 }
 
-// ---- customers ----
+// ---- the company ----
 
 func cliCustomers(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("customers", flag.ExitOnError)
+	fs := flag.NewFlagSet("company", flag.ExitOnError)
 	file := fs.String("f", "", "company config (JSON) to create, or - for stdin")
 	brief := fs.String("ai", "", "describe the customer; the scene architect writes the config")
 	check := fs.Bool("check", false, "only check the config")
@@ -297,7 +297,7 @@ func cliCustomers(ctx context.Context, args []string) error {
 		table([]string{"标识", "名称", "行业", "工厂", "产线", "设备", "", ""}, rows)
 	case "show":
 		if len(rest) < 2 {
-			return errors.New("smartfactory customers show <id>")
+			return errors.New("smartfactory company show <id>")
 		}
 		var cfg json.RawMessage
 		if err := c.Do(ctx, "GET", "/api/admin/companies/"+client.Q(rest[1]), nil, &cfg); err != nil {
@@ -356,7 +356,7 @@ func cliCustomers(ctx context.Context, args []string) error {
 				return fmt.Errorf("%s 不是合法的 JSON：%w", *file, err)
 			}
 		default:
-			return errors.New("smartfactory customers new -f cfg.json，或 -ai \"描述客户的工厂\"")
+			return errors.New("smartfactory company new -f cfg.json，或 -ai \"描述工厂\"")
 		}
 		var res json.RawMessage
 		if err := c.Do(ctx, "POST", "/api/admin/companies?check=1", cfg, &res); err != nil {
@@ -379,7 +379,7 @@ func cliCustomers(ctx context.Context, args []string) error {
 		fmt.Printf("%s 已建好，正在仿真：%s/?company=%v\n", green("✓"), c.Server, cfg["id"])
 	case "rm", "delete":
 		if len(rest) < 2 {
-			return errors.New("smartfactory customers rm <id>")
+			return errors.New("smartfactory company rm <id>")
 		}
 		if !*yes && !confirm("删除公司 "+rest[1]+"？它的仿真停止、配置删掉（助手、资料、记录保留）") {
 			return nil
@@ -389,7 +389,7 @@ func cliCustomers(ctx context.Context, args []string) error {
 		}
 		fmt.Println(green("✓"), "已删除", rest[1])
 	default:
-		return fmt.Errorf("customers %s：用 ls、show、new、rm", verb)
+		return fmt.Errorf("company %s：用 ls、show、new、rm", verb)
 	}
 	return nil
 }
@@ -456,8 +456,8 @@ func firstLine(s string) string {
 }
 
 var toolNames = map[string]string{
-	"list_industries": "看行业包", "get_industry": "读行业包", "list_companies": "看现有客户", "get_company": "参考公司",
-	"propose_company": "检查配置", "list_customers": "看客户", "get_customer": "读客户", "check_company": "检查配置",
+	"list_industries": "看行业包", "get_industry": "读行业包", "list_companies": "看现有的公司", "get_company": "参考公司",
+	"propose_company": "检查配置", "list_customers": "看公司", "get_customer": "读公司", "check_company": "检查配置",
 	"list_tokens": "看令牌", "activity": "看操作记录", "knowledge_search": "搜知识库", "knowledge_entity": "查工艺图",
 	"propose_create_company": "提出建公司", "propose_delete_company": "提出删公司", "propose_issue_token": "提出发令牌",
 	"propose_revoke_token": "提出撤销令牌", "propose_rebuild_knowledge": "提出重建知识库",

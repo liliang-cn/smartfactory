@@ -100,7 +100,7 @@ export const templates = () => call<TemplateSummary[]>('GET', '/api/admin/templa
 export const template = (source: TemplateSummary['source'], id: string) => call<Template>('GET', `/api/admin/templates/${source}/${encodeURIComponent(id)}`);
 export const saveTemplate = (t: SaveTemplate) => call<TemplateSummary>('POST', '/api/admin/templates', t);
 export const deleteTemplate = (id: string) => call<{ ok: true }>('DELETE', `/api/admin/templates/${encodeURIComponent(id)}`);
-export const publishTemplate = (id: string) => call<{ ok: true }>('POST', `/api/admin/templates/${encodeURIComponent(id)}/publish`);
+export const importTemplate = (t: unknown) => call<TemplateSummary>('POST', '/api/admin/templates/import', t);
 
 const kbPath = (c: string) => `/api/knowledge/${encodeURIComponent(c)}`;
 export const knowledge = (c: string) => call<KnowledgeOverview>('GET', kbPath(c));

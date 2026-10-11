@@ -3117,43 +3117,7 @@
             "type": "string"
           }
         },
-        "instances": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "url": {
-                "type": "string"
-              },
-              "up": {
-                "type": "boolean"
-              },
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "name",
-              "url",
-              "up"
-            ],
-            "additionalProperties": false
-          }
-        },
         "single": {
-          "type": "boolean"
-        },
-        "hub": {
-          "type": "string"
-        },
-        "hubPublish": {
           "type": "boolean"
         }
       },
@@ -3164,9 +3128,7 @@
         "issue",
         "assistants",
         "version",
-        "instances",
-        "single",
-        "hubPublish"
+        "single"
       ],
       "additionalProperties": false,
       "description": "GET /api/admin — administrators only (401 without a token, 403 below admin)"
@@ -4023,7 +3985,7 @@
       "items": {
         "$ref": "#/$defs/TemplateSummary"
       },
-      "description": "GET /api/admin/templates, and the hub's GET /api/hub/templates (public)"
+      "description": "GET /api/admin/templates"
     },
     "TemplateSummary": {
       "type": "object",
@@ -4044,8 +4006,7 @@
           "type": "string",
           "enum": [
             "builtin",
-            "local",
-            "hub"
+            "local"
           ]
         },
         "industry": {
@@ -4152,7 +4113,7 @@
         "company"
       ],
       "additionalProperties": false,
-      "description": "GET /api/admin/templates/{source}/{id}; POST /api/hub/templates takes one"
+      "description": "GET /api/admin/templates/{source}/{id} (the file a template is exported as); POST /api/admin/templates/import takes one"
     },
     "SaveTemplate": {
       "type": "object",

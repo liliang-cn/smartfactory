@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -11,8 +10,8 @@ import (
 	"smartfactory/internal/templates"
 )
 
-// Templates are factories to start from: built in, saved on this instance, or on the template
-// hub, where anyone with a hub account publishes theirs for everyone.
+// Templates are factories to start from: built in, or saved on this instance — made here from
+// a factory, or imported from a file another installation exported.
 
 // summarize checks a template with the engine and says what it lays out to.
 func (o *Ops) summarize(t *templates.Template, source string) (templates.Summary, error) {
@@ -28,7 +27,7 @@ func (o *Ops) summarize(t *templates.Template, source string) (templates.Summary
 	return s, nil
 }
 
-// Templates lists the templates: built in, this instance's, the hub's.
+// Templates lists the templates: built in and this instance's.
 func (o *Ops) Templates(ctx context.Context, who auth.Who) ([]templates.Summary, error) {
 	if err := Admin(who); err != nil {
 		return nil, err
@@ -51,7 +50,7 @@ func (o *Ops) Templates(ctx context.Context, who auth.Who) ([]templates.Summary,
 			}
 		}
 	}
-	return append(out, o.Market.List(ctx)...), nil
+	return out, nil
 }
 
 // Template is one template whole.
@@ -73,10 +72,8 @@ func (o *Ops) Template(ctx context.Context, who auth.Who, source, id string) (*t
 		if o.Saved != nil {
 			t, err = o.Saved.Get(id)
 		}
-	case "hub":
-		t, err = o.Market.Get(ctx, id)
 	default:
-		return nil, fail(400, "模板来源是 builtin、local 或 hub")
+		return nil, fail(400, "模板来源是 builtin 或 local")
 	}
 	if err != nil {
 		return nil, err
@@ -84,7 +81,6 @@ func (o *Ops) Template(ctx context.Context, who auth.Who, source, id string) (*t
 	if t == nil {
 		return nil, fail(404, "没有模板 %s", id)
 	}
-	t.AuthorKey = ""
 	return t, nil
 }
 
@@ -209,77 +205,27 @@ func (o *Ops) DeleteTemplate(who auth.Who, via, id string) error {
 	return nil
 }
 
-// PublishTemplate puts a template saved here on the template hub.
-func (o *Ops) PublishTemplate(ctx context.Context, who auth.Who, via, id string) error {
+// ImportTemplate keeps a template exported from another installation (a file); same id replaces.
+func (o *Ops) ImportTemplate(who auth.Who, via string, t *templates.Template) (*templates.Summary, error) {
 	if err := Admin(who); err != nil {
-		return err
+		return nil, err
 	}
-	t, err := o.Template(ctx, who, "local", id)
-	if err != nil {
-		return err
+	if o.Saved == nil {
+		return nil, fail(503, "这台服务器没有数据目录，存不了模板")
 	}
-	err = o.Market.Publish(ctx, t)
-	o.Audit.Record(who, via, "*", "template.publish", t.ID+" "+t.Name, "", err)
-	if err != nil {
-		return &Error{Code: 502, Msg: err.Error()}
+	if !templates.ValidID.MatchString(t.ID) || strings.TrimSpace(t.Name) == "" || len(t.Company) == 0 {
+		return nil, fail(400, "不是模板文件：要有 id、name、company")
 	}
-	return nil
-}
-
-// ---- the hub (on the platform server) ----
-
-// HubTemplates is what the hub offers, for anyone.
-func (o *Ops) HubTemplates() ([]templates.Summary, error) {
-	out := []templates.Summary{}
-	if o.HubStore == nil {
-		return out, nil
+	if t.Created.IsZero() {
+		t.Created = time.Now()
 	}
-	list, err := o.HubStore.All()
+	s, err := o.summarize(t, "local")
+	if err == nil {
+		err = o.Saved.Put(t)
+	}
+	o.Audit.Record(who, via, "*", "template.import", t.ID+" "+t.Name, t.Author, err)
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range list {
-		if s, err := o.summarize(t, "hub"); err == nil {
-			out = append(out, s)
-		}
-	}
-	return out, nil
-}
-
-func (o *Ops) HubTemplate(id string) (*templates.Template, error) {
-	if o.HubStore == nil {
-		return nil, fail(404, "这里不是模板市场")
-	}
-	t, err := o.HubStore.Get(id)
-	if err != nil {
-		return nil, err
-	}
-	if t == nil {
-		return nil, fail(404, "没有模板 %s", id)
-	}
-	t.AuthorKey = ""
-	return t, nil
-}
-
-// HubPublish takes a template from anyone with a hub account; only its author replaces it.
-func (o *Ops) HubPublish(who auth.Who, t *templates.Template) error {
-	if o.HubStore == nil {
-		return fail(404, "这里不是模板市场")
-	}
-	if who.Key == "" {
-		return fail(401, "用模板市场的令牌发布")
-	}
-	if old, _ := o.HubStore.Get(t.ID); old != nil && old.AuthorKey != who.Key {
-		return fail(409, "模板 %s 是%s发布的，换一个标识", t.ID, old.Author)
-	}
-	t.Author, t.AuthorKey, t.Created = who.Name, who.Key, time.Now()
-	if _, err := o.summarize(t, "hub"); err != nil {
-		return err
-	}
-	err := o.HubStore.Put(t)
-	o.Audit.Record(who, "page", "*", "template.publish", t.ID+" "+t.Name, "", err)
-	if err != nil {
-		return errors.New(err.Error())
-	}
-	return nil
+	return &s, nil
 }

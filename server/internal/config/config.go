@@ -36,28 +36,9 @@ type Config struct {
 	//   - by default, one company: a self-hosted instance starts empty, its administrator builds
 	//     the factory from a template, a description or a config, and that company is all it runs;
 	//   - Demo: every built-in template, as a company each (development, the public demo);
-	//   - Companies: just these ([] for none: the platform server, which lists the instances).
+	//   - Companies: just these.
 	Demo      bool     `json:"demo,omitempty"`
 	Companies []string `json:"companies,omitempty"`
-	// Instances are the customers' own servers. A factory page asked of one of them here is sent
-	// there, and the console lists them.
-	Instances []Instance `json:"instances,omitempty"`
-	// TemplateHub is the public template hub (default https://factory.superleo.cn; "off" for
-	// none); HubToken this instance's account there, to publish (${VAR} from the environment).
-	TemplateHub string `json:"templateHub,omitempty"`
-	HubToken    string `json:"hubToken,omitempty"`
-	// Hub: this server is the template hub, keeping what anyone publishes.
-	Hub bool `json:"hub,omitempty"`
-}
-
-// Instance is one customer's own server.
-type Instance struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	// URL is where people open it (https://huaduan.factory.superleo.cn).
-	URL string `json:"url"`
-	// Internal is where this server reaches it to see whether it is up (http://127.0.0.1:44731).
-	Internal string `json:"internal,omitempty"`
 }
 
 // Key is one person's or client's token.
@@ -227,13 +208,6 @@ func Load(path string) (Config, error) {
 	if t := os.Getenv("SF_TOKEN"); t != "" {
 		c.Token = t
 	}
-	switch c.TemplateHub {
-	case "":
-		c.TemplateHub = "https://factory.superleo.cn"
-	case "off":
-		c.TemplateHub = ""
-	}
-	c.HubToken = os.ExpandEnv(c.HubToken)
 	for i := range c.History {
 		c.History[i].DSN = os.ExpandEnv(c.History[i].DSN)
 		c.History[i].AdvisorToken = os.ExpandEnv(c.History[i].AdvisorToken)

@@ -1,4 +1,4 @@
-// 新建客户 / 改场景: a company built from an existing one — its industry, plants and lines —
+// 建工厂 / 改场景: a company built from an existing one — its industry, plants and lines —
 // edited into the customer's own, with the floor plans laid out as you type by the same code the
 // twin uses, and checked by the same schema the server checks.
 import { useEffect, useMemo, useState } from 'react';
@@ -176,14 +176,14 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
 const TOOL_LABEL: Record<string, (a?: Record<string, unknown>) => string> = {
   list_industries: () => '看有哪些行业包',
   get_industry: (a) => `读行业包 ${a?.id ?? ''}`,
-  list_companies: () => '看现有客户',
+  list_companies: () => '看现有的公司',
   get_company: (a) => `参考 ${a?.id ?? ''} 的配置`,
   propose_company: () => '检查配置',
 };
 
 interface Step { tool: string; args?: Record<string, unknown>; done: boolean; failed?: string }
 
-/** 描述客户: the scene architect writes the config from a few sentences; each version that passes
+/** 描述工厂: the scene architect writes the config from a few sentences; each version that passes
  * the engine's check lands in the form below. */
 function Architect({ draft, onDraft, edit }: { draft: Draft | null; onDraft(d: Draft): void; edit: boolean }) {
   const [brief, setBrief] = useState('');
@@ -280,7 +280,7 @@ function Preview({ plants, problems, draft }: { plants: PlantLayout[]; problems:
       <div className="flex items-center gap-3">
         <span className="grid h-10 min-w-11 place-items-center rounded-[10px] bg-foreground px-1.5 text-[14px] font-extrabold text-background">{draft.short || '简称'}</span>
         <span className="grid min-w-0 leading-tight">
-          <b className={cn('truncate text-[16px] font-extrabold', !draft.name && 'text-muted-foreground')}>{draft.name || '客户名称'}</b>
+          <b className={cn('truncate text-[16px] font-extrabold', !draft.name && 'text-muted-foreground')}>{draft.name || '公司名称'}</b>
           <small className="text-[12.5px] text-muted-foreground tabular-nums">{plants.length} 个工厂，{lines} 条产线，{machines} 台设备</small>
         </span>
       </div>
@@ -320,7 +320,7 @@ function Done({ result, edit }: { result: api.CompanyCreated; edit: boolean }) {
   );
 }
 
-const SOURCE_LABEL: Record<api.TemplateSummary['source'], string> = { builtin: '内置模板', local: '这里存的模板', hub: '模板市场' };
+const SOURCE_LABEL: Record<api.TemplateSummary['source'], string> = { builtin: '内置模板', local: '这里的模板' };
 
 export default function Builder({ edit }: { edit?: string }) {
   const { ov, reload } = useConsole();
@@ -344,7 +344,7 @@ export default function Builder({ edit }: { edit?: string }) {
   const [server, setServer] = useState<string[]>([]);
   const [done, setDone] = useState<api.CompanyCreated | null>(null);
   const [touched, setTouched] = useState(false);
-  const noun = ov.single ? '公司' : '客户';
+  const noun = '公司';
 
   useEffect(() => {
     api.templates().then(setList, () => setList([]));
@@ -445,25 +445,25 @@ export default function Builder({ edit }: { edit?: string }) {
   const checked = useMemo(() => {
     if (!draft) return { plants: [] as PlantLayout[], problems: [] as string[] };
     try {
-      const cfg = validateCompany(clean(draft), '客户');
+      const cfg = validateCompany(clean(draft), '公司');
       const missing = industriesOf(cfg).filter((i) => !industries.has(i));
       if (missing.length) return { plants: [], problems: [`还没读到行业包 ${missing.join('、')}`] };
-      return { plants: layoutCompany(cfg, industries, '客户'), problems: [] };
+      return { plants: layoutCompany(cfg, industries, '公司'), problems: [] };
     } catch (e) {
       return { plants: [], problems: e instanceof ConfigError ? e.issues : [(e as Error).message] };
     }
   }, [draft, industries]);
 
   if (edit && !ov.companies.some((c) => c.id === edit && !c.builtin)) {
-    return <PageHead title="这家公司不能在这里改" sub="随应用内置的公司改不了，可以照它新建一个" back={{ to: `/admin/customers/${encodeURIComponent(edit)}`, label: '客户' }} />;
+    return <PageHead title="这家公司不能在这里改" sub="随应用内置的公司改不了，可以照它新建一个" back={{ to: `/admin/customers/${encodeURIComponent(edit)}`, label: '公司' }} />;
   }
   if (!edit && (ov.single ? ov.companies.length > 0 : !!ov.runs)) {
-    return <PageHead title={ov.single ? '这个实例已经建好了工厂' : '这是一个客户自己的实例'} sub="别的公司部署自己的实例" back={{ to: '/admin', label: noun }} />;
+    return <PageHead title={ov.single ? '这个实例已经建好了工厂' : '这台服务器只运行一家公司'} sub="别的公司部署自己的 SmartFactory" back={{ to: '/admin', label: noun }} />;
   }
   if (!ov.me.everywhere && !edit) {
-    return <PageHead title={`新建${noun}要所有公司的管理员令牌`} sub={`你的令牌只管 ${ov.companies.map((c) => c.name).join('、')}`} back={{ to: '/admin', label: '客户' }} />;
+    return <PageHead title={`新建${noun}要所有公司的管理员令牌`} sub={`你的令牌只管 ${ov.companies.map((c) => c.name).join('、')}`} back={{ to: '/admin', label: '公司' }} />;
   }
-  if (done) return <><PageHead title={edit ? '改场景' : ov.single ? '建你的工厂' : '新建客户'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
+  if (done) return <><PageHead title={edit ? '改场景' : ov.single ? '建你的工厂' : '新建公司'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
 
   const idTaken = !edit && !!draft?.id && ov.companies.some((c) => c.id === draft.id.trim());
   const idBad = !!draft?.id && !ID.test(draft.id.trim());
@@ -510,8 +510,8 @@ export default function Builder({ edit }: { edit?: string }) {
   const templateName = (id: string) => ov.companies.find((c) => c.id === id)?.name ?? id;
   return (
     <>
-      <PageHead title={edit ? `改场景：${templateName(edit)}` : ov.single ? '建你的工厂' : '新建客户'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '模板' : '客户' }}
-        sub={edit ? '保存后这家公司的仿真按新场景从头开始' : `从一个模板起步，改成${ov.single ? '你公司' : '客户'}的名字、工厂和产线`}>
+      <PageHead title={edit ? `改场景：${templateName(edit)}` : ov.single ? '建你的工厂' : '新建公司'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '模板' : '公司' }}
+        sub={edit ? '保存后这家公司的仿真按新场景从头开始' : '从一个模板起步，改成你公司的名字、工厂和产线'}>
         <ToggleGroup type="single" value={mode} onValueChange={(v) => { if (v === 'json' && mode === 'form') toJson(); if (v === 'form' && mode === 'json') fromJson(); }} className="rounded-xl bg-card p-0.5 shadow-float">
           <ToggleGroupItem value="form" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><ListIcon className="size-4" />表单</ToggleGroupItem>
           <ToggleGroupItem value="json" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><CodeXmlIcon className="size-4" />JSON</ToggleGroupItem>
@@ -546,7 +546,7 @@ export default function Builder({ edit }: { edit?: string }) {
                       <Select value={from} onValueChange={pickTemplate}>
                         <SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="选一个模板" /></SelectTrigger>
                         <SelectContent>
-                          {(['builtin', 'local', 'hub'] as const).map((src) => {
+                          {(['builtin', 'local'] as const).map((src) => {
                             const items = list.filter((t) => t.source === src);
                             if (!items.length) return null;
                             return (

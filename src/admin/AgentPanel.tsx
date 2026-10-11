@@ -73,7 +73,7 @@ const STEP: Record<string, string> = {
 };
 const stepText = (s: Step) => [STEP[s.tool] ?? s.tool, ...['id', 'company', 'name', 'query'].map((k) => s.args?.[k]).filter((v): v is string => typeof v === 'string' && !!v)].join(' ');
 
-const SUGGEST = ['哪些客户接了真实设备数据？', '华锻 IH-101 的上下游是什么，作业要求在哪份资料里？', '给张工发一个只管华锻的操作员令牌', '最近一周谁改过什么？'];
+const SUGGEST = ['哪些设备接了真实数据？', '华锻 IH-101 的上下游是什么，作业要求在哪份资料里？', '给张工发一个操作员令牌', '最近一周谁改过什么？'];
 
 function ActionCard({ card, onChange }: { card: Card; onChange(c: Card): void }) {
   const { reload } = useConsole();
@@ -213,7 +213,7 @@ export function AgentPanel() {
         </div>
         <form className="border-t p-3" onSubmit={(e) => { e.preventDefault(); go(text); }}>
           <div className="relative">
-            <Textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="比如：照华锻新建一个客户，两个厂各三条曲轴线"
+            <Textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="比如：二厂再加一条曲轴线"
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); go(text); } }}
               className="max-h-40 min-h-[64px] resize-none rounded-xl pr-12 text-[13.5px]" aria-label="对助手说" />
             {ctrl

@@ -10,16 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"net/http"
 	"strings"
-	"sync"
-	"time"
 	"unicode/utf8"
 
 	"smartfactory/internal/agents"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
-	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
@@ -37,13 +33,8 @@ type Ops struct {
 	// Advisors is each company's advisor console, for those that have one.
 	Advisors map[string]string
 	Version  string
-	// Instances are the customers' own servers (on the platform server).
-	Instances []config.Instance
-	// Saved are the templates saved on this instance; Market the public template hub it reads;
-	// HubStore the hub's own templates, when this server is the hub.
-	Saved    *templates.Store
-	Market   *templates.Hub
-	HubStore *templates.Store
+	// Saved are the templates saved on this instance.
+	Saved *templates.Store
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.
@@ -111,25 +102,10 @@ type Overview struct {
 	Issue      bool            `json:"issue"`
 	Assistants bool            `json:"assistants"`
 	Version    string          `json:"version"`
-	// Runs is the companies this server is limited to (a customer's own instance, [] on the
-	// platform server); absent when any.
+	// Runs is the companies this server is limited to; absent when any (the demo).
 	Runs *[]string `json:"runs,omitempty"`
-	// Instances are the customers' own servers, on the platform server.
-	Instances []InstanceStatus `json:"instances"`
 	// Single: a self-hosted instance of one company (empty until it is built)
 	Single bool `json:"single"`
-	// Hub is the template hub this instance reads, and whether it can publish there.
-	Hub        string `json:"hub,omitempty"`
-	HubPublish bool   `json:"hubPublish"`
-}
-
-// InstanceStatus is a customer's own server and whether it answers.
-type InstanceStatus struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	Up      bool   `json:"up"`
-	Version string `json:"version,omitempty"`
 }
 
 func (o *Ops) Overview(who auth.Who) (*Overview, error) {
@@ -141,8 +117,7 @@ func (o *Ops) Overview(who auth.Who) (*Overview, error) {
 		return nil, err
 	}
 	return &Overview{Me: who, Companies: cs, Industries: json.RawMessage(o.Engine.IndustryList()), Issue: o.Keys.CanIssue(), Assistants: o.Agents != nil, Version: o.Version,
-		Runs: runs(o.Engine.Runs()), Instances: o.instances(who), Single: o.Engine.IsSingle(),
-		Hub: hubURL(o.Market), HubPublish: o.Market != nil && o.Market.Token != ""}, nil
+		Runs: runs(o.Engine.Runs()), Single: o.Engine.IsSingle()}, nil
 }
 
 func runs(ids []string) *[]string {
@@ -150,49 +125,6 @@ func runs(ids []string) *[]string {
 		return nil
 	}
 	return &ids
-}
-
-func hubURL(h *templates.Hub) string {
-	if h == nil {
-		return ""
-	}
-	return h.URL
-}
-
-// instances asks each customer's server the caller may see whether it is up.
-func (o *Ops) instances(who auth.Who) []InstanceStatus {
-	out := make([]InstanceStatus, 0, len(o.Instances))
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	for _, in := range o.Instances {
-		if !who.In(in.ID) {
-			continue
-		}
-		st := InstanceStatus{ID: in.ID, Name: in.Name, URL: in.URL}
-		i := len(out)
-		out = append(out, st)
-		if in.Internal == "" {
-			continue
-		}
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			c := http.Client{Timeout: 1500 * time.Millisecond}
-			res, err := c.Get(strings.TrimRight(url, "/") + "/api/health")
-			if err != nil {
-				return
-			}
-			defer res.Body.Close()
-			var h struct{ Version string }
-			if res.StatusCode == 200 && json.NewDecoder(res.Body).Decode(&h) == nil {
-				mu.Lock()
-				out[i].Up, out[i].Version = true, h.Version
-				mu.Unlock()
-			}
-		}(in.Internal)
-	}
-	wg.Wait()
-	return out
 }
 
 // Companies are the companies who's token covers.
