@@ -575,8 +575,11 @@ export const IssueToken = z.object({
 /** The token itself is in this answer only; the server keeps a hash. */
 export const IssuedToken = z.object({ token: str, account: Account });
 
-/** POST /api/admin/compose: a customer described in words, and optionally the config to change. */
-export const ComposeRequest = z.object({ brief: str, base: z.record(str, z.unknown()).optional() });
+/**
+ * POST /api/admin/compose: a site described in words, and optionally the config to change. kind
+ * company (default): a company config, with new industry packs when none fits; industry: a pack alone.
+ */
+export const ComposeRequest = z.object({ kind: z.enum(['company', 'industry']).optional(), brief: str, base: z.record(str, z.unknown()).optional() });
 export const ComposeEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('thinking') }),
   z.object({ kind: z.literal('tool_call'), tool: str, args: z.record(str, z.unknown()).optional() }),
@@ -585,6 +588,8 @@ export const ComposeEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('reset') }),
   /** a company config that passed the engine's check (nothing was created) */
   z.object({ kind: z.literal('draft'), result: z.record(str, z.unknown()) }),
+  /** an industry pack it wrote that passed the check (nothing was installed); a company it drafts may use it */
+  z.object({ kind: z.literal('industry'), result: z.record(str, z.unknown()) }),
   z.object({ kind: z.literal('complete'), text: str.optional() }),
   z.object({ kind: z.literal('error'), text: str }),
 ]).meta({ description: 'One server-sent event of the scene architect: `data: <ComposeEvent JSON>`' });
@@ -739,7 +744,7 @@ export const PullResult = z.object({
 
 /** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
 export const ConsoleAction = z.object({
-  kind: z.enum(['create_company', 'delete_company', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order']),
+  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [

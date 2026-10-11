@@ -122,7 +122,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -672,6 +672,14 @@ func (e *Engine) CreateCompany(raw []byte) ConfigResult {
 	return r
 }
 
+// CheckIndustry validates an industry pack without loading it.
+func (e *Engine) CheckIndustry(raw []byte) ConfigResult {
+	if r, bad := badID(configID(raw)); bad {
+		return r
+	}
+	return e.verdict(e.str("checkIndustry", string(raw)))
+}
+
 // CheckCompany says what CreateCompany would, without creating anything.
 func (e *Engine) CheckCompany(raw []byte) ConfigResult {
 	if r, bad := badID(configID(raw)); bad {
@@ -693,7 +701,9 @@ func (e *Engine) BuiltinTemplates() string { return e.str("builtinTemplates") }
 func (e *Engine) BuiltinTemplate(id string) string { return e.str("builtinTemplate", id) }
 
 // CheckTemplate validates a template ({company, industries}) and lays it out, installing nothing.
-func (e *Engine) CheckTemplate(raw []byte) ConfigResult { return e.verdict(e.str("checkTemplate", string(raw))) }
+func (e *Engine) CheckTemplate(raw []byte) ConfigResult {
+	return e.verdict(e.str("checkTemplate", string(raw)))
+}
 
 // ProcessModel is a company's plants, lines, products and stations as laid out (JSON), or "null".
 func (e *Engine) ProcessModel(id string) string { return e.str("processModel", id) }

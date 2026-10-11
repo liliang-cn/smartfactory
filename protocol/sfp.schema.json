@@ -3344,6 +3344,13 @@
     "ComposeRequest": {
       "type": "object",
       "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "company",
+            "industry"
+          ]
+        },
         "brief": {
           "type": "string"
         },
@@ -3453,6 +3460,27 @@
             "kind": {
               "type": "string",
               "const": "draft"
+            },
+            "result": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "industry"
             },
             "result": {
               "type": "object",
@@ -3798,6 +3826,7 @@
           "enum": [
             "create_company",
             "delete_company",
+            "create_industry",
             "issue_token",
             "revoke_token",
             "rebuild_knowledge",

@@ -12,7 +12,7 @@ import (
 // An Action is a change the console agent proposes and a person carries out: the page shows it
 // with a button, the command line asks y/N, and either runs it here as the person who confirmed.
 type Action struct {
-	// Kind: create_company | delete_company | issue_token | revoke_token | rebuild_knowledge | cancel_order
+	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
 	Title  string         `json:"title"`
@@ -32,6 +32,12 @@ func (o *Ops) Do(ctx context.Context, who auth.Who, via string, a Action) (any, 
 		return o.CreateCompany(who, via, cfg)
 	case "delete_company":
 		return map[string]bool{"ok": true}, o.DeleteCompany(who, via, str("id"))
+	case "create_industry":
+		cfg, ok := a.Args["config"].(map[string]any)
+		if !ok {
+			return nil, fail(400, "create_industry 要 config")
+		}
+		return o.CreateIndustry(who, via, cfg)
 	case "issue_token":
 		var in IssueRequest
 		b, _ := json.Marshal(a.Args)
@@ -73,6 +79,9 @@ func (o *Ops) describe(a *Action) error {
 		a.Title = fmt.Sprintf("建立公司 %s（%s）", name, id)
 	case "delete_company":
 		a.Title = "删除公司 " + named(str("id"))
+	case "create_industry":
+		cfg, _ := a.Args["config"].(map[string]any)
+		a.Title = fmt.Sprintf("保存行业包 %v（%v）", cfg["name"], cfg["id"])
 	case "issue_token":
 		role, _ := auth.ParseRole(str("role"))
 		scope := "所有公司"

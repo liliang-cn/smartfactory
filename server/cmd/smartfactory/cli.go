@@ -4,7 +4,7 @@ package main
 //
 //	smartfactory login -server https://factory.superleo.cn
 //	smartfactory company | company show <id> | company new -f cfg.json | company new -ai "描述" | company rm <id>
-//	smartfactory industries | industries show <id>
+//	smartfactory industries | industries show <id> | industries new -ai "描述" | industries new -f pack.json
 //	smartfactory tokens | tokens issue -name 张工 -role operator -company huaduan | tokens revoke <key>
 //	smartfactory kb <company> | kb <company> search "问题" | kb <company> entity <名字> | kb <company> rebuild
 //	smartfactory orders <company> | orders <company> show <工单号> | send -f orders.json | cancel <工单号> | pull [-dry] | erp
@@ -338,9 +338,11 @@ func cliCustomers(ctx context.Context, args []string) error {
 		fmt.Printf("  孪生：%s/?company=%s\n", c.Server, co.ID)
 	case "new":
 		var cfg map[string]any
+		// industry packs the architect wrote for it, installed before it is built
+		var packs map[string]map[string]any
 		switch {
 		case *brief != "":
-			if cfg, err = compose(ctx, c, *brief); err != nil {
+			if cfg, packs, err = compose(ctx, c, "company", *brief); err != nil {
 				return err
 			}
 		case *file != "":
@@ -360,16 +362,28 @@ func cliCustomers(ctx context.Context, args []string) error {
 			return errors.New("smartfactory company new -f cfg.json，或 -ai \"描述工厂\"")
 		}
 		var res json.RawMessage
-		if err := c.Do(ctx, "POST", "/api/admin/companies?check=1", cfg, &res); err != nil {
-			return err
+		if len(packs) == 0 {
+			// with new packs the architect has already checked them together
+			if err := c.Do(ctx, "POST", "/api/admin/companies?check=1", cfg, &res); err != nil {
+				return err
+			}
+			summary(res)
 		}
-		summary(res)
+		for _, p := range packs {
+			fmt.Print(dim("新行业包 "))
+			packSummary(p)
+		}
 		if *check {
 			fmt.Println(green("检查通过"), dim("（没有创建）"))
 			return nil
 		}
 		if !*yes && !confirm(fmt.Sprintf("建立 %v？", cfg["name"])) {
 			return nil
+		}
+		for id, p := range packs {
+			if err := c.Do(ctx, "POST", "/api/admin/industries", p, nil); err != nil {
+				return fmt.Errorf("行业包 %s：%w", id, err)
+			}
 		}
 		if err := c.Do(ctx, "POST", "/api/admin/companies", cfg, &res); err != nil {
 			return err
@@ -412,11 +426,13 @@ func summary(raw json.RawMessage) {
 	}
 }
 
-// compose has the scene architect write a config from brief, showing its steps.
-func compose(ctx context.Context, c *client.Client, brief string) (map[string]any, error) {
+// compose has the scene architect write a company config (kind company) or an industry pack
+// (kind industry) from brief, showing its steps; it returns the config and the packs it wrote.
+func compose(ctx context.Context, c *client.Client, kind, brief string) (map[string]any, map[string]map[string]any, error) {
 	var draft map[string]any
+	packs := map[string]map[string]any{}
 	var failed string
-	err := c.Stream(ctx, "/api/admin/compose", map[string]any{"brief": brief}, func(e client.Event) {
+	err := c.Stream(ctx, "/api/admin/compose", map[string]any{"kind": kind, "brief": brief}, func(e client.Event) {
 		switch e.Kind {
 		case "tool_call":
 			fmt.Println(dim("· " + toolLabel(e.Tool, e.Args)))
@@ -426,6 +442,10 @@ func compose(ctx context.Context, c *client.Client, brief string) (map[string]an
 			}
 		case "draft":
 			draft, _ = e.Result.(map[string]any)
+		case "industry":
+			if p, ok := e.Result.(map[string]any); ok {
+				packs[fmt.Sprint(p["id"])] = p
+			}
 		case "complete":
 			fmt.Println(e.Text)
 		case "error":
@@ -433,12 +453,57 @@ func compose(ctx context.Context, c *client.Client, brief string) (map[string]an
 		}
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	if kind == "industry" {
+		if len(packs) == 0 {
+			return nil, nil, errors.New(cmpOr(failed, "没写出能通过检查的行业包"))
+		}
+		return nil, packs, nil
 	}
 	if draft == nil {
-		return nil, errors.New(cmpOr(failed, "没写出能通过检查的配置"))
+		return nil, nil, errors.New(cmpOr(failed, "没写出能通过检查的配置"))
 	}
-	return draft, nil
+	// only the packs the config uses
+	used := map[string]bool{fmt.Sprint(draft["industry"]): true}
+	if ps, ok := draft["plants"].([]any); ok {
+		for _, p := range ps {
+			if m, ok := p.(map[string]any); ok && m["industry"] != nil {
+				used[fmt.Sprint(m["industry"])] = true
+			}
+		}
+	}
+	for id := range packs {
+		if !used[id] {
+			delete(packs, id)
+		}
+	}
+	return draft, packs, nil
+}
+
+// packSummary prints an industry pack's products, machines and routes in a line each.
+func packSummary(p map[string]any) {
+	names := func(k, field string) string {
+		m, _ := p[k].(map[string]any)
+		var out []string
+		for _, v := range m {
+			if x, ok := v.(map[string]any); ok {
+				out = append(out, fmt.Sprint(x[field]))
+			}
+		}
+		sort.Strings(out)
+		return strings.Join(out, "、")
+	}
+	fmt.Printf("%s（%v）\n", bold(fmt.Sprint(p["name"])), p["id"])
+	fmt.Println("  产品：" + names("products", "name"))
+	fmt.Println("  设备：" + names("machines", "label"))
+}
+
+func readInput(file string) ([]byte, error) {
+	if file == "-" {
+		return io.ReadAll(os.Stdin)
+	}
+	return os.ReadFile(file)
 }
 
 func cmpOr(a, b string) string {
@@ -461,7 +526,9 @@ var toolNames = map[string]string{
 	"propose_company": "检查配置", "list_customers": "看公司", "get_customer": "读公司", "check_company": "检查配置",
 	"list_tokens": "看令牌", "activity": "看操作记录", "knowledge_search": "搜知识库", "knowledge_entity": "查工艺图",
 	"propose_create_company": "提出建公司", "propose_delete_company": "提出删公司", "propose_issue_token": "提出发令牌",
-	"propose_revoke_token": "提出撤销令牌", "propose_rebuild_knowledge": "提出重建知识库",
+	"propose_revoke_token": "提出撤销令牌", "propose_rebuild_knowledge": "提出重建知识库", "propose_industry": "检查新写的行业包",
+	"list_orders": "看工单", "erp_status": "看 ERP 对接", "propose_cancel_order": "提出撤回工单",
+	"check_industry": "检查行业包", "propose_create_industry": "提出保存行业包",
 }
 
 func toolLabel(tool string, args map[string]any) string {
@@ -477,10 +544,49 @@ func toolLabel(tool string, args map[string]any) string {
 // ---- industry packs ----
 
 func cliIndustries(ctx context.Context, args []string) error {
-	rest := flags(flag.NewFlagSet("industries", flag.ExitOnError), args)
+	fs := flag.NewFlagSet("industries", flag.ExitOnError)
+	brief := fs.String("ai", "", "new: describe the kind of site; the architect writes the pack")
+	file := fs.String("f", "", "new: the pack as JSON (- for stdin)")
+	yes := fs.Bool("y", false, "do not ask")
+	rest := flags(fs, args)
 	c, err := connect()
 	if err != nil {
 		return err
+	}
+	if len(rest) >= 1 && rest[0] == "new" {
+		var pack map[string]any
+		switch {
+		case *brief != "":
+			var packs map[string]map[string]any
+			if _, packs, err = compose(ctx, c, "industry", *brief); err != nil {
+				return err
+			}
+			for _, p := range packs {
+				pack = p
+			}
+		case *file != "":
+			b, err := readInput(*file)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(b, &pack); err != nil {
+				return fmt.Errorf("%s 不是合法的 JSON：%w", *file, err)
+			}
+		default:
+			return errors.New(`smartfactory industries new -ai "描述" 或 -f pack.json`)
+		}
+		if pack == nil {
+			return errors.New("没写出能通过检查的行业包")
+		}
+		packSummary(pack)
+		if !*yes && !confirm(fmt.Sprintf("保存行业包 %v？", pack["name"])) {
+			return nil
+		}
+		if err := c.Do(ctx, "POST", "/api/admin/industries", pack, nil); err != nil {
+			return err
+		}
+		fmt.Printf("%s 行业包 %v 已保存，建工厂时可以选它\n", green("✓"), pack["id"])
+		return nil
 	}
 	if len(rest) >= 2 && rest[0] == "show" {
 		var cfg json.RawMessage

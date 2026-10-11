@@ -153,12 +153,51 @@ function cartonFor(max: Dims): PartCfg[] {
   ];
 }
 
+/**
+ * A product's stages in process order: each route says which stage comes after which (the stages
+ * its steps make, in turn); stages no step makes (what enters a line) come first, and ties keep
+ * the order written. So a pack whose keys were sorted on the way (through the server's JSON, an
+ * agent's tool call) still enters with the right stage.
+ */
+export function stageOrder(industry: IndustryCfg, key: string): string[] {
+  const keys = Object.keys(industry.products[key]?.stages ?? {});
+  const made = new Set<string>();
+  const next = new Map(keys.map((k) => [k, new Set<string>()]));
+  const before = new Map(keys.map((k) => [k, 0]));
+  for (const route of Object.values(industry.routes)) {
+    const seq: string[] = [];
+    for (const st of route) {
+      const mk = typeof st === 'string' ? industry.machines[st]?.makes : (st.makes ?? industry.machines[st.machine]?.makes);
+      if (!mk || !keys.includes(mk)) continue;
+      made.add(mk);
+      if (seq[seq.length - 1] !== mk) seq.push(mk);
+    }
+    for (let i = 1; i < seq.length; i++) {
+      if (next.get(seq[i - 1])!.has(seq[i])) continue;
+      next.get(seq[i - 1])!.add(seq[i]);
+      before.set(seq[i], before.get(seq[i])! + 1);
+    }
+  }
+  const out: string[] = [];
+  const left = new Set(keys);
+  while (left.size) {
+    const ready = keys.filter((k) => left.has(k) && before.get(k) === 0);
+    // routes that disagree: the rest as written
+    if (!ready.length) return [...out, ...keys.filter((k) => left.has(k))];
+    const k = ready.find((x) => !made.has(x)) ?? ready[0];
+    out.push(k);
+    left.delete(k);
+    for (const b of next.get(k)!) before.set(b, before.get(b)! - 1);
+  }
+  return out;
+}
+
 function productInfo(industry: IndustryCfg, key: string, needsPacked: boolean): ProductInfo {
   const p = industry.products[key];
   if (!p) throw new Error(`行业包 ${industry.id} 里没有产品 ${key}`);
   const stages: Record<string, PartCfg[]> = {};
-  for (const [k, v] of Object.entries(p.stages)) stages[k] = v.parts;
-  const order = Object.keys(stages);
+  const order = stageOrder(industry, key);
+  for (const k of order) stages[k] = p.stages[k].parts;
   const dims: Record<string, Dims> = {};
   for (const k of order) dims[k] = stageDims(stages[k]);
   let max = Object.values(dims).reduce((m, d) => ({ l: Math.max(m.l, d.l), h: Math.max(m.h, d.h), d: Math.max(m.d, d.d) }));

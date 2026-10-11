@@ -153,6 +153,21 @@ function addCompany(json: string): string {
   });
 }
 
+/** Validates an industry pack without loading it: what addIndustry would say. */
+function checkIndustry(json: string): string {
+  return result(() => {
+    const raw = JSON.parse(json) as { id?: string };
+    const ind = validateIndustry(raw, `行业包 ${raw?.id ?? ''}`);
+    if (builtinIndustries.has(ind.id)) throw new ConfigError(`行业包 ${ind.id}`, [`${ind.id} 是内置行业包，换一个 id`]);
+    return {
+      id: ind.id, name: ind.name, flow: ind.flow, unit: ind.unit,
+      products: Object.fromEntries(Object.entries(ind.products).map(([k, p]) => [k, { name: p.name, stages: Object.keys(p.stages), partNo: p.partNo, variants: (p.variants ?? []).map((v) => v.partNo) }])),
+      machines: Object.fromEntries(Object.entries(ind.machines).map(([k, m]) => [k, `${m.label} (${m.look.archetype}, ${m.cycle} 秒)`])),
+      routes: Object.fromEntries(Object.entries(ind.routes).map(([k, r]) => [k, r.map((st) => (typeof st === 'string' ? st : st.machine))])),
+    };
+  });
+}
+
 /** Validates and lays out a company without running it: what addCompany would say. */
 function checkCompany(json: string): string {
   return result(() => {
@@ -707,6 +722,6 @@ function list(): string {
 
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
-  addIndustry, addCompany, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
+  addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward,
 };

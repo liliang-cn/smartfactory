@@ -229,6 +229,19 @@ func (o *Ops) Industry(who auth.Who, id string) (json.RawMessage, error) {
 	return json.RawMessage(js), nil
 }
 
+// CheckIndustry says what saving an industry pack would, without saving it.
+func (o *Ops) CheckIndustry(who auth.Who, cfg map[string]any) (json.RawMessage, error) {
+	if err := Admin(who); err != nil {
+		return nil, err
+	}
+	raw, _ := json.Marshal(cfg)
+	res := o.Engine.CheckIndustry(raw)
+	if !res.OK {
+		return nil, rejected(res)
+	}
+	return res.Detail, nil
+}
+
 func (o *Ops) CreateIndustry(who auth.Who, via string, cfg map[string]any) (json.RawMessage, error) {
 	if err := Admin(who); err != nil {
 		return nil, err
@@ -337,7 +350,9 @@ func (o *Ops) Activity(ctx context.Context, who auth.Who, company string, before
 
 // ---- the scene architect ----
 
-func (o *Ops) Compose(ctx context.Context, who auth.Who, brief string, base json.RawMessage, emit func(agents.Event)) error {
+// Compose has the scene architect write a company config (kind "company" or "") or an industry
+// pack ("industry") from brief, changing base when given.
+func (o *Ops) Compose(ctx context.Context, who auth.Who, kind, brief string, base json.RawMessage, emit func(agents.Event)) error {
 	if err := Admin(who); err != nil {
 		return err
 	}
@@ -348,5 +363,13 @@ func (o *Ops) Compose(ctx context.Context, who auth.Who, brief string, base json
 	if brief == "" || utf8.RuneCountInString(brief) > 4000 {
 		return fail(400, "描述要 1～4000 字")
 	}
-	return o.Agents.Compose(ctx, who, brief, base, mcptools.SceneGuide(), emit)
+	k := agents.ComposeCompany
+	switch kind {
+	case "", "company":
+	case "industry":
+		k = agents.ComposeIndustry
+	default:
+		return fail(400, "kind 是 company 或 industry")
+	}
+	return o.Agents.Compose(ctx, who, k, brief, base, mcptools.SceneGuide(), emit)
 }

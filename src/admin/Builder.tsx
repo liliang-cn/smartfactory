@@ -179,13 +179,14 @@ const TOOL_LABEL: Record<string, (a?: Record<string, unknown>) => string> = {
   list_companies: () => '看现有的公司',
   get_company: (a) => `参考 ${a?.id ?? ''} 的配置`,
   propose_company: () => '检查配置',
+  propose_industry: () => '检查新写的行业包',
 };
 
 interface Step { tool: string; args?: Record<string, unknown>; done: boolean; failed?: string }
 
 /** 描述工厂: the scene architect writes the config from a few sentences; each version that passes
  * the engine's check lands in the form below. */
-function Architect({ draft, onDraft, edit }: { draft: Draft | null; onDraft(d: Draft): void; edit: boolean }) {
+function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; onDraft(d: Draft): void; onIndustry(raw: Record<string, unknown>): void; edit: boolean }) {
   const [brief, setBrief] = useState('');
   const [steps, setSteps] = useState<Step[]>([]);
   const [answer, setAnswer] = useState('');
@@ -215,6 +216,7 @@ function Architect({ draft, onDraft, edit }: { draft: Draft | null; onDraft(d: D
             return out;
           }); break;
           case 'draft': onDraft(ev.result as Draft); setDrafts((n) => n + 1); break;
+          case 'industry': onIndustry(ev.result); break;
           case 'delta': setAnswer((a) => a + ev.text); break;
           case 'reset': setAnswer(''); break;
           case 'complete': if (ev.text) setAnswer(ev.text); break;
@@ -256,7 +258,7 @@ function Architect({ draft, onDraft, edit }: { draft: Draft | null; onDraft(d: D
                   : st.failed ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                     : <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />}
                 <span className="min-w-0">
-                  <span className={cn('font-bold', st.failed && 'text-destructive')}>{(TOOL_LABEL[st.tool] ?? (() => st.tool))(st.args)}{st.tool === 'propose_company' && st.done && !st.failed ? '：通过，已放进表单' : ''}</span>
+                  <span className={cn('font-bold', st.failed && 'text-destructive')}>{(TOOL_LABEL[st.tool] ?? (() => st.tool))(st.args)}{st.done && !st.failed ? { propose_company: '：通过，已放进表单', propose_industry: '：通过，建的时候一起装上' }[st.tool] ?? '' : ''}</span>
                   {st.failed && <span className="block whitespace-pre-line text-muted-foreground">{st.failed.replace(/^没通过：\n?/, '').slice(0, 300)}</span>}
                 </span>
               </li>
@@ -538,6 +540,15 @@ export default function Builder({ edit }: { edit?: string }) {
                     setDraft(next);
                     setServer([]);
                     if (next.industry) setFrom((f) => (sources.get(f)?.company.industry === next.industry ? f : ''));
+                  }} onIndustry={(raw) => {
+                    // a pack the architect wrote: drawn from now on, installed when the factory is built
+                    try {
+                      const ind = validateIndustry(raw, `行业包 ${String(raw.id)}`);
+                      setExtra((m) => new Map(m).set(ind.id, ind));
+                      setBundled((m) => new Map(m).set(ind.id, raw));
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
                   }} />
                 )}
                 {!edit && (

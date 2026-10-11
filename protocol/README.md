@@ -253,7 +253,7 @@
 
 ## 5a. 后台接口 `/api/admin/…`
 
-后台（`/admin`，独立的页面 `admin.html`）搭建孪生里的东西：客户（公司）、行业包、令牌。只有管理员令牌能用：不带令牌 401，角色不够 403。管理某几家公司的管理员只看得到、只管得了那几家；新建公司、导入行业包、看所有公司的记录要管理所有公司的管理员。
+后台（`/admin`，独立的页面 `admin.html`）搭建孪生里的东西：公司（工厂）、行业包、令牌、ERP 对接。只有管理员令牌能用：不带令牌 401，角色不够 403。管理某几家公司的管理员只看得到、只管得了那几家；新建公司、导入行业包、看所有公司的记录要管理所有公司的管理员。
 
 | 方法 路径 | 请求 | 响应 | 说明 |
 |---|---|---|---|
@@ -262,7 +262,7 @@
 | `DELETE /api/admin/companies/{id}` | — | `Done` | 删除运行时建的公司；内置的 422 |
 | `GET /api/admin/industries/{id}` | — | 行业包配置（默认值已填） | |
 | `POST /api/admin/industries` | 行业包配置 | 行业包摘要 | 新建或替换，用它的公司按新的重建；要管理所有公司 |
-| `POST /api/admin/compose` | `ComposeRequest {brief, base?}` | SSE，`ComposeEvent` 流 | 搭建员：按一段描述（`base` 是表单里现在的配置，在它上面改）用已有行业包写公司配置，每版都经引擎检查（不创建）；通过的一版作为 `draft` 事件发出。没有配置大模型时 503，同一个令牌同一时间只能跑一个 |
+| `POST /api/admin/compose` | `ComposeRequest {kind?, brief, base?}` | SSE，`ComposeEvent` 流 | 搭建员：按一段描述（`base` 是现在的配置，在它上面改）写公司配置（`kind: company`，默认）或单独一个行业包（`kind: industry`）。现有行业包里没有要的产品或工序时它写一个新行业包。每版都经引擎检查（不创建、不装）：通过的行业包作为 `industry` 事件、公司配置作为 `draft` 事件发出；用新行业包的公司配置和它一起检查，建的时候先装行业包。没有配置大模型时 503，同一个令牌同一时间只能跑一个 |
 | `GET /api/admin/tokens` | — | `Accounts` | 令牌：`from` 是 `legacy`（最初的共用令牌）、`config`（配置文件里的，只能在那里改）或 `issued`（后台发的）；撤销过的也列出 |
 | `POST /api/admin/tokens` | `IssueToken {name, role, companies, expires?}` | `IssuedToken {token, account}` | 发令牌，立即生效；`companies` 为 `null` 是所有公司（要管理所有公司）。令牌只在这个响应里出现一次，服务器只存 SHA-256 |
 | `DELETE /api/admin/tokens/{key}` | — | `Done` | 撤销后台发的令牌，立即生效（页面、实时通道里的下一次操作、MCP 都按访客对待）；配置文件里的 409，自己正在用的 409 |
@@ -271,11 +271,11 @@
 | `GET /api/admin/companies/{id}` | — | 公司配置 | 内置的和运行时建的都有 |
 | `POST /api/admin/companies?check=1` | 公司配置 | `CompanyCreated` | 只检查（校验、排布），不创建 |
 | `POST /api/admin/agent` | `{conversation?, text}` | SSE，`ConsoleEvent` 流 | 工作台助手：用后台自己的操作回答；它提出的改动作为 `action` 事件发出，**不会自己执行**。第一个事件 `conversation` 给出对话 id，带上它继续说。同一个令牌同一时间只能跑一个 |
-| `POST /api/admin/actions` | `ConsoleAction {kind, args}` | 视 `kind` 而定 | 执行一个改动（通常是助手提出、人确认的那个），以确认的人的身份，检查和审计与对应的接口相同。`kind`：`create_company {config}`、`delete_company {id}`、`issue_token {name, role, companies, expires?}`、`revoke_token {key}`、`rebuild_knowledge {company}` |
+| `POST /api/admin/actions` | `ConsoleAction {kind, args}` | 视 `kind` 而定 | 执行一个改动（通常是助手提出、人确认的那个），以确认的人的身份，检查和审计与对应的接口相同。`kind`：`create_company {config}`、`delete_company {id}`、`create_industry {config}`、`issue_token {name, role, companies, expires?}`、`revoke_token {key}`、`rebuild_knowledge {company}`、`cancel_order {company, no}` |
 
-`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`：一份通过检查的公司配置，在 `result` 里。`ConsoleEvent` 另加 `action`：一个待确认的改动，在 `result` 里，带 `title`、`detail`。审计日志新增 `token.issue`、`token.revoke`、`knowledge.rebuild`；请求头带 `X-SF-Via: cli` 的（命令行）记为 `via: cli`，其余后台请求记为 `page`。
+`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`（一份通过检查的公司配置）和 `industry`（一个通过检查的行业包），都在 `result` 里。`ConsoleEvent` 另加 `action`：一个待确认的改动，在 `result` 里，带 `title`、`detail`。审计日志新增 `token.issue`、`token.revoke`、`knowledge.rebuild`；请求头带 `X-SF-Via: cli` 的（命令行）记为 `via: cli`，其余后台请求记为 `page`。
 
-**操作只有一份**：后台页面、命令行（`smartfactory customers|industries|tokens|kb|activity|agent`）和工作台助手调用的是服务器上同一组操作（`server/internal/ops`），权限检查和审计记录完全相同。
+**操作只有一份**：后台页面、命令行（`smartfactory company|industries|tokens|kb|orders|activity|agent`）和工作台助手调用的是服务器上同一组操作（`server/internal/ops`），权限检查和审计记录完全相同。
 
 ### 部署方式和模板
 

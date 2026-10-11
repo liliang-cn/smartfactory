@@ -92,8 +92,8 @@ export const activity = (company: string, before?: number) => {
 };
 
 /** The scene architect: brief in, events out (server-sent), until it ends or signal aborts. */
-export const compose = (brief: string, base: unknown, signal: AbortSignal, on: (ev: ComposeEvent) => void) =>
-  stream('/api/admin/compose', { brief, ...(base ? { base } : {}) }, signal, on);
+export const compose = (brief: string, base: unknown, signal: AbortSignal, on: (ev: ComposeEvent) => void, kind: 'company' | 'industry' = 'company') =>
+  stream('/api/admin/compose', { kind, brief, ...(base ? { base } : {}) }, signal, on);
 
 /** The console agent: one turn of a conversation; changes come back as actions to confirm. */
 export const agent = (conversation: string | null, text: string, signal: AbortSignal, on: (ev: ConsoleEvent) => void) =>

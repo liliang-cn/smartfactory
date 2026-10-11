@@ -26,12 +26,13 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 看：list_customers、get_customer（配置和知识库概况）、list_industries、get_industry、list_tokens、activity（操作记录）。
 - 知识库：knowledge_search（文档和工艺）、knowledge_entity（工艺图里一样东西的上下游和关系）。
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
-- 写配置：check_company 检查一份公司配置（不创建），用来验证你写的配置。
-- 改动：propose_create_company、propose_delete_company、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
+- 写配置：check_company 检查一份公司配置（不创建）；check_industry 检查一个行业包（不保存）。
+- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
 规则：
 - 用中文，简洁。数字、编号、名称以工具返回为准，不要编。
-- 新建或修改客户：先 get_customer 看一个同行业的现有客户怎么写，照着写，check_company 通过后再 propose_create_company。只能用已有的行业包。
+- 建或改工厂：先 get_customer 看一个同行业的现有公司怎么写，照着写，check_company 通过后再 propose_create_company。
+- 现有行业包里没有要的产品或工序：get_industry 读一个结构最像的，照着写一个新行业包（新 id，不能和已有的重复），check_industry 通过后 propose_create_industry；它保存了，公司配置才能用它。
 - 发令牌：问清楚给谁、什么角色（member 成员 / operator 操作员 / admin 管理员）、哪些公司；不说就按最小权限（成员、只给提到的那家公司）。
 - 删除、撤销这类改动，提出前说清后果。
 - 管理员的令牌只能管它自己管的公司，工具会拒绝越权的操作，照实转告。`
@@ -105,6 +106,25 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 					return nil, errors.New("config 要是对象")
 				}
 				return raw(o.CheckCompany(who, cfg))
+			}},
+		{"check_industry", "检查一个行业包能不能保存（不保存）：通过返回产品、设备、路线，不通过返回每个问题。", obj(map[string]any{"config": map[string]any{"type": "object"}}, "config"),
+			func(m map[string]any) (any, error) {
+				cfg, ok := m["config"].(map[string]any)
+				if !ok {
+					return nil, errors.New("config 要是对象")
+				}
+				return raw(o.CheckIndustry(who, cfg))
+			}},
+		{"propose_create_industry", "提出保存一个行业包（同 id 替换，用它的公司按新版本重建），交管理员确认。先 check_industry 通过。", obj(map[string]any{"config": map[string]any{"type": "object"}}, "config"),
+			func(m map[string]any) (any, error) {
+				cfg, ok := m["config"].(map[string]any)
+				if !ok {
+					return nil, errors.New("config 要是对象")
+				}
+				if _, err := o.CheckIndustry(who, cfg); err != nil {
+					return nil, err
+				}
+				return propose(Action{Kind: "create_industry", Args: map[string]any{"config": cfg}, Detail: "保存后建工厂时可以选它"})
 			}},
 		{"list_tokens", "令牌：持有人、角色、公司、来源、最近使用、是否有效。", obj(map[string]any{}),
 			func(map[string]any) (any, error) { return o.Accounts(who) }},

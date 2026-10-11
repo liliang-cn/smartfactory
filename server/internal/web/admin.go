@@ -98,6 +98,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/compose", func(w http.ResponseWriter, r *http.Request) {
 		who := s.caller(r)
 		var in struct {
+			Kind  string          `json:"kind"`
 			Brief string          `json:"brief"`
 			Base  json.RawMessage `json:"base"`
 		}
@@ -120,7 +121,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 			}
 			send(e)
 		}
-		if err := o.Compose(r.Context(), who, in.Brief, in.Base, emit); err != nil {
+		if err := o.Compose(r.Context(), who, in.Kind, in.Brief, in.Base, emit); err != nil {
 			if send == nil {
 				writeOpError(w, err)
 				return
