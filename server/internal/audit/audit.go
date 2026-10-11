@@ -87,8 +87,8 @@ func (l *Log) Record(w auth.Who, via, company, action, target, detail string, er
 	}
 }
 
-// List is company's changes, newest first: limit of them, before the entry with id before
-// (0 for the newest).
+// List is company's changes ("" for every company's), newest first: limit of them, before the
+// entry with id before (0 for the newest).
 func (l *Log) List(ctx context.Context, company string, before int64, limit int) ([]Entry, error) {
 	out := []Entry{}
 	if l == nil {
@@ -100,8 +100,13 @@ func (l *Log) List(ctx context.Context, company string, before int64, limit int)
 	if before <= 0 {
 		before = 1<<63 - 1
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT id, at, who, role, key, via, company, action, target, detail, ok, error FROM audit
-		WHERE company = ? AND id < ? ORDER BY id DESC LIMIT ?`, company, before, limit)
+	q := `SELECT id, at, who, role, key, via, company, action, target, detail, ok, error FROM audit WHERE id < ?`
+	args := []any{before}
+	if company != "" {
+		q += ` AND company = ?`
+		args = append(args, company)
+	}
+	rows, err := l.db.QueryContext(ctx, q+` ORDER BY id DESC LIMIT ?`, append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}

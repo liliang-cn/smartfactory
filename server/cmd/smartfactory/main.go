@@ -174,6 +174,15 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			return fmt.Errorf("audit log: %w", err)
 		}
 		defer trail.Close()
+		// tokens issued in the console (/admin) live here, next to the config file's
+		accounts, err := auth.OpenStore(cfg.Data)
+		if err != nil {
+			return fmt.Errorf("accounts: %w", err)
+		}
+		defer accounts.Close()
+		if err := keys.Attach(accounts); err != nil {
+			return fmt.Errorf("accounts: %w", err)
+		}
 	}
 	if assistants != nil {
 		assistants.Audit = trail

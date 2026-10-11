@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("/mcp", s.requireToken(s.MCP))
 	}
 	mux.HandleFunc("GET /api/audit/{company}", s.auditLog)
+	s.adminRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())
@@ -137,7 +138,8 @@ var revertOf = map[string]string{"stop": "start", "fault": "reset", "speed": "sp
 // gets frames of the plant it is looking at (and the others now and then), sends commands, and
 // as an operator of the company can also change the plant clock and reach real equipment.
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
-	who := s.caller(r)
+	tok := auth.Token(r)
+	who, _ := s.Keys.Lookup(tok)
 	// the page says which company it shows, so the greeting can say what the caller may do there
 	first := r.URL.Query().Get("company")
 	op := who.Can(first, auth.Operator)
@@ -187,6 +189,12 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	handle := func(m clientMsg) {
+		if m.Type == "cmd" || m.Type == "time" {
+			// a token revoked or expired since the link opened stops counting at once
+			if now, _ := s.Keys.Lookup(tok); now.Key != who.Key {
+				who, op = now, now.Can(company, auth.Operator)
+			}
+		}
 		switch m.Type {
 		case "watch":
 			if m.Company != company {
@@ -383,8 +391,14 @@ func (s *Server) static() http.Handler {
 				return
 			}
 			r = r.Clone(r.Context())
-			r.URL.Path = "/"
-			p = "index.html"
+			// the console is its own page
+			if p == "admin" || strings.HasPrefix(p, "admin/") {
+				r.URL.Path = "/admin.html"
+				p = "admin.html"
+			} else {
+				r.URL.Path = "/"
+				p = "index.html"
+			}
 		}
 		if strings.HasPrefix(p, "assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")

@@ -1,5 +1,8 @@
 package mcptools
 
+// SceneGuide is how to write industry packs and company configs, for agents that write them.
+func SceneGuide() string { return guide }
+
 // guide is what scene_guide returns: enough for an agent to write a working industry pack and
 // company config without reading the source.
 const guide = `# 用配置搭一个新的数字孪生场景

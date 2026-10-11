@@ -99,6 +99,26 @@ function addCompany(json: string): string {
   });
 }
 
+/** Validates and lays out a company without running it: what addCompany would say. */
+function checkCompany(json: string): string {
+  return result(() => {
+    const raw = JSON.parse(json) as { id?: string };
+    const cfg = validateCompany(raw, `公司 ${raw?.id ?? ''}`);
+    if (builtinCompanies.has(cfg.id)) throw new ConfigError(`公司 ${cfg.id}`, [`${cfg.id} 是内置公司，换一个 id`]);
+    const plants = layoutCompany(cfg, industries, `公司 ${cfg.id}`);
+    return {
+      id: cfg.id, name: cfg.name,
+      plants: plants.map((p) => ({ id: p.id, name: p.name, site: p.site, lines: p.lines.map((l) => l.name), machines: p.lines.reduce((n, l) => n + l.stations.length, 0) })),
+    };
+  });
+}
+
+/** A running company's config as it was given (built in or created). */
+function companyConfig(id: string): string {
+  const c = companies.get(id);
+  return c ? JSON.stringify(c.bundle.company) : 'null';
+}
+
 function removeCompany(id: string): string {
   return result(() => {
     if (builtinCompanies.has(id)) throw new ConfigError(`公司 ${id}`, [`${id} 是内置公司，不能删除`]);
@@ -489,13 +509,17 @@ function sum(b: ReturnType<History['drain']>, lines: [string, string][]) {
 
 function list(): string {
   return JSON.stringify([...companies.values()].map((c) => ({
-    id: c.bundle.company.id, name: c.bundle.company.name,
-    plants: c.plants.map((p) => ({ id: p.layout.id, name: p.layout.name, hall: p.layout.hall })),
+    id: c.bundle.company.id, name: c.bundle.company.name, short: c.bundle.company.short, industry: c.bundle.company.industry,
+    builtin: builtinCompanies.has(c.bundle.company.id),
+    plants: c.plants.map((p) => ({
+      id: p.layout.id, name: p.layout.name, hall: p.layout.hall, site: p.layout.site,
+      lines: p.layout.lines.length, machines: p.layout.lines.reduce((n, l) => n + l.stations.length, 0),
+    })),
   })));
 }
 
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
-  addIndustry, addCompany, removeCompany, industryList, industry, schema,
+  addIndustry, addCompany, checkCompany, companyConfig, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock,
 };

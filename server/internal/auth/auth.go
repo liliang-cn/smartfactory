@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"smartfactory/internal/config"
@@ -92,17 +93,25 @@ type key struct {
 	who     Who
 	sum     [32]byte
 	expires time.Time
+	// from: legacy | config | issued (in the console, kept in the store)
+	from string
 }
 
-// Keyring holds the tokens the server accepts.
-type Keyring struct{ keys []key }
+// Keyring holds the tokens the server accepts: the ones in the config file, which only an edit
+// of the file changes, and the ones issued in the console, which take effect at once.
+type Keyring struct {
+	mu    sync.RWMutex
+	keys  []key
+	store *Store
+	used  map[string]time.Time
+}
 
 // NewKeyring reads the configured tokens. legacy is the original single token, kept working
 // as an administrator of every company.
 func NewKeyring(legacy string, keys []config.Key) (*Keyring, error) {
 	k := &Keyring{}
 	if legacy != "" {
-		k.keys = append(k.keys, key{who: Who{Name: "管理员", Role: Admin, Key: "token"}, sum: sha256.Sum256([]byte(legacy))})
+		k.keys = append(k.keys, key{who: Who{Name: "管理员", Role: Admin, Key: "token"}, sum: sha256.Sum256([]byte(legacy)), from: "legacy"})
 	}
 	seen := map[string]bool{}
 	for _, c := range keys {
@@ -144,13 +153,20 @@ func NewKeyring(legacy string, keys []config.Key) (*Keyring, error) {
 		seen[id] = true
 		var sum [32]byte
 		copy(sum[:], raw)
-		k.keys = append(k.keys, key{who: Who{Name: name, Role: role, Companies: companies, Key: id}, sum: sum, expires: exp})
+		k.keys = append(k.keys, key{who: Who{Name: name, Role: role, Companies: companies, Key: id}, sum: sum, expires: exp, from: "config"})
 	}
 	return k, nil
 }
 
 // Empty reports whether no token is accepted at all.
-func (k *Keyring) Empty() bool { return k == nil || len(k.keys) == 0 }
+func (k *Keyring) Empty() bool {
+	if k == nil {
+		return true
+	}
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	return len(k.keys) == 0
+}
 
 // Lookup finds the holder of token.
 func (k *Keyring) Lookup(token string) (Who, bool) {
@@ -159,19 +175,25 @@ func (k *Keyring) Lookup(token string) (Who, bool) {
 	}
 	sum := sha256.Sum256([]byte(token))
 	found := -1
+	k.mu.RLock()
 	// compare against every key, so the time taken says nothing about which one matched
 	for i, c := range k.keys {
 		if subtle.ConstantTimeCompare(sum[:], c.sum[:]) == 1 {
 			found = i
 		}
 	}
+	var c key
+	if found >= 0 {
+		c = k.keys[found]
+	}
+	k.mu.RUnlock()
 	if found < 0 {
 		return Anonymous, false
 	}
-	c := k.keys[found]
 	if !c.expires.IsZero() && time.Now().After(c.expires) {
 		return Anonymous, false
 	}
+	k.touch(c)
 	return c.who, true
 }
 

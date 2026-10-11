@@ -393,7 +393,7 @@ function Me() {
       <span className={cn('grid size-[38px] shrink-0 place-items-center rounded-full font-extrabold max-md:size-8', visitor ? 'bg-surface text-muted-foreground' : 'bg-gradient-to-br from-amber-300 to-orange-400 text-white')}>
         {[...name][0] ?? '访'}
       </span>
-      <span className="grid text-left leading-tight max-xl:hidden">
+      <span className="grid shrink-0 text-left leading-tight whitespace-nowrap max-xl:hidden">
         <b className="text-[13.5px]">{name}</b>
         <small className="text-xs text-muted-foreground">{ROLE_LABEL[role]}</small>
       </span>

@@ -148,3 +148,41 @@ export function loadAll(companyRaw: Record<string, unknown>, industryRaw: Record
   }
   return out;
 }
+
+/** Whether an industry pack ships with the app. */
+export const builtinIndustry = (id: string) => `./industries/${id}.json` in industryFiles;
+
+/** Every company that ships with the app, validated (broken files left out). */
+export async function builtinCompanies(): Promise<CompanyCfg[]> {
+  const raws = await Promise.all(Object.values(companyFiles).map(async (load) => (await load()).default));
+  return raws.flatMap((raw) => {
+    const r = Company.safeParse(raw);
+    return r.success ? [r.data] : [];
+  });
+}
+
+/**
+ * A company's config and the industry packs it uses, from the app's files or (created at run
+ * time) the server. extra resolves packs that are neither (created on the server, used elsewhere).
+ */
+export async function companyConfig(id: string, extra?: (id: string) => Promise<unknown>): Promise<{ company: CompanyCfg; industries: Map<string, IndustryCfg> }> {
+  const industries = new Map<string, IndustryCfg>();
+  let company: CompanyCfg;
+  const file = companyFiles[`./companies/${id}.json`];
+  if (file) company = validateCompany((await file()).default, `src/config/companies/${id}.json`);
+  else {
+    const r = await fetch(`/api/config/company/${encodeURIComponent(id)}`);
+    if (!r.ok) throw new ConfigError(`公司 ${id}`, ['服务器上没有这家公司的配置']);
+    const d: { company: unknown; industries: Record<string, unknown> } = await r.json();
+    company = validateCompany(d.company, `服务器上的公司 ${id}`);
+    for (const [k, raw] of Object.entries(d.industries)) industries.set(k, validateIndustry(raw, `行业包 ${k}`));
+  }
+  for (const k of industriesOf(company)) if (!industries.has(k)) industries.set(k, await industryConfig(k, extra));
+  return { company, industries };
+}
+
+/** An industry pack: the app's file, or extra (the server) for one created at run time. */
+export async function industryConfig(id: string, extra?: (id: string) => Promise<unknown>): Promise<IndustryCfg> {
+  if (builtinIndustry(id) || !extra) return loadIndustry(id);
+  return validateIndustry(await extra(id), `行业包 ${id}`);
+}

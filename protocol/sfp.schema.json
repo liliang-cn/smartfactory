@@ -2914,6 +2914,569 @@
       },
       "description": "A company's changes, newest first (GET /api/audit/{company}?before=&limit=)"
     },
+    "AdminOverview": {
+      "type": "object",
+      "properties": {
+        "me": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "visitor",
+                "member",
+                "operator",
+                "admin"
+              ],
+              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+            },
+            "companies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "everywhere": {
+              "type": "boolean"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "role",
+            "companies",
+            "everywhere",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "companies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "short": {
+                "type": "string"
+              },
+              "industry": {
+                "type": "string"
+              },
+              "builtin": {
+                "type": "boolean"
+              },
+              "plants": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "hall": {
+                      "type": "string"
+                    },
+                    "site": {
+                      "type": "string",
+                      "enum": [
+                        "hall",
+                        "outdoor"
+                      ]
+                    },
+                    "lines": {
+                      "type": "number"
+                    },
+                    "machines": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "hall",
+                    "site",
+                    "lines",
+                    "machines"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "liveTags": {
+                "type": "number"
+              },
+              "advisor": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "short",
+              "industry",
+              "builtin",
+              "plants",
+              "liveTags",
+              "advisor"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "industries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "flow": {
+                "type": "string",
+                "enum": [
+                  "belt",
+                  "walk"
+                ]
+              },
+              "unit": {
+                "type": "string"
+              },
+              "builtin": {
+                "type": "boolean"
+              },
+              "products": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "machines": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "flow",
+              "unit",
+              "builtin",
+              "products",
+              "machines"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "issue": {
+          "type": "boolean"
+        },
+        "assistants": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "me",
+        "companies",
+        "industries",
+        "issue",
+        "assistants",
+        "version"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/admin — administrators only (401 without a token, 403 below admin)"
+    },
+    "CompanyCreated": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "plants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "site": {
+                "type": "string",
+                "enum": [
+                  "hall",
+                  "outdoor"
+                ]
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "machines": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "site",
+              "lines",
+              "machines"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "id",
+        "name",
+        "plants"
+      ],
+      "additionalProperties": false
+    },
+    "ConfigProblem": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "where": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error",
+        "errors"
+      ],
+      "additionalProperties": false
+    },
+    "Accounts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Account"
+      },
+      "description": "GET /api/admin/tokens — the tokens of the companies the caller administers"
+    },
+    "Account": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "visitor",
+            "member",
+            "operator",
+            "admin"
+          ],
+          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+        },
+        "companies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expires": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "enum": [
+            "legacy",
+            "config",
+            "issued"
+          ]
+        },
+        "created": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "used": {
+          "type": "string"
+        },
+        "revoked": {
+          "type": "string"
+        },
+        "revokedBy": {
+          "type": "string"
+        },
+        "expired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "role",
+        "companies",
+        "from"
+      ],
+      "additionalProperties": false
+    },
+    "IssueToken": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "member",
+            "operator",
+            "admin"
+          ]
+        },
+        "companies": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expires": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "role",
+        "companies"
+      ],
+      "additionalProperties": false
+    },
+    "IssuedToken": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string"
+        },
+        "account": {
+          "$ref": "#/$defs/Account"
+        }
+      },
+      "required": [
+        "token",
+        "account"
+      ],
+      "additionalProperties": false
+    },
+    "ComposeRequest": {
+      "type": "object",
+      "properties": {
+        "brief": {
+          "type": "string"
+        },
+        "base": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "brief"
+      ],
+      "additionalProperties": false
+    },
+    "ComposeEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "thinking"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_call"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_result"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "result": {}
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "delta"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "reset"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "draft"
+            },
+            "result": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "complete"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "error"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "One server-sent event of the scene architect: `data: <ComposeEvent JSON>`"
+    },
     "Source": {
       "type": "object",
       "properties": {

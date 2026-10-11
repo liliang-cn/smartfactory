@@ -249,6 +249,25 @@
 
 浏览器断开时回答停止，已经写入的笔记和工单保留，这条回答记为 `stopped`。
 
+## 5a. 后台接口 `/api/admin/…`
+
+后台（`/admin`，独立的页面 `admin.html`）搭建孪生里的东西：客户（公司）、行业包、令牌。只有管理员令牌能用：不带令牌 401，角色不够 403。管理某几家公司的管理员只看得到、只管得了那几家；新建公司、导入行业包、看所有公司的记录要管理所有公司的管理员。
+
+| 方法 路径 | 请求 | 响应 | 说明 |
+|---|---|---|---|
+| `GET /api/admin` | — | `AdminOverview {me, companies, industries, issue, assistants, version}` | 登录的人、令牌管的公司（`builtin` 随应用内置的不能替换或删除）、行业包；`issue` 是能不能在这里发令牌（服务器有数据目录） |
+| `POST /api/admin/companies` | 公司配置（`src/config/schema/company.json`） | `CompanyCreated` | 新建，或同 `id` 替换（仿真从头开始）。没通过校验 422 `ConfigProblem {error, errors, where}`。`id` 只能用小写字母、数字、`-` |
+| `DELETE /api/admin/companies/{id}` | — | `Done` | 删除运行时建的公司；内置的 422 |
+| `GET /api/admin/industries/{id}` | — | 行业包配置（默认值已填） | |
+| `POST /api/admin/industries` | 行业包配置 | 行业包摘要 | 新建或替换，用它的公司按新的重建；要管理所有公司 |
+| `POST /api/admin/compose` | `ComposeRequest {brief, base?}` | SSE，`ComposeEvent` 流 | 搭建员：按一段描述（`base` 是表单里现在的配置，在它上面改）用已有行业包写公司配置，每版都经引擎检查（不创建）；通过的一版作为 `draft` 事件发出。没有配置大模型时 503，同一个令牌同一时间只能跑一个 |
+| `GET /api/admin/tokens` | — | `Accounts` | 令牌：`from` 是 `legacy`（最初的共用令牌）、`config`（配置文件里的，只能在那里改）或 `issued`（后台发的）；撤销过的也列出 |
+| `POST /api/admin/tokens` | `IssueToken {name, role, companies, expires?}` | `IssuedToken {token, account}` | 发令牌，立即生效；`companies` 为 `null` 是所有公司（要管理所有公司）。令牌只在这个响应里出现一次，服务器只存 SHA-256 |
+| `DELETE /api/admin/tokens/{key}` | — | `Done` | 撤销后台发的令牌，立即生效（页面、实时通道里的下一次操作、MCP 都按访客对待）；配置文件里的 409，自己正在用的 409 |
+| `GET /api/admin/audit?company=&before=&limit=` | — | `AuditLog` | 同 `/api/audit/{company}`；`company` 不填是所有公司，`*` 是共用的改动（行业包、所有公司的令牌） |
+
+`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`：一份通过检查的公司配置，在 `result` 里。审计日志新增 `token.issue`、`token.revoke`，后台的建删公司记为 `via: page`。
+
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。

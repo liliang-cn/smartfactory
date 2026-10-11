@@ -498,6 +498,89 @@ export const AuditEntry = z.object({
 });
 export const AuditLog = z.array(AuditEntry).meta({ description: "A company's changes, newest first (GET /api/audit/{company}?before=&limit=)" });
 
+// ---------- the console (/admin) ----------
+
+/** The signed-in administrator. companies is empty for a token covering every company. */
+export const AdminMe = z.object({ name: str, role: Role, companies: z.array(str), everywhere: z.boolean(), key: str });
+
+export const AdminCompany = z.object({
+  id: str, name: str, short: str, industry: str,
+  /** shipped with the app (cannot be replaced or deleted); the others were created in the console or over MCP */
+  builtin: z.boolean(),
+  plants: z.array(z.object({ id: str, name: str, hall: str, site: z.enum(['hall', 'outdoor']), lines: num, machines: num })),
+  /** values currently arriving from real equipment */
+  liveTags: num,
+  /** the company has a business advisor */
+  advisor: z.boolean(),
+});
+
+export const IndustrySummary = z.object({
+  id: str, name: str, flow: z.enum(['belt', 'walk']), unit: str, builtin: z.boolean(),
+  products: z.array(str),
+  /** machine key → "label (archetype)" */
+  machines: z.record(str, str),
+});
+
+export const AdminOverview = z.object({
+  me: AdminMe,
+  /** the companies the token covers */
+  companies: z.array(AdminCompany),
+  industries: z.array(IndustrySummary),
+  /** tokens can be issued here (the server keeps data) */
+  issue: z.boolean(),
+  /** the server runs the companies' assistants */
+  assistants: z.boolean(),
+  version: str,
+}).meta({ description: 'GET /api/admin — administrators only (401 without a token, 403 below admin)' });
+
+/** A company the engine accepted (POST /api/admin/companies, same id replaces). */
+export const CompanyCreated = z.object({
+  ok: z.literal(true), id: str, name: str,
+  plants: z.array(z.object({ id: str, name: str, site: z.enum(['hall', 'outdoor']), lines: z.array(str), machines: num })),
+});
+
+/** A config the engine turned down (422): each problem, and where. */
+export const ConfigProblem = z.object({ error: str, errors: z.array(str), where: str.optional() });
+
+export const Account = z.object({
+  /** the start of the token's hash */
+  key: str, name: str, role: Role,
+  /** empty: every company */
+  companies: z.array(str),
+  /** last day it works, YYYY-MM-DD */
+  expires: str.optional(),
+  /** legacy: the original single token · config: the server's config file (changed only there) · issued: here */
+  from: z.enum(['legacy', 'config', 'issued']),
+  created: time.optional(), createdBy: str.optional(),
+  /** last time it was used */
+  used: time.optional(),
+  revoked: time.optional(), revokedBy: str.optional(),
+  expired: z.boolean().optional(),
+});
+export const Accounts = z.array(Account).meta({ description: 'GET /api/admin/tokens — the tokens of the companies the caller administers' });
+export const IssueToken = z.object({
+  name: str, role: z.enum(['member', 'operator', 'admin']),
+  /** null: every company (only an administrator of every company) */
+  companies: z.array(str).nullable(),
+  expires: str.optional(),
+});
+/** The token itself is in this answer only; the server keeps a hash. */
+export const IssuedToken = z.object({ token: str, account: Account });
+
+/** POST /api/admin/compose: a customer described in words, and optionally the config to change. */
+export const ComposeRequest = z.object({ brief: str, base: z.record(str, z.unknown()).optional() });
+export const ComposeEvent = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('thinking') }),
+  z.object({ kind: z.literal('tool_call'), tool: str, args: z.record(str, z.unknown()).optional() }),
+  z.object({ kind: z.literal('tool_result'), tool: str, result: z.unknown().optional() }),
+  z.object({ kind: z.literal('delta'), text: str }),
+  z.object({ kind: z.literal('reset') }),
+  /** a company config that passed the engine's check (nothing was created) */
+  z.object({ kind: z.literal('draft'), result: z.record(str, z.unknown()) }),
+  z.object({ kind: z.literal('complete'), text: str.optional() }),
+  z.object({ kind: z.literal('error'), text: str }),
+]).meta({ description: 'One server-sent event of the scene architect: `data: <ComposeEvent JSON>`' });
+
 export const DEFS = {
   ClientMessage, ServerMessage, PlantState,
   ErrorBody, Health, Directory, RuntimeCompany, Tags, Advisors, DeviceMap,
@@ -506,6 +589,7 @@ export const DEFS = {
   Assistants, Assistant, AssistantRequest, Conversations, ConversationView, AssistantAsk, AssistantEvent,
   Docs, Doc, DocView, DocUpload, Notes, Note, Tickets, Ticket, TicketPatch, Done,
   AuditLog,
+  AdminOverview, CompanyCreated, ConfigProblem, Accounts, Account, IssueToken, IssuedToken, ComposeRequest, ComposeEvent,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

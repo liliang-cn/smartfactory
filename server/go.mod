@@ -7,6 +7,7 @@ require (
 	github.com/dop251/goja v0.0.0-20261004200024-481fdb442bb4
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/google/jsonschema-go v0.4.3
+	github.com/google/uuid v1.6.0
 	github.com/gopcua/opcua v0.9.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/liliang-cn/agent-go/v3 v3.51.6
@@ -77,7 +78,6 @@ require (
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

@@ -255,19 +255,7 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 				return
 			}
 		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("X-Accel-Buffering", "no")
-		fl, _ := w.(http.Flusher)
-		send := func(e agents.Event) {
-			b, _ := json.Marshal(e)
-			w.Write([]byte("data: "))
-			w.Write(b)
-			w.Write([]byte("\n\n"))
-			if fl != nil {
-				fl.Flush()
-			}
-		}
+		send := stream(w)
 		send(agents.Event{Kind: "conversation", ID: conv.ID, Title: conv.Title})
 		if err := a.Ask(r.Context(), ag, conv.ID, in.Text, who, send); err != nil {
 			send(agents.Event{Kind: "error", Text: err.Error()})
@@ -401,4 +389,21 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			writeJSON(w, t)
 		}
 	})
+}
+
+// stream answers with server-sent events, one per call of the function it returns.
+func stream(w http.ResponseWriter) func(agents.Event) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	fl, _ := w.(http.Flusher)
+	return func(e agents.Event) {
+		b, _ := json.Marshal(e)
+		w.Write([]byte("data: "))
+		w.Write(b)
+		w.Write([]byte("\n\n"))
+		if fl != nil {
+			fl.Flush()
+		}
+	}
 }

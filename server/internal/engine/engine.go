@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -115,7 +116,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkCompany", "companyConfig", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -137,7 +138,11 @@ func (e *Engine) call(name string, args ...any) (goja.Value, error) {
 	for i, a := range args {
 		vals[i] = e.vm.ToValue(a)
 	}
-	return e.fn[name](goja.Undefined(), vals...)
+	f, ok := e.fn[name]
+	if !ok {
+		return nil, fmt.Errorf("engine has no %s", name)
+	}
+	return f(goja.Undefined(), vals...)
 }
 
 // do runs fn on the loop goroutine and waits for it (directly, for an offline engine).
@@ -599,6 +604,17 @@ func (e *Engine) persistConfig(kind, id string, raw []byte) error {
 	return os.WriteFile(filepath.Join(dir, id+".json"), raw, 0o644)
 }
 
+// ValidID is what a created company or industry pack may be called: it names its file and goes
+// into URLs and MQTT topics.
+var ValidID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+func badID(id string) (ConfigResult, bool) {
+	if ValidID.MatchString(id) {
+		return ConfigResult{}, false
+	}
+	return ConfigResult{Errors: []string{fmt.Sprintf("id %q：只能用小写字母、数字和连字符，最长 32 个字符", id)}, Where: "id"}, true
+}
+
 func configID(raw []byte) string {
 	var v struct {
 		ID string `json:"id"`
@@ -609,6 +625,9 @@ func configID(raw []byte) string {
 
 // CreateIndustry validates and loads an industry pack, and keeps it.
 func (e *Engine) CreateIndustry(raw []byte) ConfigResult {
+	if r, bad := badID(configID(raw)); bad {
+		return r
+	}
 	r := e.verdict(e.str("addIndustry", string(raw)))
 	if r.OK {
 		if err := e.persistConfig("industries", configID(raw), raw); err != nil {
@@ -620,6 +639,9 @@ func (e *Engine) CreateIndustry(raw []byte) ConfigResult {
 
 // CreateCompany validates, lays out and starts simulating a company, and keeps its config.
 func (e *Engine) CreateCompany(raw []byte) ConfigResult {
+	if r, bad := badID(configID(raw)); bad {
+		return r
+	}
 	r := e.verdict(e.str("addCompany", string(raw)))
 	if r.OK {
 		id := configID(raw)
@@ -635,8 +657,22 @@ func (e *Engine) CreateCompany(raw []byte) ConfigResult {
 	return r
 }
 
+// CheckCompany says what CreateCompany would, without creating anything.
+func (e *Engine) CheckCompany(raw []byte) ConfigResult {
+	if r, bad := badID(configID(raw)); bad {
+		return r
+	}
+	return e.verdict(e.str("checkCompany", string(raw)))
+}
+
+// CompanyConfig is a running company's config (JSON), or "null".
+func (e *Engine) CompanyConfig(id string) string { return e.str("companyConfig", id) }
+
 // DeleteCompany stops simulating a company created at run time and forgets it.
 func (e *Engine) DeleteCompany(id string) ConfigResult {
+	if r, bad := badID(id); bad {
+		return r
+	}
 	r := e.verdict(e.str("removeCompany", id))
 	if r.OK {
 		e.mu.Lock()
