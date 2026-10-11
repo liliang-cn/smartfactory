@@ -67,7 +67,7 @@ smartfactory kb <公司> search "问题" -json
 Node.js 22+、Go 1.27+：
 
 ```sh
-npm ci
+(cd web && npm ci)
 scripts/build.sh      # server/bin/smartfactory
 scripts/release.sh    # 各平台发布包
 ```

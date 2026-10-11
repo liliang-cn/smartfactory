@@ -34,7 +34,7 @@ import (
 )
 
 // Protocol is the version of the browser protocol this server speaks (protocol/README.md); it
-// must match PROTOCOL in src/protocol/sfp.ts.
+// must match PROTOCOL in web/src/protocol/sfp.ts.
 const Protocol = 1
 
 type Server struct {

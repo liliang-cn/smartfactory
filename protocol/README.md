@@ -4,8 +4,8 @@
 
 | 文件 | 作用 |
 |---|---|
-| `src/protocol/sfp.ts` | 标准本身（zod）。前端类型由它推导 |
-| `protocol/sfp.schema.json` | 由上面生成的 JSON Schema（draft 2020-12），`npm run schema` 重新生成，不要手改 |
+| `web/src/protocol/sfp.ts` | 标准本身（zod）。前端类型由它推导 |
+| `protocol/sfp.schema.json` | 由上面生成的 JSON Schema（draft 2020-12），在 `web/` 里 `npm run schema` 重新生成，不要手改 |
 | `server/internal/web/protocol_test.go` | 一致性测试：服务器实际发出的消息逐条按 schema 校验 |
 
 `$defs` 下的名字就是本文里的类型名：`ClientMessage`、`ServerMessage`、`PlantState`、`Health` 等。
@@ -173,7 +173,7 @@
 |---|---|---|
 | `GET /api/health` | `Health` | 版本、单步耗时 `stepMs`、上次存盘时间 `savedAt`；公司列表和采集源只列令牌管的公司（访客为空） |
 | `GET /api/config/directory` | `Directory` | 运行时创建的公司中令牌管的那些：`[{id, name, short}]`（访客为空） |
-| `GET /api/config/company/{id}` | `RuntimeCompany` | 运行时创建的公司配置及其行业包，格式见 `src/config/schema/*.json`；不存在时 404 |
+| `GET /api/config/company/{id}` | `RuntimeCompany` | 运行时创建的公司配置及其行业包，格式见 `web/src/config/schema/*.json`；不存在时 404 |
 | `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t}]`；不带 `company` 时只有令牌管的公司 |
 | `GET /api/advisors?company=` | `Advisors` | 这家公司的顾问控制台地址；不带 `company` 时是令牌管的公司的 |
 | `GET /api/devices/{company}/{plant}` | `DeviceMap` | 这个厂在设备约定下的地址表（MQTT topic、Modbus 寄存器、OPC UA 节点），见 devices.md 第 6 节 |
@@ -258,7 +258,7 @@
 | 方法 路径 | 请求 | 响应 | 说明 |
 |---|---|---|---|
 | `GET /api/admin` | — | `AdminOverview {me, companies, industries, issue, assistants, version}` | 登录的人、令牌管的公司（`builtin` 随应用内置的不能替换或删除）、行业包；`issue` 是能不能在这里发令牌（服务器有数据目录） |
-| `POST /api/admin/companies` | 公司配置（`src/config/schema/company.json`） | `CompanyCreated` | 新建，或同 `id` 替换（仿真从头开始）。没通过校验 422 `ConfigProblem {error, errors, where}`。`id` 只能用小写字母、数字、`-` |
+| `POST /api/admin/companies` | 公司配置（`web/src/config/schema/company.json`） | `CompanyCreated` | 新建，或同 `id` 替换（仿真从头开始）。没通过校验 422 `ConfigProblem {error, errors, where}`。`id` 只能用小写字母、数字、`-` |
 | `DELETE /api/admin/companies/{id}` | — | `Done` | 删除运行时建的公司；内置的 422 |
 | `GET /api/admin/industries/{id}` | — | 行业包配置（默认值已填） | |
 | `POST /api/admin/industries` | 行业包配置 | 行业包摘要 | 新建或替换，用它的公司按新的重建；要管理所有公司 |
@@ -359,8 +359,8 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 ## 7. 修改协议
 
-1. 先改 `src/protocol/sfp.ts`。
-2. `npm run schema` 重新生成 `protocol/sfp.schema.json`，`npm run typecheck` 检查前端。
-3. 改服务器，跑 `go test ./internal/web/ -run TestProtocol`（需要先 `npm run build:engine`）。服务器发出不合 schema 的消息，或者 `clientMsg` 的字段和标准对不上，测试都会失败。
+1. 先改 `web/src/protocol/sfp.ts`。
+2. 在 `web/` 里 `npm run schema` 重新生成 `protocol/sfp.schema.json`，`npm run typecheck` 检查前端。
+3. 改服务器，在 `server/` 里跑 `go test ./internal/web/ -run TestProtocol`（需要先在 `web/` 里 `npm run build:engine`）。服务器发出不合 schema 的消息，或者 `clientMsg` 的字段和标准对不上，测试都会失败。
 4. 按第 1 节的兼容规则决定是否要把 `PROTOCOL` 和 `web.Protocol` 一起加 1。
 5. 更新本文。

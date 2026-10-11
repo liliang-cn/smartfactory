@@ -1,5 +1,5 @@
 // Package engine runs the twin's simulation on the server: the same TypeScript the browser
-// uses (src/server/engine.ts, bundled into js/engine.js) inside an embedded JS engine.
+// uses (web/src/server/engine.ts, bundled into js/engine.js) inside an embedded JS engine.
 // Every company's plants advance in real time whether or not anyone is watching; browsers
 // follow it through frames, MCP reads it, protocol adapters feed it.
 package engine
@@ -90,7 +90,7 @@ func NewOffline(log *slog.Logger) (*Engine, error) {
 func New(log *slog.Logger) (*Engine, error) {
 	src, err := files.ReadFile("js/engine.js")
 	if err != nil {
-		return nil, errors.New("engine bundle missing: run `npm run build:engine` (scripts/build.sh does)")
+		return nil, errors.New("engine bundle missing: run `npm run build:engine` in web/ (scripts/build.sh does)")
 	}
 	vm := goja.New()
 	jsLog := func(level slog.Level) func(goja.FunctionCall) goja.Value {

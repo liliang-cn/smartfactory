@@ -19,7 +19,7 @@ import (
 	"smartfactory/internal/tags"
 )
 
-// Snapshot mirrors what the front end reports (src/live/client.ts).
+// Snapshot mirrors what the front end reports (web/src/live/client.ts).
 type snapshot struct {
 	Company struct {
 		ID   string `json:"id"`

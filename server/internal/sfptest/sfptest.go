@@ -1,5 +1,5 @@
 // Package sfptest checks messages against the protocol standard, protocol/sfp.schema.json
-// (written by `npm run schema` from src/protocol/sfp.ts), for the conformance tests.
+// (written by `npm run schema` in web/ from web/src/protocol/sfp.ts), for the conformance tests.
 package sfptest
 
 import (

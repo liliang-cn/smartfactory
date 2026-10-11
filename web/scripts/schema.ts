@@ -1,5 +1,5 @@
 // Writes JSON Schemas for the config files so editors can complete and check them, and the
-// protocol standard (src/protocol/sfp.ts) as protocol/sfp.schema.json.
+// protocol standard (src/protocol/sfp.ts) as ../protocol/sfp.schema.json.
 // Run: npm run schema
 import { writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -23,7 +23,7 @@ const defs = Object.fromEntries(Object.entries(schemas).map(([id, s]) => {
   const { $schema: _, $id: __, ...rest } = s as Record<string, unknown>;
   return [id, rest];
 }));
-write('protocol/sfp.schema.json', {
+write('../protocol/sfp.schema.json', {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: `https://factory.superleo.cn/protocol/sfp-${PROTOCOL}.schema.json`,
   title: `SmartFactory protocol ${PROTOCOL}`,

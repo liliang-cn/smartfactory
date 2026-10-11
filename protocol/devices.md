@@ -7,7 +7,7 @@
 
 | 文件 | 作用 |
 |---|---|
-| `src/protocol/sfp.ts` | 标准本身（zod），定义 `DeviceFields`、`DeviceCommand`、`DeviceMap` |
+| `web/src/protocol/sfp.ts` | 标准本身（zod），定义 `DeviceFields`、`DeviceCommand`、`DeviceMap` |
 | `protocol/sfp.schema.json` | 由上面生成的 JSON Schema，与浏览器协议共用一个文件 |
 | `server/internal/e2e/standard_test.go` | 一致性测试：抓取设备模拟器在 MQTT 上的全部流量和服务器下发的命令，逐条按 schema 校验 |
 | `GET /api/devices/{company}/{plant}` | 某个厂的完整地址表（第 6 节），由代码生成 |
@@ -197,7 +197,7 @@ curl https://factory.superleo.cn/api/devices/huaduan/p1
 
 ## 7. 修改协议
 
-1. 先改 `src/protocol/sfp.ts`，再运行 `npm run schema`。
-2. 改 `server/internal/sfconv`（Modbus 和 OPC UA 的布局）、`server/internal/mapping`（MQTT 的约定），或 `src/sim/plant.ts` 的 `ingest`（字段含义）。
+1. 先改 `web/src/protocol/sfp.ts`，再在 `web/` 里运行 `npm run schema`。
+2. 改 `server/internal/sfconv`（Modbus 和 OPC UA 的布局）、`server/internal/mapping`（MQTT 的约定），或 `web/src/sim/plant.ts` 的 `ingest`（字段含义）。
 3. 运行 `go test ./internal/e2e/ ./internal/web/`。设备的实际流量、服务器下发的命令和地址表都会按 schema 校验。
 4. 更新本文。Modbus 寄存器布局或命令码一旦变化，现场设备就得重新编程，所以应当把 SFD 的版本号加 1。
