@@ -79,6 +79,9 @@ type Service struct {
 	HTTP  *http.Client
 	// Every is how often the lines and the store are brought in step (2 s).
 	Every time.Duration
+	// Changed hears that a company's orders changed (sent, withdrawn, started, finished); it
+	// must not block.
+	Changed func(company string)
 
 	mu      sync.Mutex
 	dirty   map[string]bool
@@ -317,6 +320,9 @@ func (s *Service) touch(company string) {
 	s.mu.Lock()
 	s.dirty[company] = true
 	s.mu.Unlock()
+	if s.Changed != nil {
+		s.Changed(company)
+	}
 }
 
 // Reroute routes the queued orders again, after the company's factory changed: those no line
@@ -394,6 +400,9 @@ func (s *Service) sync(ctx context.Context, c string, cfg Config) {
 		return
 	}
 	now := time.Now()
+	if len(res.Events) > 0 && s.Changed != nil {
+		s.Changed(c)
+	}
 	for _, e := range res.Events {
 		var changed bool
 		var err error

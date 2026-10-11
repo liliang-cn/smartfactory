@@ -1,9 +1,11 @@
 // Package knowledge is each company's knowledge base: its process as a graph (plants, lines,
-// stations in order, products, machines, suppliers, customers) laid out by the engine, and its
-// documents cut into passages and linked to the things in that graph they name. Questions are
-// answered from both at once: a passage that names a machine is found from a question that only
-// names the station built from it. It is a CortexDB file per company, without embeddings
-// (BM25 plus a personalized PageRank walk over the graph).
+// stations in order, products, machines, suppliers, customers) laid out by the engine, its
+// production orders linked to the customer, product and line of each, and its documents cut into
+// passages and linked to the things in that graph they name. Questions are answered from all of
+// them at once: a passage that names a machine is found from a question that only names the
+// station built from it, a customer's orders from a question that names the customer. It is a
+// CortexDB file per company, without embeddings (BM25 plus a personalized PageRank walk over the
+// graph, started from the things the question names).
 package knowledge
 
 import (
@@ -15,12 +17,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
+	"github.com/liliang-cn/cortexdb/v2/pkg/graph"
 
 	"smartfactory/internal/engine"
 )
@@ -33,6 +37,12 @@ type Base struct {
 
 	mu  sync.Mutex
 	dbs map[string]*company
+
+	// Orders reads a company's production orders (from the ERP connection); nil keeps none.
+	Orders func(company string) ([]OrderInfo, error)
+	omu    sync.Mutex
+	dirty  map[string]bool
+	kick   chan struct{}
 }
 
 type company struct {
@@ -47,7 +57,7 @@ func Open(dir string, eng *engine.Engine, log *slog.Logger) (*Base, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}}, nil
+	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}, dirty: map[string]bool{}, kick: make(chan struct{}, 1)}, nil
 }
 
 func (b *Base) Close() {
@@ -86,7 +96,7 @@ func (b *Base) Drop(id string) {
 	}
 	b.mu.Unlock()
 	if engine.ValidID.MatchString(id) {
-		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json"} {
+		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json"} {
 			os.Remove(filepath.Join(b.dir, f))
 		}
 	}
@@ -153,6 +163,7 @@ const (
 	TProduct  = "product"
 	TSupplier = "supplier"
 	TCustomer = "customer"
+	TOrder    = "order"
 
 	RHasPlant   = "has_plant"
 	RHasLine    = "has_line"
@@ -162,7 +173,14 @@ const (
 	RFeeds      = "feeds"
 	RSupplies   = "supplies"
 	RSoldTo     = "sold_to"
+	// an order is for a customer, of a product, and runs on a line
+	RForCustomer = "for_customer"
+	ROfProduct   = "of_product"
+	RRunsOn      = "runs_on"
 )
+
+// relations are the relation types the graph keeps (the rest are CortexDB's own: mentions, …).
+var relations = []string{RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn}
 
 func (b *Base) model(id string) (*Model, error) {
 	js := b.eng.ProcessModel(id)
@@ -314,6 +332,7 @@ func processItems(m *Model) []item {
 			it.text = fmt.Sprintf("%s %s%s生产%s。工序依次是：\n%s\n最慢的工序是 %s %s（%g 秒），决定这条线的节拍。",
 				p.Name, l.Name, paren(l.Note), l.Product.Name, strings.Join(steps, "\n"), slowest.ID, slowest.Name, slowest.Cycle)
 			out = append(out, it)
+			out = append(out, stationItems(n, p, l, ln)...)
 			if _, ok := products[l.Product.Key]; !ok {
 				products[l.Product.Key] = l.Product
 				order = append(order, l.Product.Key)
@@ -359,6 +378,45 @@ func processItems(m *Model) []item {
 	return out
 }
 
+// stationItems are one passage per station of a line: where it is, what it is, what comes before
+// and after it, so "HP-101 的上游" is answered by the passage about HP-101.
+func stationItems(n names, p Plant, l Line, ln string) []item {
+	out := make([]item, 0, len(l.Stations))
+	for i, s := range l.Stations {
+		sn := n.station[p.ID+"/"+s.ID]
+		it := item{id: "proc:station:" + p.ID + ":" + s.ID, title: sn + " " + s.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "line": l.ID, "station": s.ID}}
+		it.ent(sn, TStation, s.Name)
+		it.ent(s.Label, TMachine, "")
+		it.ent(ln, TLine, l.Note)
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s 是%s %s的第 %d 道工序：%s", sn, p.Name, l.Name, i+1, s.Name)
+		if s.Name != s.Label {
+			fmt.Fprintf(&b, "（%s）", s.Label)
+		}
+		fmt.Fprintf(&b, "，节拍 %g 秒", s.Cycle)
+		if s.Makes != "" && readable(s.Makes) {
+			fmt.Fprintf(&b, "，做成%s", s.Makes)
+		}
+		// the neighbours are named in the text only: declared, every station's passage would sit
+		// next to two others and a walk from one station would spread along the whole line
+		if i > 0 {
+			up := l.Stations[i-1]
+			fmt.Fprintf(&b, "。上游（上一道）是 %s %s", n.station[p.ID+"/"+up.ID], up.Name)
+		} else {
+			b.WriteString("。它是这条线的第一道，上游是原料")
+		}
+		if i+1 < len(l.Stations) {
+			dn := l.Stations[i+1]
+			fmt.Fprintf(&b, "；下游（下一道）是 %s %s。", n.station[p.ID+"/"+dn.ID], dn.Name)
+		} else {
+			b.WriteString("；它是最后一道，下游是成品。")
+		}
+		it.text = b.String()
+		out = append(out, it)
+	}
+	return out
+}
+
 func paren(s string) string {
 	if s == "" {
 		return ""
@@ -388,7 +446,7 @@ func uniq(s []string) []string {
 }
 
 // processFormat changes whenever processItems writes differently, so every base is written again.
-const processFormat = "2"
+const processFormat = "4"
 
 // processState is what was last written for a company's process, so an unchanged process is not
 // written again.
@@ -439,8 +497,41 @@ func (b *Base) SyncProcess(ctx context.Context, id string) error {
 		}
 		ids = append(ids, it.id)
 	}
+	prune(ctx, c.db, nil)
 	out, _ := json.Marshal(processState{Hash: hash, IDs: ids})
 	return os.WriteFile(b.statePath(id), out, 0o644)
+}
+
+// prune removes the nodes CortexDB's own extraction adds beside the ones declared here: the
+// prefixes of codes ("HP" of HP-101, which would tie every press of every plant together) and
+// passage titles read as names ("一厂 曲轴 1 线" beside the line 曲轴 1 线). A walk over the graph
+// leaks through them into everything that shares a prefix. Given the orders to keep, it also
+// removes the order nodes of the others.
+func prune(ctx context.Context, db *cortexdb.DB, keepOrders map[string]bool) {
+	types := []string{"entity"}
+	if keepOrders != nil {
+		types = append(types, TOrder)
+	}
+	nodes, err := db.Graph().ListNodes(ctx, &graph.GraphFilter{NodeTypes: types})
+	if err != nil {
+		return
+	}
+	var ids []string
+	for _, n := range nodes {
+		if n.NodeType == TOrder {
+			name, _ := n.Properties["name"].(string)
+			if name == "" {
+				name = n.Content
+			}
+			if keepOrders[name] {
+				continue
+			}
+		}
+		ids = append(ids, n.ID)
+	}
+	if len(ids) > 0 {
+		db.Graph().DeleteNodesBatch(ctx, ids)
+	}
 }
 
 func save(ctx context.Context, db *cortexdb.DB, it item) error {
@@ -494,6 +585,9 @@ func (b *Base) vocabulary(id string) [][2]string {
 		}
 	}
 	add(m.Name, TCompany)
+	for _, v := range b.orderVocabulary(id) {
+		add(v[0], v[1])
+	}
 	out := make([][2]string, 0, len(seen))
 	for k, v := range seen {
 		out = append(out, [2]string{k, v})
@@ -536,6 +630,7 @@ func (b *Base) AddDoc(ctx context.Context, company, doc, title string, parts []P
 			return err
 		}
 	}
+	prune(ctx, c.db, nil)
 	return nil
 }
 
@@ -566,7 +661,8 @@ func (b *Base) HasDoc(ctx context.Context, company, doc string) bool {
 
 // Passage is one piece of what the base knows, found for a question.
 type Passage struct {
-	// From: doc (a document in the library) | process (the company's process)
+	// From: doc (a document in the library) | process (the company's process) | order (a
+	// production order)
 	From  string `json:"from"`
 	Title string `json:"title"`
 	// Doc and Part locate a document passage (read_doc reads around it).
@@ -594,9 +690,20 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 	if k <= 0 {
 		k = 6
 	}
-	r, err := c.db.SearchKnowledge(ctx, cortexdb.KnowledgeSearchRequest{
-		Query: query, EntityNames: names, Keywords: keywords, TopK: k, MaxContextChunks: k, RetrievalMode: "auto",
-	})
+	// the things the question names, in the company's own words: the walk starts from them
+	found := b.Recognize(company, query)
+	names = uniq(append(slices.Clone(names), found...))
+	// more than asked for, to put the passages about the things named first
+	pool := max(k*3, 12)
+	req := cortexdb.KnowledgeSearchRequest{
+		Query: query, EntityNames: names, Keywords: uniq(append(slices.Clone(keywords), found...)), TopK: pool, MaxContextChunks: pool, RetrievalMode: "auto",
+	}
+	if len(found) > 0 {
+		// co-occurrence is a statistical guess; the relations written here are facts
+		req.RetrievalMode = "ppr"
+		req.PPR = &cortexdb.PPRRetrievalOptions{EdgeTypeWeights: map[string]float64{"co_occurs": 0}}
+	}
+	r, err := c.db.SearchKnowledge(ctx, req)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -609,12 +716,14 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 	out := Answer{Passages: []Passage{}, Mode: r.Decision.EffectiveMode, Entities: r.Entities}
 	seen := map[string]bool{}
 	for _, ch := range r.Chunks {
-		if seen[ch.DocumentID] || len(out.Passages) >= k {
+		if seen[ch.DocumentID] {
 			continue
 		}
 		seen[ch.DocumentID] = true
 		p := Passage{From: "process", Title: titles[ch.DocumentID], Text: ch.Content, Entities: ch.Entities}
-		if m := meta[ch.DocumentID]; m["kind"] == "doc" || strings.HasPrefix(ch.DocumentID, "doc:") {
+		if m := meta[ch.DocumentID]; m["kind"] == "order" || strings.HasPrefix(ch.DocumentID, "order:") {
+			p.From = "order"
+		} else if m["kind"] == "doc" || strings.HasPrefix(ch.DocumentID, "doc:") {
 			p.From = "doc"
 			p.Doc = m["doc"]
 			fmt.Sscan(m["part"], &p.Part)
@@ -628,7 +737,75 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 		}
 		out.Passages = append(out.Passages, p)
 	}
+	out.Passages = aboutFirst(out.Passages, found)
+	if len(out.Passages) > k {
+		out.Passages = out.Passages[:k]
+	}
 	return out, nil
+}
+
+// aboutFirst puts first the passages about a thing the question names (its name in the title:
+// the station's own passage, the line's, the order's), then the orders that name one (a line's or
+// a customer's orders), keeping the search's order otherwise.
+func aboutFirst(ps []Passage, named []string) []Passage {
+	if len(named) == 0 {
+		return ps
+	}
+	rank := func(p Passage) int {
+		for _, n := range named {
+			if strings.HasPrefix(p.Title, n) || strings.HasSuffix(p.Title, " "+n) || p.Title == n {
+				return 0
+			}
+		}
+		if p.From == "order" {
+			for _, n := range named {
+				if strings.Contains(p.Text, n) {
+					return 1
+				}
+			}
+		}
+		return 2
+	}
+	out := slices.Clone(ps)
+	slices.SortStableFunc(out, func(a, b Passage) int { return rank(a) - rank(b) })
+	return out
+}
+
+// orderNo is how an order number looks in a question: letters, a dash, letters and digits.
+var orderNo = regexp.MustCompile(`[A-Za-z]{1,6}-[A-Za-z0-9][A-Za-z0-9-]*`)
+
+// Recognize is the things in the company's graph a question names: whole names (the longest
+// first, each part of the question used once), a product, customer or supplier by the end of its
+// name ("法兰" for 风电法兰), and order numbers.
+func (b *Base) Recognize(company, query string) []string {
+	var out []string
+	rest := query
+	vocab := b.vocabulary(company)
+	for _, v := range vocab {
+		if strings.Contains(rest, v[0]) {
+			out = append(out, v[0])
+			rest = strings.ReplaceAll(rest, v[0], " ")
+		}
+	}
+	for _, v := range vocab {
+		if v[1] != TProduct && v[1] != TCustomer && v[1] != TSupplier || slices.Contains(out, v[0]) {
+			continue
+		}
+		r := []rune(v[0])
+		for n := min(4, len(r)-1); n >= 2; n-- {
+			if tail := string(r[len(r)-n:]); readable(tail) && strings.Contains(rest, tail) {
+				out = append(out, v[0])
+				break
+			}
+		}
+	}
+	orders := b.orderState(company).Items
+	for _, no := range orderNo.FindAllString(query, -1) {
+		if _, ok := orders[no]; ok && !slices.Contains(out, no) {
+			out = append(out, no)
+		}
+	}
+	return out
 }
 
 // ---- the graph ----
@@ -652,7 +829,7 @@ type Entity struct {
 	Mentions []string `json:"mentions"`
 }
 
-var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer}
+var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder}
 
 // Lookup is the thing called name (of kind, if given) and its relations.
 func (b *Base) Lookup(ctx context.Context, company, name string) (*Entity, error) {
@@ -701,6 +878,14 @@ func (b *Base) Lookup(ctx context.Context, company, name string) (*Entity, error
 	add(q(`MATCH (n {name: $name})-[r]->(m) RETURN type(r), labels(m), m.name`), true)
 	add(q(`MATCH (m)-[r]->(n {name: $name}) RETURN type(r), labels(m), m.name`), false)
 	return e, nil
+}
+
+func anyList(s []string) []any {
+	out := make([]any, len(s))
+	for i, x := range s {
+		out[i] = x
+	}
+	return out
 }
 
 func asList(v any) []string {
@@ -753,6 +938,8 @@ type Stats struct {
 	Relations map[string]int `json:"relations"`
 	Docs      int            `json:"docs"`
 	Process   int            `json:"process"`
+	// Orders are the production orders kept, one passage each.
+	Orders int `json:"orders"`
 }
 
 func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
@@ -774,8 +961,7 @@ func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
 		}
 	}
 	for _, t := range s.EdgeTypes {
-		switch t.EdgeType {
-		case RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, "mentions":
+		if slices.Contains(relations, t.EdgeType) || t.EdgeType == "mentions" {
 			st.Relations[t.EdgeType] = t.Count
 		}
 	}
@@ -784,7 +970,8 @@ func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
 		json.Unmarshal(raw, &ps)
 	}
 	st.Process = len(ps.IDs)
-	st.Docs -= st.Process
+	st.Orders = len(b.orderState(company).Items)
+	st.Docs -= st.Process + st.Orders
 	return st, nil
 }
 
@@ -849,7 +1036,7 @@ func (b *Base) Graph(ctx context.Context, company string) (Graph, error) {
 	}
 	r, err := c.db.QueryCypher(ctx, cortexdb.CypherQueryRequest{
 		Query:   `MATCH (a)-[r]->(b) WHERE type(r) IN $types RETURN a.name, type(r), b.name`,
-		Params:  map[string]any{"types": []any{RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo}},
+		Params:  map[string]any{"types": anyList(relations)},
 		MaxRows: 10000,
 	})
 	if err != nil {

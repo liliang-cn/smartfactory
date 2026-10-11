@@ -114,7 +114,11 @@ func (o *Ops) KnowledgeRebuild(ctx context.Context, who auth.Who, via, company s
 		return nil, err
 	}
 	o.KB.Forget(company)
+	o.KB.ForgetOrders(company)
 	err := o.KB.SyncProcess(ctx, company)
+	if err == nil {
+		err = o.KB.SyncOrders(ctx, company)
+	}
 	n := 0
 	if err == nil && o.Agents != nil {
 		n, err = o.Agents.IndexDocs(ctx, company, true)
