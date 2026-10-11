@@ -103,8 +103,8 @@
         <section class="station" id="install">
           <h2>Install on a Linux server</h2>
           <ol class="steps">
-            <li><b>Download the package for your server</b><pre>tar xzf smartfactory-v0.1.2-linux-amd64.tar.gz
-cd smartfactory-v0.1.2-linux-amd64</pre></li>
+            <li><b>Download the package for your server</b><pre>tar xzf smartfactory-*-linux-amd64.tar.gz
+cd smartfactory-*-linux-amd64</pre></li>
             <li><b>Install it as a service</b><pre>sudo ./smartfactory install</pre><p>A systemd service with its own user, started now and on every boot. Run it again with a newer package to upgrade.</p></li>
             <li><b>Sign in and build your factory</b><pre>sudo cat /var/lib/smartfactory/initial-admin-token</pre><p>Open <code>http://your-server:4720/admin</code> with this token.</p></li>
           </ol>

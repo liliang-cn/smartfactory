@@ -13,8 +13,8 @@
 Linux（systemd），从 [Releases](https://github.com/liliang-cn/smartfactory/releases) 下载：
 
 ```sh
-tar xzf smartfactory-v0.1.0-linux-amd64.tar.gz
-cd smartfactory-v0.1.0-linux-amd64
+tar xzf smartfactory-*-linux-amd64.tar.gz
+cd smartfactory-*-linux-amd64
 sudo ./smartfactory install
 ```
 

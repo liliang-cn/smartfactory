@@ -103,8 +103,8 @@
         <section class="station" id="install">
           <h2>装在一台 Linux 服务器上</h2>
           <ol class="steps">
-            <li><b>下载对应架构的安装包</b><pre>tar xzf smartfactory-v0.1.2-linux-amd64.tar.gz
-cd smartfactory-v0.1.2-linux-amd64</pre></li>
+            <li><b>下载对应架构的安装包</b><pre>tar xzf smartfactory-*-linux-amd64.tar.gz
+cd smartfactory-*-linux-amd64</pre></li>
             <li><b>装成系统服务</b><pre>sudo ./smartfactory install</pre><p>systemd 服务，独立的系统用户，立即启动，开机自启。以后用新版本再执行一次就是升级。</p></li>
             <li><b>登录，搭你的工厂</b><pre>sudo cat /var/lib/smartfactory/initial-admin-token</pre><p>用这个令牌打开 <code>http://你的服务器:4720/admin</code>。</p></li>
           </ol>
