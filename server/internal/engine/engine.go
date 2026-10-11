@@ -122,7 +122,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -444,6 +444,35 @@ func (e *Engine) List() string { return e.str("list") }
 // Hist returns an asset's trend buffers (JSON), or "null".
 func (e *Engine) Hist(company, plant, asset string) string {
 	return e.str("hist", company, plant, asset)
+}
+
+// AssetState is one asset as the command guard judges a command for it.
+type AssetState struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	State    string   `json:"state"`
+	Fault    string   `json:"fault"`
+	Temp     float64  `json:"temp"`
+	Warn     float64  `json:"warn"`
+	Trip     float64  `json:"trip"`
+	Speed    float64  `json:"speed"`
+	Health   float64  `json:"health"`
+	Maint    bool     `json:"maint"`
+	Changing bool     `json:"changing"`
+	Alarms   []string `json:"alarms"`
+	// Live is the source its readings come from, "" when they are simulated.
+	Live string `json:"live"`
+}
+
+// AssetState is the asset's state now; false when there is no such asset.
+func (e *Engine) AssetState(company, plant, asset string) (AssetState, bool) {
+	var a AssetState
+	js := e.str("assetState", company, plant, asset)
+	if js == "null" || json.Unmarshal([]byte(js), &a) != nil {
+		return a, false
+	}
+	return a, true
 }
 
 func (e *Engine) Command(company, plant, asset, cmd string, arg *float64) Result {

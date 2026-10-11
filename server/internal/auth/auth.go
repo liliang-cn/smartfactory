@@ -5,6 +5,9 @@
 //	member    + record through the assistants: notes, tickets, ticket status
 //	operator  + commands that reach equipment, the plant clock, the advisor's decisions
 //	admin     + scenes, documents, assistants themselves
+//
+// erp is not on that ladder: a business system's token that sends, reads and withdraws
+// production orders for its companies, and is a visitor everywhere else.
 package auth
 
 import (
@@ -32,10 +35,12 @@ const (
 	Member
 	Operator
 	Admin
+	// ERP may use the order API of its companies and nothing else.
+	ERP
 )
 
-var roleNames = [...]string{"visitor", "member", "operator", "admin"}
-var roleLabels = [...]string{"访客", "成员", "操作员", "管理员"}
+var roleNames = [...]string{"visitor", "member", "operator", "admin", "erp"}
+var roleLabels = [...]string{"访客", "成员", "操作员", "管理员", "ERP 接口"}
 
 func (r Role) String() string { return roleNames[r] }
 
@@ -44,14 +49,22 @@ func (r Role) Label() string { return roleLabels[r] }
 
 func (r Role) MarshalJSON() ([]byte, error) { return json.Marshal(r.String()) }
 
-// ParseRole reads a role a token can carry: member, operator or admin.
+// ParseRole reads a role a token can carry: member, operator, admin or erp.
 func ParseRole(s string) (Role, error) {
 	for i, n := range roleNames {
 		if n == s && i > 0 {
 			return Role(i), nil
 		}
 	}
-	return Visitor, fmt.Errorf("role %q: use member, operator or admin", s)
+	return Visitor, fmt.Errorf("role %q: use member, operator, admin or erp", s)
+}
+
+// Rank is where the role stands on the visitor–admin ladder: an ERP token stands with visitors.
+func (r Role) Rank() Role {
+	if r == ERP {
+		return Visitor
+	}
+	return r
 }
 
 // Who is the caller.
@@ -77,14 +90,26 @@ func (w Who) Everywhere() bool { return w.Companies == nil }
 
 // Can reports whether the caller may act at role need on company. Anyone may act as a visitor.
 func (w Who) Can(company string, need Role) bool {
-	return need == Visitor || (w.Role >= need && w.In(company))
+	return need == Visitor || (w.Role.Rank() >= need && w.In(company))
+}
+
+// Orders reports whether the caller may use company's order API: an ERP token of the company,
+// members and above to read, operators and above to send and withdraw.
+func (w Who) Orders(company string, write bool) bool {
+	if w.Role == ERP {
+		return w.In(company)
+	}
+	if write {
+		return w.Can(company, Operator)
+	}
+	return w.Can(company, Member)
 }
 
 // RoleIn is the caller's role on company: their own where the token covers it, a visitor's
-// elsewhere.
+// elsewhere (and an ERP token's everywhere but the order API).
 func (w Who) RoleIn(company string) Role {
 	if w.In(company) {
-		return w.Role
+		return w.Role.Rank()
 	}
 	return Visitor
 }

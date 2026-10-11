@@ -30,7 +30,7 @@ func guard[In, Out any](need auth.Role, company func(In) string, h mcp.ToolHandl
 		w := who(req)
 		var zero Out
 		if company == nil {
-			if w.Role < need {
+			if w.Role.Rank() < need {
 				return nil, zero, fmt.Errorf("this needs %s token; yours is %s", article(need), w.Role)
 			}
 		} else if c := company(in); !w.Can(c, need) {
@@ -48,7 +48,7 @@ func guard[In, Out any](need auth.Role, company func(In) string, h mcp.ToolHandl
 func everywhere[In, Out any](need auth.Role, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		var zero Out
-		if w := who(req); w.Role < need || !w.Everywhere() {
+		if w := who(req); w.Role.Rank() < need || !w.Everywhere() {
 			return nil, zero, fmt.Errorf("this changes what every company shares: it needs %s token for every company", article(need))
 		}
 		return h(ctx, req, in)

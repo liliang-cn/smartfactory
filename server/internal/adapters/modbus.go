@@ -20,6 +20,7 @@ import (
 func RunModbus(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.Logger) {
 	log = log.With("adapter", src.Name)
 	hub.Source(src.Name, "modbus", src.URL, len(src.Points))
+	register(hub, src)
 	client, err := modbus.NewClient(&modbus.ClientConfiguration{URL: src.URL, Timeout: 3 * time.Second})
 	if err != nil {
 		hub.SetConnected(src.Name, false, err)

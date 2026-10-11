@@ -151,9 +151,10 @@
                 "visitor",
                 "member",
                 "operator",
-                "admin"
+                "admin",
+                "erp"
               ],
-              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
             },
             "name": {
               "type": "string"
@@ -2360,9 +2361,10 @@
             "visitor",
             "member",
             "operator",
-            "admin"
+            "admin",
+            "erp"
           ],
-          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
         },
         "you": {
           "type": "string"
@@ -3168,9 +3170,10 @@
               "visitor",
               "member",
               "operator",
-              "admin"
+              "admin",
+              "erp"
             ],
-            "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+            "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
           },
           "key": {
             "type": "string"
@@ -3183,7 +3186,8 @@
               "assistant",
               "mcp",
               "cli",
-              "api"
+              "api",
+              "guard"
             ]
           },
           "company": {
@@ -3202,6 +3206,9 @@
             "type": "boolean"
           },
           "error": {
+            "type": "string"
+          },
+          "context": {
             "type": "string"
           }
         },
@@ -3236,9 +3243,10 @@
                 "visitor",
                 "member",
                 "operator",
-                "admin"
+                "admin",
+                "erp"
               ],
-              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
             },
             "companies": {
               "type": "array",
@@ -3528,9 +3536,10 @@
             "visitor",
             "member",
             "operator",
-            "admin"
+            "admin",
+            "erp"
           ],
-          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants"
+          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
         },
         "companies": {
           "type": "array",
@@ -4995,6 +5004,243 @@
       ],
       "additionalProperties": false,
       "description": "POST /api/admin/erp/{company}/pull?dry=1 — what a pull reads and where each order would run (dry: nothing stored)"
+    },
+    "GuardSettings": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "advisory",
+            "guarded",
+            "autonomous"
+          ]
+        },
+        "approve": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stop",
+              "speed",
+              "reset",
+              "maint",
+              "fault",
+              "restock",
+              "ship",
+              "retool",
+              "toollimit"
+            ],
+            "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "start",
+                      "stop",
+                      "speed",
+                      "reset",
+                      "maint",
+                      "fault",
+                      "restock",
+                      "ship",
+                      "retool",
+                      "toollimit"
+                    ],
+                    "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+                  },
+                  {
+                    "type": "string",
+                    "const": "*"
+                  }
+                ]
+              },
+              "when": {
+                "type": "string"
+              },
+              "say": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cmd",
+              "when",
+              "say"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "expire": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "level",
+        "approve",
+        "rules",
+        "expire"
+      ],
+      "additionalProperties": false,
+      "description": "PUT /api/guard/{company} (administrators); answers GuardOverview"
+    },
+    "GuardOverview": {
+      "type": "object",
+      "properties": {
+        "settings": {
+          "$ref": "#/$defs/GuardSettings"
+        },
+        "defaults": {
+          "$ref": "#/$defs/GuardSettings"
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stop",
+              "speed",
+              "reset",
+              "maint",
+              "fault",
+              "restock",
+              "ship",
+              "retool",
+              "toollimit"
+            ],
+            "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+          }
+        },
+        "machines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "waiting": {
+          "type": "number"
+        },
+        "admin": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "settings",
+        "defaults",
+        "commands",
+        "machines",
+        "waiting",
+        "admin"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/guard/{company} — operators and above"
+    },
+    "CommandRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "cmd": {
+          "type": "string",
+          "enum": [
+            "start",
+            "stop",
+            "speed",
+            "reset",
+            "maint",
+            "fault",
+            "restock",
+            "ship",
+            "retool",
+            "toollimit"
+          ],
+          "description": "speed: arg 0.5–1.5 · toollimit: arg 0.3–1 of the die life · fault: a drill"
+        },
+        "arg": {
+          "type": "number"
+        },
+        "who": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string"
+        },
+        "expires": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "deciding",
+            "sent",
+            "refused",
+            "denied",
+            "expired",
+            "failed"
+          ]
+        },
+        "decidedBy": {
+          "type": "string"
+        },
+        "decidedAt": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "company",
+        "plant",
+        "asset",
+        "cmd",
+        "who",
+        "via",
+        "reason",
+        "context",
+        "created",
+        "expires",
+        "status"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/guard/{company}/requests/{id}/approve | deny {reason?} — operators and above; MCP command_request"
+    },
+    "CommandRequests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CommandRequest"
+      },
+      "description": "GET /api/guard/{company}/requests?status= — waiting first, then the newest"
     },
     "Source": {
       "type": "object",

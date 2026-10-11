@@ -16,6 +16,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
+	guardpkg "smartfactory/internal/guard"
 	"smartfactory/internal/tags"
 )
 
@@ -172,13 +173,28 @@ type cmdIn struct {
 	Arg     *float64 `json:"arg,omitempty" jsonschema:"for speed: 0.5 to 1.5 (fraction of nominal); for toollimit: 0.3 to 1 (share of the tool life at which it is changed, e.g. 0.85)"`
 }
 type cmdOut struct {
-	Sent string `json:"sent"`
+	// Status: sent | waiting (for a person to approve) | refused (by the company's rules)
+	Status string `json:"status"`
+	// Sent is the twin's answer when it was carried out.
+	Sent string `json:"sent,omitempty"`
+	// Reason is why it waits or was refused.
+	Reason string `json:"reason,omitempty"`
+	// Request names a command that waits: ask command_request how it went.
+	Request string `json:"request,omitempty"`
+	Expires string `json:"expires,omitempty"`
+}
+
+type reqIn struct {
+	Company string `json:"company" jsonschema:"company id"`
+	ID      string `json:"id" jsonschema:"the request named by send_command (CQ-…)"`
+	Wait    int    `json:"wait,omitempty" jsonschema:"seconds to wait for a person's decision, up to 120 (0: answer at once)"`
 }
 
 var commands = []string{"start", "stop", "reset", "maint", "speed", "fault", "restock", "ship", "retool", "toollimit"}
 
 // New builds the MCP server.
-func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log) *mcp.Server {
+// cmds judges commands that would reach a machine; nil sends them straight on.
+func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log, cmds *guardpkg.Guard) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "smartfactory", Title: "SmartFactory digital twin", Version: version}, &mcp.ServerOptions{
 		Instructions: "SmartFactory is a 3D digital twin platform for factories and other sites (venues, campsites …). Companies contain plants, plants contain lines of machines (assets). New scenes can be created with scene_guide → create_industry → create_company. " +
 			"Use list_sites first. The simulation runs on the server continuously; KPIs, alarms and machine state are current. " +
@@ -300,6 +316,19 @@ func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log) *mcp
 				return nil, cmdOut{}, fmt.Errorf("company, plant and asset are required")
 			}
 			w := who(req)
+			if cmds != nil {
+				v := cmds.Send(guardpkg.Origin{Who: w, Via: "mcp", By: "mcp", AI: true}, guardpkg.Command{Company: in.Company, Plant: in.Plant, Asset: in.Asset, Cmd: in.Command, Arg: in.Arg})
+				switch v.Outcome {
+				case guardpkg.Failed:
+					return nil, cmdOut{}, errors.New(v.Msg)
+				case guardpkg.Refused:
+					return nil, cmdOut{Status: "refused", Reason: "the company's rules refuse it: " + v.Msg}, nil
+				case guardpkg.Waiting:
+					return nil, cmdOut{Status: "waiting", Request: v.Request.ID, Expires: v.Request.Expires.Format(time.RFC3339),
+						Reason: v.Request.Reason + ". Nothing was done yet: a person approves or denies it in SmartFactory; ask command_request with this id (wait up to 120 s) to learn the outcome, and tell the user it is waiting."}, nil
+				}
+				return nil, cmdOut{Status: "sent", Sent: v.Msg}, nil
+			}
 			r := eng.Command(in.Company, in.Plant, in.Asset, in.Command, in.Arg)
 			var err error
 			if !r.OK {
@@ -310,8 +339,27 @@ func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log) *mcp
 				return nil, cmdOut{}, err
 			}
 			hub.Command(tags.Command{Company: in.Company, Plant: in.Plant, Asset: in.Asset, Cmd: in.Command, Arg: in.Arg, By: "mcp", Name: w.Name})
-			return nil, cmdOut{Sent: r.Msg}, nil
+			return nil, cmdOut{Status: "sent", Sent: r.Msg}, nil
 		}))
+
+	if cmds != nil {
+		mcp.AddTool(s, &mcp.Tool{Name: "command_request", Description: "How a command that waits for a person went: waiting, sent (approved and carried out), refused (the machine changed and the rules refuse it now), denied, expired or failed, with the twin's answer or the reason. wait > 0 waits up to that many seconds for the decision."},
+			guard(auth.Operator, func(in reqIn) string { return in.Company }, func(ctx context.Context, req *mcp.CallToolRequest, in reqIn) (*mcp.CallToolResult, *guardpkg.Request, error) {
+				var r *guardpkg.Request
+				var err error
+				if in.Wait > 0 {
+					wctx, cancel := context.WithTimeout(ctx, time.Duration(min(in.Wait, 120))*time.Second)
+					r, err = cmds.Wait(wctx, in.Company, in.ID)
+					cancel()
+				} else {
+					r, err = cmds.Get(in.Company, in.ID)
+				}
+				if err == nil && r == nil {
+					err = fmt.Errorf("no request %q in %s", in.ID, in.Company)
+				}
+				return nil, r, err
+			}))
+	}
 
 	addSceneTools(s, eng, log)
 	addSimTool(s, eng)

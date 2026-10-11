@@ -42,6 +42,7 @@ import (
 	"smartfactory/internal/edge"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
+	"smartfactory/internal/guard"
 	"smartfactory/internal/history"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
@@ -365,9 +366,18 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			}
 		}
 	}
-	ms := mcptools.New(hub, eng, version, trail)
+	// commands that would reach a machine: the company's rules, and a person's approval for AI
+	var cmds *guard.Guard
+	if cfg.Data != "" {
+		if cmds, err = guard.Open(cfg.Data, eng, hub, trail, log); err != nil {
+			return fmt.Errorf("guard: %w", err)
+		}
+		defer cmds.Close()
+		go cmds.Run(ctx)
+	}
+	ms := mcptools.New(hub, eng, version, trail, cmds)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Series: readings, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Series: readings, Guard: cmds, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

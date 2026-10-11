@@ -7,7 +7,9 @@
 package tags
 
 import (
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -83,6 +85,10 @@ type SourceStatus struct {
 	LastFlag string `json:"lastFlag,omitempty"`
 	// Targets are the assets this source feeds, as company/plant/asset.
 	Targets []string `json:"targets"`
+	// Public sources are emulated equipment (demo devices): what reaches them reaches no machine.
+	Public bool `json:"public,omitempty"`
+	// commands are the assets this source takes commands for besides those it feeds.
+	commands []string
 	// Labels name each target for people ("华锻集团 一厂 · HP-101"); filled by the web layer.
 	Labels []string `json:"labels,omitempty"`
 }
@@ -218,6 +224,74 @@ func (h *Hub) Source(name, typ, url string, points int) *SourceStatus {
 	}
 	s.Points = points
 	return s
+}
+
+// SetPublic marks a source as emulated equipment (or not).
+func (h *Hub) SetPublic(name string, public bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if s := h.sources[name]; s != nil {
+		s.Public = public
+	}
+}
+
+// AcceptCommands records the assets (company/plant/asset) a source takes commands for even
+// when it reads nothing from them.
+func (h *Hub) AcceptCommands(name string, targets []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if s := h.sources[name]; s != nil {
+		s.commands = append(s.commands, targets...)
+	}
+}
+
+// Real reports whether a command for the asset reaches a machine: a source that is not
+// emulated has sent the asset's readings or takes its commands.
+func (h *Hub) Real(company, plant, asset string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	target := company + "/" + plant + "/" + asset
+	for _, s := range h.sources {
+		if !s.Public && slices.Contains(s.commands, target) {
+			return true
+		}
+	}
+	for _, t := range h.last {
+		if t.Company == company && t.Plant == plant && t.Asset == asset {
+			if s := h.sources[t.Source]; s != nil && !s.Public {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// RealAssets are the company's assets (plant/asset) whose commands reach a machine.
+func (h *Hub) RealAssets(company string) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	seen := map[string]bool{}
+	for _, s := range h.sources {
+		if s.Public {
+			continue
+		}
+		for _, t := range s.commands {
+			if c, rest, ok := strings.Cut(t, "/"); ok && c == company {
+				seen[rest] = true
+			}
+		}
+	}
+	for _, t := range h.last {
+		if s := h.sources[t.Source]; t.Company == company && s != nil && !s.Public {
+			seen[t.Plant+"/"+t.Asset] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // HasSource reports whether an adapter of that name has registered.

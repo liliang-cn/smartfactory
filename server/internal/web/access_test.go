@@ -68,7 +68,7 @@ func TestRoles(t *testing.T) {
 	outsider, xk := auth.NewToken("天控的人", auth.Admin, []string{"tiankong"}, "")
 	admin, ak := auth.NewToken("李工", auth.Admin, nil, "")
 	hub := tags.NewHub()
-	ms := mcptools.New(hub, eng, "test", trail)
+	ms := mcptools.New(hub, eng, "test", trail, nil)
 	srv := &Server{Hub: hub, Engine: eng, Keys: keyring(t, "", mk, ok, xk, ak), Audit: trail, Log: log, Agents: ag,
 		Static: fstest.MapFS{"index.html": {Data: []byte("<!doctype html>")}},
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
