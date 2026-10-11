@@ -111,8 +111,9 @@ type Overview struct {
 	Issue      bool            `json:"issue"`
 	Assistants bool            `json:"assistants"`
 	Version    string          `json:"version"`
-	// Runs is the companies this server is limited to (a customer's own instance); absent when any.
-	Runs []string `json:"runs,omitempty"`
+	// Runs is the companies this server is limited to (a customer's own instance, [] on the
+	// platform server); absent when any.
+	Runs *[]string `json:"runs,omitempty"`
 	// Instances are the customers' own servers, on the platform server.
 	Instances []InstanceStatus `json:"instances"`
 	// Single: a self-hosted instance of one company (empty until it is built)
@@ -140,8 +141,15 @@ func (o *Ops) Overview(who auth.Who) (*Overview, error) {
 		return nil, err
 	}
 	return &Overview{Me: who, Companies: cs, Industries: json.RawMessage(o.Engine.IndustryList()), Issue: o.Keys.CanIssue(), Assistants: o.Agents != nil, Version: o.Version,
-		Runs: o.Engine.Runs(), Instances: o.instances(who), Single: o.Engine.IsSingle(),
+		Runs: runs(o.Engine.Runs()), Instances: o.instances(who), Single: o.Engine.IsSingle(),
 		Hub: hubURL(o.Market), HubPublish: o.Market != nil && o.Market.Token != ""}, nil
+}
+
+func runs(ids []string) *[]string {
+	if ids == nil {
+		return nil
+	}
+	return &ids
 }
 
 func hubURL(h *templates.Hub) string {

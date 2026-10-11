@@ -115,7 +115,7 @@ export default function Customers() {
         <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5 max-sm:grid-cols-1 max-sm:gap-3">
           {ov.instances.map((i) => <InstanceCard key={i.id} i={i} />)}
         </div>
-        <p className="mt-6 text-[12.5px] text-muted-foreground">新客户开一个新实例：在服务器上运行 <code className="rounded bg-card px-1 font-mono">scripts/instance.sh new &lt;标识&gt;</code>，再到它自己的后台搭工厂。</p>
+        <p className="mt-6 text-[12.5px] leading-relaxed text-muted-foreground">新客户：在服务器上起一个新实例（不写 <code className="rounded bg-card px-1 font-mono">companies</code> 就是空的单公司实例，第一次启动在 <code className="rounded bg-card px-1 font-mono">data/initial-admin-token</code> 留管理员令牌），加进这里配置的 <code className="rounded bg-card px-1 font-mono">instances</code>，再到它自己的后台用模板建工厂。</p>
       </>
     );
   }
