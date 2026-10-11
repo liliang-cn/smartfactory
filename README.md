@@ -2,6 +2,12 @@
 
 一家公司自己部署的智能工厂：后台、实时 3D 孪生、AI 助手。
 
+![实时 3D 孪生](docs/screenshots/twin.png)
+
+| 生产工单（ERP） | 知识图谱 | 工作台助手 |
+|---|---|---|
+| ![生产工单](docs/screenshots/orders.png) | ![知识图谱](docs/screenshots/knowledge.png) | ![工作台助手](docs/screenshots/agent.png) |
+
 ## 安装
 
 Linux（systemd），从 [Releases](https://github.com/liliang-cn/smartfactory/releases) 下载：
