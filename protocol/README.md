@@ -22,6 +22,8 @@
   | `operator` 操作员 | 加上：会下发到真实设备的命令、全公司仿真倍速、顾问的决定和例行诊断、看审计日志 |
   | `admin` 管理员 | 加上：增删助手、上传删除资料、删除笔记；经 MCP 建删场景 |
 
+  另有 `erp` ERP 接口：不在上面的阶梯里，给 ERP 之类的系统用，只能发、查、撤它所管公司的生产工单（`/api/erp/{company}/orders…`），别处一律按访客，也进不了 MCP。
+
   令牌由 `smartfactory token -name 张工 -role operator -company huaduan` 生成，服务器配置里只存它的 SHA-256。最早的单一 `token` 仍然有效，等同于所有公司的管理员。
 - **版本**：服务器在 `hello.protocol` 里声明版本号。浏览器看到版本号和自己不一致时，必须停止跟随，并提示刷新页面。
 - **兼容**：新增消息类型、新增可选字段，版本号不变。改名、删字段、改语义，版本号加 1。收到不认识的消息类型或字段时，接收方必须忽略，不能报错。
@@ -334,7 +336,7 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 公司的 ERP（或 MES、中间件）下达生产工单，孪生把每张排到一条产线上做，开工、完工回传给 ERP。没接 ERP 时产线自己排工单（仿真）。
 
-- **进来**：ERP 带这家公司的操作员令牌推送（`POST`），或者孪生按设置去 ERP 的接口拉（GET/POST，返回 JSON 里列表的路径和每个字段的路径可配，下标取数组，适合按行返回数组的 ERP）。拉取用的请求头值存在服务器上，读设置时只给名字。
+- **进来**：ERP 带这家公司的 ERP 接口令牌（角色 `erp`，也可以用操作员令牌）推送（`POST`），或者孪生按设置去 ERP 的接口拉（GET/POST，返回 JSON 里列表的路径和每个字段的路径可配，下标取数组，适合按行返回数组的 ERP）。拉取用的请求头值存在服务器上，读设置时只给名字。
 - **排线**：工单写了 `line`（产线 id 或名字，可加 `plant`）就在那条线；否则在做这个料号（`partNo`，产品的料号或它的变型）或产品（`product`）的产线里，挑手上活最少的。哪条线都做不了的单独拒收。
 - **排序**：每条线按交期先后做，没写交期的排在后面、按收到的先后。线上在做的是 ERP 的工单时，孪生里的工单号、料号、客户、交期就是 ERP 的。
 - **没工单的产线**：`idle` 停线等单（和真实工厂一样），`simulate` 自己排一张（演示）。
@@ -344,16 +346,35 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 | 方法 路径 | 请求 → 响应 | 说明 |
 |---|---|---|
-| `GET /api/erp/{company}/orders?status=&q=&limit=` | `Orders` | 在做的、排队的（按要做的顺序）、其余新的在前；成员以上 |
+| `GET /api/erp/{company}/orders?status=&q=&limit=` | `Orders` | 在做的、排队的（按要做的顺序）、其余新的在前；ERP 接口或成员以上 |
 | `GET /api/erp/{company}/orders/{no}` | `Order` | 一张工单 |
-| `POST /api/erp/{company}/orders` | `OrderInput`、它的数组或 `{orders: [...]}` → `OrderResults` | 收下工单，每张单独回答；操作员以上 |
-| `DELETE /api/erp/{company}/orders/{no}` | → `Order` | 撤回；完成的不能撤（409）；操作员以上 |
+| `POST /api/erp/{company}/orders` | `OrderInput`、它的数组或 `{orders: [...]}` → `OrderResults` | 收下工单，每张单独回答；ERP 接口或操作员以上 |
+| `DELETE /api/erp/{company}/orders/{no}` | → `Order` | 撤回；完成的不能撤（409）；ERP 接口或操作员以上 |
 | `GET /api/admin/erp/{company}` | `ERPOverview` | 对接设置（不含密钥）、上次拉取和回调怎么样、各状态工单数；管理员 |
 | `PUT /api/admin/erp/{company}` | `ERPConfig` → `{ok, secret?}` | 设置；请求头值留空表示不改 |
 | `POST /api/admin/erp/{company}/pull?dry=1` | → `PullResult` | 现在拉一次；`dry` 只看读到什么、会排到哪条线，不存 |
 | `POST /api/admin/erp/{company}/secret` | → `{secret}` | 换回调签名密钥 |
 
 命令行：`smartfactory orders <company>`（`show`、`send -f`、`cancel`、`pull [-dry]`、`erp`）。工作台助手有 `list_orders`、`erp_status`，撤回工单要管理员确认。孪生里的售后服务助手用 `production_orders` 回答客户问的订单进度。
+
+### 指令把关 `/api/guard/{company}`
+
+发给真实设备的指令先过把关。"真实设备"指采集源不是演示设备（`public`）的机器：它的读数来自这样的采集源，或者这样的采集源为它配了指令。只到孪生的机器（纯仿真、演示设备）不经把关，和以前一样。
+
+- **规则**：人和 AI 的指令都要过。每条规则 `{cmd, when, say}`：`cmd` 是一种指令或 `*`；`when` 是用 `and` 连接的条件，每个条件是 字段 比较 值，字段有 `state`（running、idle、blocked、fault、stopped…）、`temp`、`warn`、`trip`（°C）、`speed`、`health`、`alarms`（在报警的条数）、`arg`（指令的参数）、`maint`、`changing`，比较是 `= != > >= < <=`，值是数、词或另一个字段；条件成立就不执行，`say` 是给出的理由（可以写 `{temp}`、`{warn}`、`{trip}`、`{speed}`、`{arg}`、`{state}`、`{alarms}`）。比较报警线、停机线的规则对没有这两条线的机器不成立。默认：故障或超过报警线不能启动，没降到停机线以下不能复位，速度在 50%～120% 之间，加工中不能换模。
+- **等级**（只管 AI：经 MCP 的客户端、助手）：`advisory` 只提议，AI 的每条指令都等人批准（默认）；`guarded` 有护栏，`approve` 里列出的指令等人批准，其余过了规则就执行；`autonomous` 自主，过了规则就执行。
+- **等人批准**：指令记成一条请求（`CQ-…`），带发出时设备的状态，`expire` 分钟（默认 15）内没人处理就作废。这家公司的操作员或管理员在孪生顶栏的「待批准」、后台的「指令」页或命令行批准或拒绝；批准时按设备当时的状态再过一遍规则，过了才下发，以发起方的名义加上批准人。MCP 的 `send_command` 这时回答 `status: waiting` 和请求编号，用 `command_request`（可以 `wait` 最多 120 秒）问结果。
+- **审计**：每条发给真实设备的指令，执行了的（`command`）、被规则拒绝的（`command.refused`）、提出的（`command.pending`）、批准的（`command.approved`）、拒绝的（`command.denied`）、作废的（`command.expired`），都记下当时设备的状态、温度、报警，拒绝它的规则，谁发起、谁批准（`AuditEntry.context`）。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/guard/{company}` | `GuardOverview` | 设置、默认设置、接了真实设备的机器、等待批准的条数；操作员以上 |
+| `PUT /api/guard/{company}` | `GuardSettings` → `GuardOverview` | 改设置；规则写不对 422，带每条问题；管理员 |
+| `GET /api/guard/{company}/requests?status=` | `CommandRequests` | 等批准的在前，其余新的在前；操作员以上 |
+| `POST /api/guard/{company}/requests/{id}/approve` | → `CommandRequest` | 批准并下发；已经处理过或过期的 409 |
+| `POST /api/guard/{company}/requests/{id}/deny` | `{reason?}` → `CommandRequest` | 拒绝 |
+
+命令行：`smartfactory guard <company>`（`set -level guarded -approve start,speed -expire 15`、`set -f settings.json`、`pending`、`requests`、`approve <编号>`、`deny <编号> -reason …`）。工作台助手有 `guard_status`，批准、拒绝要管理员确认。
 
 ## 6. MCP `POST /mcp`
 
@@ -370,7 +391,8 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `get_asset` | 一台设备的状态、遥测、报警、实测值 | 成员 |
 | `read_tags` | 设备实测值及其来源 | 成员 |
 | `list_sources` | 采集源的连接状态（只列喂给令牌所管公司的） | 成员 |
-| `send_command` | 操作设备，取值同 2.5；会经采集源下发到真实设备，记入审计日志 | 操作员 |
+| `send_command` | 操作设备，取值同 2.5；真实设备的指令先过指令把关：`status` 是 `sent`、`waiting`（等人批准，带 `request`）或 `refused`（带 `reason`）；记入审计日志 | 操作员 |
+| `command_request` | 一条等人批准的指令现在怎样了，`wait` 秒内等结果（最多 120） | 操作员 |
 | `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
 | `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
 | `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |

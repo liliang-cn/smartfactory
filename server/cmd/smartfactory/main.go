@@ -413,7 +413,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 func runToken(args []string) error {
 	fs := flag.NewFlagSet("token", flag.ExitOnError)
 	name := fs.String("name", "", "who holds it, as the audit log shows it")
-	role := fs.String("role", "member", "member | operator | admin")
+	role := fs.String("role", "member", "member | operator | admin | erp (the order API only)")
 	companies := fs.String("company", "*", "companies it covers, comma-separated; * for every company")
 	expires := fs.String("expires", "", "last day it works, YYYY-MM-DD (optional)")
 	fs.Parse(args)

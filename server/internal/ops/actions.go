@@ -7,12 +7,13 @@ import (
 	"strings"
 
 	"smartfactory/internal/auth"
+	"smartfactory/internal/guard"
 )
 
 // An Action is a change the console agent proposes and a person carries out: the page shows it
 // with a button, the command line asks y/N, and either runs it here as the person who confirmed.
 type Action struct {
-	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order
+	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order | approve_command | deny_command
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
 	Title  string         `json:"title"`
@@ -51,6 +52,10 @@ func (o *Ops) Do(ctx context.Context, who auth.Who, via string, a Action) (any, 
 		return o.KnowledgeRebuild(ctx, who, via, str("company"))
 	case "cancel_order":
 		return o.CancelOrder(who, via, str("company"), str("no"))
+	case "approve_command":
+		return o.ApproveCommand(who, via, str("company"), str("id"))
+	case "deny_command":
+		return o.DenyCommand(who, via, str("company"), str("id"), str("reason"))
 	}
 	return nil, fail(400, "没有这种操作：%s", a.Kind)
 }
@@ -99,6 +104,17 @@ func (o *Ops) describe(a *Action) error {
 		a.Title = "重建" + named(str("company")) + "的知识库"
 	case "cancel_order":
 		a.Title = "撤回工单 " + str("no")
+	case "approve_command", "deny_command":
+		verb := "批准"
+		if a.Kind == "deny_command" {
+			verb = "拒绝"
+		}
+		a.Title = verb + "指令 " + str("id")
+		if o.Commands != nil {
+			if r, _ := o.Commands.Get(str("company"), str("id")); r != nil {
+				a.Title = fmt.Sprintf("%s %s 对 %s 的「%s」", verb, r.Who, r.Asset, guard.Text(r.Cmd, r.Arg))
+			}
+		}
 	default:
 		return fail(400, "没有这种操作：%s", a.Kind)
 	}

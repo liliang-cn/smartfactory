@@ -30,6 +30,7 @@ export function ago(iso?: string): string {
 
 const ROLE_TONE: Record<api.Role, string> = {
   visitor: 'bg-surface text-muted-foreground', member: 'bg-surface text-foreground', operator: 'bg-warning-soft text-warning', admin: 'bg-brand-soft text-primary',
+  erp: 'bg-success-soft text-success',
 };
 export const RoleChip = ({ role }: { role: api.Role }) => (
   <span className={cn('inline-block rounded-md px-1.5 py-0.5 text-[12px] font-bold whitespace-nowrap', ROLE_TONE[role])}>{api.ROLE_LABEL[role]}</span>
@@ -43,16 +44,18 @@ function Status({ a }: { a: api.Account }) {
 
 const FROM: Record<api.Account['from'], string> = { legacy: '最初的共用令牌', config: '服务器配置文件', issued: '后台签发' };
 
-export function Issue({ open, onOpenChange, company, onIssued, holder = '', note }: {
+export function Issue({ open, onOpenChange, company, onIssued, holder = '', as = 'operator', note }: {
   open: boolean; onOpenChange(o: boolean): void; company?: string; onIssued(): void;
-  /** who it is for, filled in (an operator's token for a system) */
+  /** who it is for, filled in (a system's name) */
   holder?: string;
+  /** the role picked at first */
+  as?: Exclude<api.Role, 'visitor'>;
   /** what to do with it, under the token once issued */
   note?: React.ReactNode;
 }) {
   const { ov } = useConsole();
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'member' | 'operator' | 'admin'>('operator');
+  const [role, setRole] = useState<Exclude<api.Role, 'visitor'>>(as);
   const [all, setAll] = useState(false);
   const [picked, setPicked] = useState<string[]>(company ? [company] : []);
   const [expires, setExpires] = useState('');
@@ -60,8 +63,8 @@ export function Issue({ open, onOpenChange, company, onIssued, holder = '', note
   const [error, setError] = useState<string>();
   const [done, setDone] = useState<api.IssuedToken | null>(null);
   useEffect(() => {
-    if (open) { setName(holder); setRole('operator'); setAll(false); setPicked(company ? [company] : []); setExpires(''); setError(undefined); setDone(null); }
-  }, [open, company, holder]);
+    if (open) { setName(holder); setRole(as); setAll(false); setPicked(company ? [company] : []); setExpires(''); setError(undefined); setDone(null); }
+  }, [open, company, holder, as]);
   const ready = name.trim() && (all || picked.length);
   const submit = async () => {
     setBusy(true);
@@ -95,7 +98,7 @@ export function Issue({ open, onOpenChange, company, onIssued, holder = '', note
               <div className="grid gap-1.5">
                 <span className="text-[13px] font-bold">角色</span>
                 <RadioGroup value={role} onValueChange={(v) => setRole(v as typeof role)} className="grid gap-2">
-                  {(['member', 'operator', 'admin'] as const).map((r) => (
+                  {(['member', 'operator', 'admin', 'erp'] as const).map((r) => (
                     <Label key={r} htmlFor={`role-${r}`} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-3 font-normal transition-colors', role === r && 'border-primary bg-brand-soft/50')}>
                       <RadioGroupItem id={`role-${r}`} value={r} className="mt-0.5" />
                       <span className="grid gap-0.5"><b className="text-[13.5px]">{api.ROLE_LABEL[r]}</b><small className="text-[12px] text-muted-foreground">{api.ROLE_NOTE[r]}</small></span>

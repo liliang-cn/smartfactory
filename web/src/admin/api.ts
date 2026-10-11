@@ -31,6 +31,9 @@ export type OrderResults = z.infer<typeof P.OrderResults>;
 export type ERPConfig = z.infer<typeof P.ERPConfig>;
 export type ERPOverview = z.infer<typeof P.ERPOverview>;
 export type PullResult = z.infer<typeof P.PullResult>;
+export type GuardSettings = z.infer<typeof P.GuardSettings>;
+export type GuardOverview = z.infer<typeof P.GuardOverview>;
+export type CommandRequest = z.infer<typeof P.CommandRequest>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -160,6 +163,13 @@ export const order = (c: string, no: string) => call<Order>('GET', `${ordersPath
 export const sendOrders = (c: string, list: OrderInput[]) => call<OrderResults>('POST', ordersPath(c), list);
 export const cancelOrder = (c: string, no: string) => call<Order>('DELETE', `${ordersPath(c)}/${encodeURIComponent(no)}`);
 
+const guardPath = (c: string) => `/api/guard/${encodeURIComponent(c)}`;
+export const guard = (c: string) => call<GuardOverview>('GET', guardPath(c));
+export const setGuard = (c: string, s: GuardSettings) => call<GuardOverview>('PUT', guardPath(c), s);
+export const commandRequests = (c: string, status = '') => call<CommandRequest[]>('GET', `${guardPath(c)}/requests?status=${status}`);
+export const approveCommand = (c: string, id: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/approve`);
+export const denyCommand = (c: string, id: string, reason: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/deny`, { reason });
+
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;
 export type DocVersion = z.infer<typeof P.DocVersion>;
@@ -216,9 +226,10 @@ export async function downloadDoc(c: string, id: string, name: string, version?:
 export const DOC_ACCEPT = '.pdf,.docx,.xlsx,.xlsm,.csv,.md,.markdown,.txt';
 export const health = () => call<z.infer<typeof P.Health>>('GET', '/api/health');
 
-export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员' };
+export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' };
 export const ROLE_NOTE: Record<Exclude<Role, 'visitor'>, string> = {
   member: '看数据，让助手记笔记、登记工单',
   operator: '再加：下发设备指令、调全厂倍速、采纳经营建议',
   admin: '再加：搭场景、管资料和助手、发令牌',
+  erp: '给 ERP 之类的系统用：只能发、查、撤这家公司的生产工单，别的都做不了',
 };

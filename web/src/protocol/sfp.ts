@@ -623,7 +623,7 @@ export const Account = z.object({
 });
 export const Accounts = z.array(Account).meta({ description: 'GET /api/admin/tokens — the tokens of the companies the caller administers' });
 export const IssueToken = z.object({
-  name: str, role: z.enum(['member', 'operator', 'admin']),
+  name: str, role: z.enum(['member', 'operator', 'admin', 'erp']),
   /** null: every company (only an administrator of every company) */
   companies: z.array(str).nullable(),
   expires: str.optional(),

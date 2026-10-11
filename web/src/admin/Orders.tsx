@@ -620,8 +620,8 @@ export function ERPPanel({ c }: { c: api.Company }) {
         </div>
       </div>
       <Secret value={secret} onClose={() => setSecret(null)} />
-      <Issue open={issuing} onOpenChange={setIssuing} company={c.id} onIssued={() => {}} holder="ERP 接口"
-        note={<p className="text-[12.5px] leading-relaxed text-muted-foreground">在 ERP（或中间件）里把它配成请求头 <code className="font-mono">Authorization: Bearer 令牌</code>。它是这家公司的操作员令牌：能发、撤、查工单，也能给设备下指令，进不了后台。只给 ERP 用，不用了就在账号里撤销。</p>} />
+      <Issue open={issuing} onOpenChange={setIssuing} company={c.id} onIssued={() => {}} holder="ERP 接口" as="erp"
+        note={<p className="text-[12.5px] leading-relaxed text-muted-foreground">在 ERP（或中间件）里把它配成请求头 <code className="font-mono">Authorization: Bearer 令牌</code>。它只能发、查、撤这家公司的工单，别的都做不了。不用了就在账号里撤销。</p>} />
     </Panel>
   );
 }

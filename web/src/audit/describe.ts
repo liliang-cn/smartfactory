@@ -1,7 +1,7 @@
 // How the audit log reads: each entry as a sentence, where it came from, the day it falls on.
 // Shared by the twin's activity sheet and the console.
 import type { z } from 'zod';
-import { BotIcon, MousePointerClickIcon, PlugIcon, RadioTowerIcon, SquareTerminalIcon, UnplugIcon, type LucideIcon } from 'lucide-react';
+import { BotIcon, MousePointerClickIcon, PlugIcon, RadioTowerIcon, ShieldCheckIcon, SquareTerminalIcon, UnplugIcon, type LucideIcon } from 'lucide-react';
 import { CMD_LABEL } from '@/live/client';
 import type * as P from '@/protocol/sfp';
 import type { Command } from '@/sim/types';
@@ -16,8 +16,11 @@ export const VIA: Record<Via, { label: string; icon: LucideIcon }> = {
   mcp: { label: 'MCP', icon: PlugIcon },
   cli: { label: '命令行', icon: SquareTerminalIcon },
   api: { label: '接口', icon: UnplugIcon },
+  guard: { label: '指令把关', icon: ShieldCheckIcon },
 };
-export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员' };
+export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' };
+/** How each guard level reads. */
+export const GUARD_LEVEL: Record<string, string> = { advisory: '只提议', guarded: '有护栏', autonomous: '自主' };
 const STATUS_ADVISOR: Record<string, string> = {
   adopt: '采纳计划', reject: '否决计划', measure: '开始验收', accept: '验收通过', review: '运行例行诊断',
 };
@@ -44,6 +47,20 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
       const [plant, asset] = e.target.split('/');
       return { text: commandText(e.detail ?? ''), plant, asset };
     }
+    case 'command.refused': case 'command.pending': case 'command.approved': case 'command.denied': case 'command.expired': {
+      const [where, id] = e.target.split(' ');
+      const [plant, asset] = where.split('/');
+      const what = `「${commandText(e.detail ?? '')}」`;
+      const text = {
+        'command.refused': `按规则没有执行${what}`,
+        'command.pending': `提出${what}，等操作员批准${id ? `（${id}）` : ''}`,
+        'command.approved': e.ok ? `批准并执行${what}${id ? `（${id}）` : ''}` : `批准${what}，但没有执行`,
+        'command.denied': `拒绝${what}${id ? `（${id}）` : ''}`,
+        'command.expired': `${what}没人批准，过期作废${id ? `（${id}）` : ''}`,
+      }[e.action]!;
+      return { text, plant, asset };
+    }
+    case 'guard.config': return { text: `把指令把关设为「${GUARD_LEVEL[e.detail ?? ''] ?? e.detail}」` };
     case 'clock': return { text: `全厂倍速改为 ${e.detail}` };
     case 'save_note': return { text: `记笔记「${titleOf(e.target)}」` };
     case 'update_note': return { text: `更新笔记「${titleOf(e.target)}」` };
