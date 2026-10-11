@@ -39,6 +39,10 @@ func TestModelCompiles(t *testing.T) {
 		{"ppm by customer", semantic.Query{Metrics: []string{"customer_ppm", "complaints"}, GroupBy: []string{"customer"}}},
 		{"incoming by supplier", semantic.Query{Metrics: []string{"incoming_reject_rate", "avg_steel_price", "supplier_on_time_rate"}, GroupBy: []string{"purchase_supplier"}}},
 		{"power price by shift", semantic.Query{Metrics: []string{"avg_power_price", "power_cost"}, GroupBy: []string{"shift"}}},
+		{"oee where the data is real", semantic.Query{Metrics: []string{"oee", "line_reported_share"}, GroupBy: []string{"line_name", "line_data_source"}}},
+		{"how much of each machine is measured", semantic.Query{Metrics: []string{"machine_reported_share", "fault_hours"}, GroupBy: []string{"machine", "machine_data_source"}}},
+		{"spc on measured readings only", semantic.Query{Metrics: []string{"measure_mean", "inspection_reported_share"}, GroupBy: []string{"feature"},
+			Where: []semantic.Filter{{Dimension: "quality_data_source", Op: "=", Values: []any{"measured"}}}}},
 		{"material yield by part and shift", semantic.Query{Metrics: []string{"material_yield", "good_tonnes"}, GroupBy: []string{"part_name", "shift"}}},
 	}
 	for _, c := range cases {

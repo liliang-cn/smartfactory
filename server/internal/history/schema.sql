@@ -283,3 +283,32 @@ CREATE INDEX IF NOT EXISTS machine_hours_hour ON machine_hours (hour);
 CREATE INDEX IF NOT EXISTS line_hours_hour ON line_hours (hour);
 CREATE INDEX IF NOT EXISTS downtime_hour ON downtime (hour);
 CREATE INDEX IF NOT EXISTS defects_hour ON defects (hour);
+
+-- ---- where each row came from: the equipment's own readings, the simulation, or both ----
+-- measured_s / measured_n accumulate like the counts beside them; the share and the source follow
+-- from them. A share of 99.9 % or more is measured, 0.1 % or less simulated, anything between mixed.
+-- Rows written before these columns existed read as simulated.
+ALTER TABLE machine_hours ADD COLUMN IF NOT EXISTS measured_s double precision NOT NULL DEFAULT 0;
+ALTER TABLE machine_hours ADD COLUMN IF NOT EXISTS measured_share double precision GENERATED ALWAYS AS (
+  CASE WHEN run_s + idle_s + blocked_s + fault_s + maint_s + changeover_s + stopped_s > 0
+    THEN least(1.0, measured_s / (run_s + idle_s + blocked_s + fault_s + maint_s + changeover_s + stopped_s)) ELSE 0 END) STORED;
+ALTER TABLE machine_hours ADD COLUMN IF NOT EXISTS source text GENERATED ALWAYS AS (
+  CASE WHEN run_s + idle_s + blocked_s + fault_s + maint_s + changeover_s + stopped_s <= 0 THEN 'simulated'
+    WHEN measured_s >= 0.999 * (run_s + idle_s + blocked_s + fault_s + maint_s + changeover_s + stopped_s) THEN 'measured'
+    WHEN measured_s <= 0.001 * (run_s + idle_s + blocked_s + fault_s + maint_s + changeover_s + stopped_s) THEN 'simulated'
+    ELSE 'mixed' END) STORED;
+
+ALTER TABLE line_hours ADD COLUMN IF NOT EXISTS machine_s double precision NOT NULL DEFAULT 0;
+ALTER TABLE line_hours ADD COLUMN IF NOT EXISTS measured_s double precision NOT NULL DEFAULT 0;
+ALTER TABLE line_hours ADD COLUMN IF NOT EXISTS measured_share double precision GENERATED ALWAYS AS (
+  CASE WHEN machine_s > 0 THEN least(1.0, measured_s / machine_s) ELSE 0 END) STORED;
+ALTER TABLE line_hours ADD COLUMN IF NOT EXISTS source text GENERATED ALWAYS AS (
+  CASE WHEN machine_s <= 0 OR measured_s <= 0.001 * machine_s THEN 'simulated'
+    WHEN measured_s >= 0.999 * machine_s THEN 'measured' ELSE 'mixed' END) STORED;
+
+ALTER TABLE quality_hours ADD COLUMN IF NOT EXISTS measured_n integer NOT NULL DEFAULT 0;
+ALTER TABLE quality_hours ADD COLUMN IF NOT EXISTS measured_share double precision GENERATED ALWAYS AS (
+  CASE WHEN n > 0 THEN least(1.0, measured_n::double precision / n) ELSE 0 END) STORED;
+ALTER TABLE quality_hours ADD COLUMN IF NOT EXISTS source text GENERATED ALWAYS AS (
+  CASE WHEN n <= 0 OR measured_n::double precision <= 0.001 * n THEN 'simulated'
+    WHEN measured_n::double precision >= 0.999 * n THEN 'measured' ELSE 'mixed' END) STORED;
