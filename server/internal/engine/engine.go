@@ -729,7 +729,8 @@ func (e *Engine) DeleteCompany(id string) ConfigResult {
 // Only makes the engine run just these companies: one customer's own instance. Call before
 // LoadConfigs and Run. Companies outside the list are not loaded and cannot be created.
 func (e *Engine) Only(ids []string) error {
-	e.only = append([]string(nil), ids...)
+	// [] is "none", not "any": keep it a list even when empty
+	e.only = append(make([]string, 0, len(ids)), ids...)
 	raw, _ := json.Marshal(e.only)
 	v, err := e.call("keep", string(raw))
 	if err != nil {

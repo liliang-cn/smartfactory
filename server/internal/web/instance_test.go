@@ -65,7 +65,14 @@ func TestInstances(t *testing.T) {
 		t.Errorf("site: %v", site.Companies)
 	}
 
-	_, platform := serve([]string{}, []config.Instance{{ID: "huaduan", Name: "华锻集团", URL: "https://huaduan.factory.superleo.cn"}})
+	// a platform server whose data still holds a company created at run time runs none of it
+	pf, platform := serve([]string{}, []config.Instance{{ID: "huaduan", Name: "华锻集团", URL: "https://huaduan.factory.superleo.cn"}})
+	if r := pf.CreateCompany(cfg); r.OK {
+		t.Error("the platform server created a company")
+	}
+	if ids := pf.CompanyIDs(); len(ids) != 0 {
+		t.Errorf("the platform server runs %v", ids)
+	}
 	res, err = noFollow.Get(platform.URL + "/?company=huaduan&plant=p2")
 	if err != nil {
 		t.Fatal(err)
