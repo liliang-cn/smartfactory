@@ -207,6 +207,7 @@ function processModel(id: string): string {
         product: {
           key: l.product.key, name: l.product.name, stages: l.product.order, partNo: l.product.partNo, material: l.product.material,
           weight: l.product.weight, customers: (l.product.customers ?? []).map((x) => x.name), suppliers: (l.product.suppliers ?? []).map((x) => x.name),
+          variants: (l.product.variants ?? []).map((v) => v.partNo),
         },
         stations: l.stations.map((st) => ({ id: st.id, label: st.machine.label, name: st.name, code: st.machine.code, cycle: st.cycle, makes: st.makes ?? '', kind: st.machine.look.archetype })),
       })),

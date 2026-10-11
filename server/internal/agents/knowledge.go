@@ -22,6 +22,20 @@ func (r *Runner) AddDoc(ctx context.Context, company, title, body, by string) (D
 	return d, nil
 }
 
+// PutFile keeps an uploaded file in the library (a new document or its next version) and puts
+// the current version's passages in the knowledge base in place of the previous ones.
+func (r *Runner) PutFile(ctx context.Context, company string, u Upload) (Doc, Outcome, error) {
+	d, outcome, before, err := r.Store.PutFile(company, u)
+	if err != nil {
+		return d, outcome, err
+	}
+	if r.KB != nil && before > 0 {
+		r.KB.RemoveDoc(ctx, company, d.ID, before)
+	}
+	r.index(ctx, company, d)
+	return d, outcome, nil
+}
+
 // DeleteDoc removes a document from the library and the knowledge base.
 func (r *Runner) DeleteDoc(ctx context.Context, company, id string) error {
 	_, total, _ := r.Store.ReadDoc(company, id, 0, 1)

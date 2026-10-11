@@ -141,6 +141,8 @@ type Product struct {
 	Weight    float64  `json:"weight"`
 	Customers []string `json:"customers"`
 	Suppliers []string `json:"suppliers"`
+	// Variants are the part numbers of the family a line can run.
+	Variants []string `json:"variants"`
 }
 
 type Station struct {
@@ -348,6 +350,9 @@ func processItems(m *Model) []item {
 		if pr.PartNo != "" {
 			fmt.Fprintf(&b, "（零件号 %s）", pr.PartNo)
 		}
+		if vs := uniq(pr.Variants); len(vs) > 1 || len(vs) == 1 && vs[0] != pr.PartNo {
+			fmt.Fprintf(&b, "，可做料号 %s", strings.Join(vs, "、"))
+		}
 		if pr.Material != "" {
 			fmt.Fprintf(&b, "，材料 %s", pr.Material)
 		}
@@ -446,7 +451,7 @@ func uniq(s []string) []string {
 }
 
 // processFormat changes whenever processItems writes differently, so every base is written again.
-const processFormat = "4"
+const processFormat = "5"
 
 // processState is what was last written for a company's process, so an unchanged process is not
 // written again.
@@ -551,8 +556,8 @@ type Part struct {
 	Text    string
 }
 
-// vocabulary is every name in the company's process graph, longest first, with its kind: the
-// words a document is linked to the process by.
+// vocabulary is the names in the company's graph, with their kinds, longest first: what a
+// question is matched against.
 func (b *Base) vocabulary(id string) [][2]string {
 	m, err := b.model(id)
 	if err != nil {
@@ -601,6 +606,17 @@ func (b *Base) vocabulary(id string) [][2]string {
 	return out
 }
 
+// linkTerms is every way a document can name something in the company's process graph: names,
+// station numbers and machine codes, line names, part numbers — the terms a document is linked
+// to the process by.
+func (b *Base) linkTerms(id string) []term {
+	m, err := b.model(id)
+	if err != nil {
+		return nil
+	}
+	return terms(m)
+}
+
 func docID(doc string, seq int) string { return fmt.Sprintf("doc:%s:%03d", doc, seq) }
 
 // AddDoc keeps a document's passages, each linked to the machines, stations, lines, products,
@@ -610,7 +626,7 @@ func (b *Base) AddDoc(ctx context.Context, company, doc, title string, parts []P
 	if err != nil {
 		return err
 	}
-	vocab := b.vocabulary(company)
+	vocab := b.linkTerms(company)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, p := range parts {
@@ -621,10 +637,8 @@ func (b *Base) AddDoc(ctx context.Context, company, doc, title string, parts []P
 			t += " › " + heading
 		}
 		it := item{id: docID(doc, p.Seq), title: t, text: p.Text, meta: map[string]string{"kind": "doc", "doc": doc, "doc_title": title, "heading": heading, "part": fmt.Sprint(p.Seq)}}
-		for _, v := range vocab {
-			if strings.Contains(p.Text, v[0]) || strings.Contains(heading, v[0]) {
-				it.ent(v[0], v[1], "")
-			}
+		for _, e := range link(vocab, heading+"\n"+p.Text) {
+			it.ent(e.name, e.typ, "")
 		}
 		if err := save(ctx, c.db, it); err != nil {
 			return err

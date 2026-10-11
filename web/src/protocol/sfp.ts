@@ -392,10 +392,38 @@ export const AssistantEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('error'), text: str }),
 ]).meta({ description: 'One server-sent event of an assistant answering: `data: <AssistantEvent JSON>`' });
 
-export const Doc = z.object({ id: str, title: str, size: num, parts: num, by: str, created: time });
+/** markdown · text (typed or uploaded as text, UTF-8 or GBK) · pdf · docx · xlsx · csv */
+export const DocKind = z.enum(['markdown', 'text', 'pdf', 'docx', 'xlsx', 'csv']);
+export const Doc = z.object({
+  id: str, title: str,
+  /** characters of text, and the passages it was cut into (0 for a scan with no text) */
+  size: num, parts: num, by: str, kind: DocKind,
+  /** the file it was uploaded as, its size in bytes, its pages (PDF) */
+  file: str.optional(), bytes: num.optional(), pages: num.optional(),
+  /** uploads under this title; the knowledge base has the latest */
+  version: num,
+  /** what could not be read: a scan without text, pages that are pictures, the encoding it was read in */
+  problems: z.array(str).optional(),
+  created: time, updated: time,
+});
 export const Docs = z.array(Doc);
 export const DocView = z.object({ doc: Doc, body: str });
 export const DocUpload = z.object({ title: str, body: str });
+export const DocVersion = z.object({
+  version: num, file: str.optional(), kind: DocKind, bytes: num, pages: num.optional(), parts: num, problems: z.array(str).optional(),
+  by: str, created: time,
+  /** the version the knowledge base has; whether its file can be downloaded (GET …/file?version=) */
+  current: z.boolean(), download: z.boolean(),
+});
+export const DocVersions = z.array(DocVersion).meta({ description: 'GET /api/library/{company}/docs/{doc}/versions — newest first' });
+/**
+ * POST /api/library/{company}/files (multipart/form-data, "file" parts, an optional "title" before
+ * them for a single file; administrators; 50 MB a file). A file with the title or file name of a
+ * document already there is its next version.
+ */
+export const UploadResults = z.array(z.object({
+  file: str, ok: z.boolean(), outcome: z.enum(['created', 'updated']).optional(), doc: Doc.optional(), error: str.optional(),
+})).meta({ description: 'POST /api/library/{company}/files — each file answered on its own' });
 export const Note = z.object({
   id: str, title: str, body: str, tags: z.array(str), assets: z.array(str), by: str, created: time, updated: time,
 });
@@ -496,7 +524,7 @@ export const AuditEntry = z.object({
   via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
 });
@@ -769,7 +797,7 @@ export const DEFS = {
   Metrics, Dimensions, Query, Answer, Board, DecideRequest, AskRequest, AskEvent, Reviews, ReviewRun,
   DeviceFields, DeviceCommand,
   Assistants, Assistant, AssistantRequest, Conversations, ConversationView, AssistantAsk, AssistantEvent,
-  Docs, Doc, DocView, DocUpload, Notes, Note, Tickets, Ticket, TicketPatch, Done,
+  Docs, Doc, DocView, DocUpload, DocVersions, UploadResults, Notes, Note, Tickets, Ticket, TicketPatch, Done,
   AuditLog,
   AdminOverview, CompanyCreated, ConfigProblem, Accounts, Account, IssueToken, IssuedToken, ComposeRequest, ComposeEvent,
   KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, ConsoleAction, ConsoleEvent,

@@ -51,6 +51,7 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     case 'update_ticket': return { text: `更新工单 ${idOf(e.target)}` };
     case 'ticket.status': return { text: `工单 ${idOf(e.target)} 改为「${e.detail}」` };
     case 'doc.add': return { text: `上传资料「${titleOf(e.target)}」` };
+    case 'doc.update': return { text: `更新资料「${titleOf(e.target)}」${e.detail ? `（${e.detail}）` : ''}` };
     case 'doc.delete': return { text: `删除资料 ${e.target}` };
     case 'note.delete': return { text: `删除笔记 ${e.target}` };
     case 'assistant.create': return { text: `新建助手「${titleOf(e.target)}」` };

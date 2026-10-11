@@ -6,7 +6,7 @@ package main
 //	smartfactory company | company show <id> | company new -f cfg.json | company new -ai "描述" | company rm <id>
 //	smartfactory industries | industries show <id> | industries new -ai "描述" | industries new -f pack.json
 //	smartfactory tokens | tokens issue -name 张工 -role operator -company huaduan | tokens revoke <key>
-//	smartfactory kb <company> | kb <company> search "问题" | kb <company> entity <名字> | kb <company> rebuild
+//	smartfactory kb <company> | kb <company> search "问题" | entity <名字> | docs | upload <文件>… | rebuild
 //	smartfactory orders <company> | orders <company> show <工单号> | send -f orders.json | cancel <工单号> | pull [-dry] | erp
 //	smartfactory activity [-company id] [-n 30]
 //	smartfactory agent ["一句话"]
@@ -780,7 +780,7 @@ func cliKB(ctx context.Context, args []string) error {
 	yes := fs.Bool("y", false, "do not ask")
 	rest := flags(fs, args)
 	if len(rest) == 0 {
-		return errors.New("smartfactory kb <company> [search \"问题\" | entity <名字> | rebuild]")
+		return errors.New("smartfactory kb <company> [search \"问题\" | entity <名字> | docs | upload <文件>… | rebuild]")
 	}
 	c, err := connect()
 	if err != nil {
@@ -896,6 +896,70 @@ func cliKB(ctx context.Context, args []string) error {
 				fmt.Println("    " + m)
 			}
 		}
+	case "docs":
+		var raw json.RawMessage
+		if err := c.Do(ctx, "GET", "/api/library/"+company+"/docs", nil, &raw); err != nil {
+			return err
+		}
+		if asJSON {
+			return printJSON(raw)
+		}
+		var docs []struct {
+			ID, Title, Kind, File, By string
+			Parts, Pages, Version     int
+			Problems                  []string
+		}
+		json.Unmarshal(raw, &docs)
+		rows := make([][]string, len(docs))
+		for i, d := range docs {
+			pages := ""
+			if d.Pages > 0 {
+				pages = fmt.Sprint(d.Pages)
+			}
+			rows[i] = []string{d.Title, d.Kind, fmt.Sprint(d.Parts), pages, fmt.Sprintf("v%d", d.Version), d.By, red(strings.Join(d.Problems, "；"))}
+		}
+		table([]string{"资料", "类型", "段落", "页", "版本", "上传", ""}, rows)
+	case "upload":
+		files := rest[min(2, len(rest)):]
+		if len(files) == 0 {
+			return errors.New("smartfactory kb <company> upload 文件… （PDF、Word、Excel、CSV、Markdown、文本）")
+		}
+		var res []struct {
+			File, Outcome, Error string
+			OK                   bool
+			Doc                  *struct {
+				Title        string
+				Parts, Pages int
+				Version      int
+				Problems     []string
+			}
+		}
+		if err := c.Upload(ctx, "/api/library/"+company+"/files", files, &res); err != nil {
+			return err
+		}
+		if asJSON {
+			return printJSON(res)
+		}
+		failed := 0
+		for _, r := range res {
+			if !r.OK {
+				failed++
+				fmt.Printf("%s %s %s\n", red("✗"), r.File, r.Error)
+				continue
+			}
+			what := fmt.Sprintf("%d 段", r.Doc.Parts)
+			if r.Doc.Pages > 0 {
+				what = fmt.Sprintf("%d 页，%s", r.Doc.Pages, what)
+			}
+			verb := "收下"
+			if r.Outcome == "updated" {
+				verb = fmt.Sprintf("更新为第 %d 版", r.Doc.Version)
+			}
+			fmt.Printf("%s %s %s：%s %s\n", green("✓"), r.File, verb, what, dim(strings.Join(r.Doc.Problems, "；")))
+		}
+		if failed > 0 {
+			return fmt.Errorf("%d 个文件没有收下", failed)
+		}
 	case "rebuild":
 		if !*yes && !confirm("重建 "+rest[0]+" 的知识库？") {
 			return nil
@@ -906,7 +970,7 @@ func cliKB(ctx context.Context, args []string) error {
 		}
 		fmt.Printf("%s 工艺图已重写，%d 篇文档重新入库\n", green("✓"), res.Docs)
 	default:
-		return fmt.Errorf("kb %s：用 search、entity、rebuild", verb)
+		return fmt.Errorf("kb %s：用 search、entity、docs、upload、rebuild", verb)
 	}
 	return nil
 }
