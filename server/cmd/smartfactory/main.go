@@ -304,6 +304,21 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		if assistants != nil {
 			assistants.Orders = orders
 		}
+		// the orders in each company's knowledge base, linked to its customers, products and lines
+		if kb != nil {
+			kb.Orders = func(company string) ([]knowledge.OrderInfo, error) {
+				list, err := orders.List(company, erp.Filter{Limit: 1000})
+				out := make([]knowledge.OrderInfo, len(list))
+				for i, o := range list {
+					out[i] = knowledge.OrderInfo{No: o.No, PartNo: o.PartNo, Name: o.Name, Customer: o.Customer, Plant: o.Plant, PlantName: o.PlantName,
+						Line: o.Line, LineName: o.LineName, Status: o.Status, Qty: o.Qty, Good: o.Good, Scrap: o.Scrap, Due: o.Due,
+						Started: o.Started, Finished: o.Finished, Updated: o.Updated}
+				}
+				return out, err
+			}
+			production.Changed = kb.OrdersChanged
+			go kb.RunOrders(ctx)
+		}
 		go production.Run(ctx)
 		synced := eng.OnChange
 		eng.OnChange = func(company string, deleted bool) {

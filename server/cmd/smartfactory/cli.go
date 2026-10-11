@@ -799,6 +799,7 @@ func cliKB(ctx context.Context, args []string) error {
 			Relations map[string]int `json:"relations"`
 			Docs      int            `json:"docs"`
 			Process   int            `json:"process"`
+			Orders    int            `json:"orders"`
 			Library   int            `json:"library"`
 			Indexed   int            `json:"indexed"`
 		}
@@ -813,7 +814,10 @@ func cliKB(ctx context.Context, args []string) error {
 		fmt.Printf("工艺图：%d 个工厂、%d 条线、%d 个工位、%d 种设备、%d 个产品、%d 家供应商、%d 家客户\n",
 			st.Kinds["plant"], st.Kinds["line"], st.Kinds["station"], st.Kinds["machine"], st.Kinds["product"], st.Kinds["supplier"], st.Kinds["customer"])
 		fmt.Printf("关系：上下游 %d，工位属于产线 %d，工位是什么设备 %d，段落提到 %d\n", st.Relations["feeds"], st.Relations["has_station"], st.Relations["is_a"], st.Relations["mentions"])
-		fmt.Printf("段落：工艺 %d，文档 %d（资料库 %d 篇，已入库 %d 篇）\n", st.Process, st.Docs, st.Library, st.Indexed)
+		if st.Orders > 0 {
+			fmt.Printf("工单：%d 张，连到客户 %d、产品 %d、产线 %d\n", st.Orders, st.Relations["for_customer"], st.Relations["of_product"], st.Relations["runs_on"])
+		}
+		fmt.Printf("段落：工艺 %d，工单 %d，文档 %d（资料库 %d 篇，已入库 %d 篇）\n", st.Process, st.Orders, st.Docs, st.Library, st.Indexed)
 	case "search":
 		if arg == "" {
 			return errors.New(`smartfactory kb <company> search "问题"`)
@@ -839,8 +843,11 @@ func cliKB(ctx context.Context, args []string) error {
 		fmt.Println(dim(fmt.Sprintf("%s，%d 段", cmpOr(mode, a.Mode), len(a.Passages))))
 		for i, p := range a.Passages {
 			tag := blue("工艺")
-			if p.From == "doc" {
+			switch p.From {
+			case "doc":
 				tag = green("文档")
+			case "order":
+				tag = red("工单")
 			}
 			fmt.Printf("\n%d. %s %s\n", i+1, tag, bold(p.Title))
 			fmt.Println(indent(strings.TrimSpace(p.Text), "   "))
@@ -905,7 +912,7 @@ func cliKB(ctx context.Context, args []string) error {
 }
 
 var kindLabel = map[string]string{
-	"company": "公司", "plant": "工厂", "line": "产线", "station": "工位", "machine": "设备", "product": "产品", "supplier": "供应商", "customer": "客户",
+	"company": "公司", "plant": "工厂", "line": "产线", "station": "工位", "machine": "设备", "product": "产品", "supplier": "供应商", "customer": "客户", "order": "工单",
 }
 
 // relLabel reads a relation from the thing's side: "IH-101 feeds HP-101" is 下游 from IH-101.
@@ -914,6 +921,7 @@ func relLabel(typ string, out bool) string {
 		"has_plant": {"有工厂", "属于公司"}, "has_line": {"有产线", "在工厂"}, "makes": {"生产", "由产线生产"},
 		"has_station": {"有工位", "在产线"}, "is_a": {"是", "这种设备的工位"}, "feeds": {"下游", "上游"},
 		"supplies": {"供应", "供应商"}, "sold_to": {"卖给", "买"},
+		"for_customer": {"客户", "工单"}, "of_product": {"产品", "工单"}, "runs_on": {"产线", "工单"},
 	}
 	l, ok := labels[typ]
 	if !ok {

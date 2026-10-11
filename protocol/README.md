@@ -298,17 +298,22 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 ### 知识库 `/api/knowledge/{company}`
 
-每家公司一个知识库（CortexDB，不用向量）：工艺图（工厂 → 产线 → 按顺序的工位 → 设备类型，产品、供应商、客户）由引擎排布出的场景生成，场景一改自动重写；资料库的文档按标题切段，每段和它提到的工位、设备、产线、产品、供应商、客户连起来。搜索先按词找，问题里提到工艺图里的东西时再从它出发沿图走（personalized PageRank），所以问“IH-101 的始锻温度”能找到只写了“中频感应加热炉”的工艺卡。该公司成员以上可读，管理员可重建。
+每家公司一个知识库（CortexDB，不用向量）：
+- **工艺**：工厂 → 产线 → 按顺序的工位 → 设备类型，产品、供应商、客户，由引擎排布出的场景生成，场景一改自动重写。每个工位还有一段，写明它在哪条线第几道、上游和下游是谁。
+- **工单**：ERP 的生产工单，每张是一个 `order` 节点，`for_customer` 连客户、`of_product` 连产品、`runs_on` 连产线，另有一段写状态、进度、交期。工单变化几秒内写进去，在做的进度每分钟更新；排队和在做的全留，完成的留最近 300 张、90 天以内，撤回的删掉。
+- **资料**：资料库的文档按标题切段，每段和它提到的工位、设备、产线、产品、供应商、客户、工单连起来。
+
+搜索先从问题里认出公司自己的名字：工位、设备、产线、产品（"法兰"认作风电法兰）、客户、工单号，从它们出发沿图走（personalized PageRank，只走写进去的关系，不走统计出来的共现）；讲到这些东西本身的段落排在前面，其次是提到它们的工单。所以问"远岳动力的工单到哪了"先给这个客户的工单，问"HP-101 的上游"先给 HP-101 那一段，问"IH-101 的始锻温度"能找到只写了"中频感应加热炉"的工艺卡。没认出名字时按词找。CortexDB 自己从文本里抽出的名字（编号前缀、段落标题）写入后删掉，免得把不相干的工位连在一起。该公司成员以上可读，管理员可重建。
 
 | 方法 路径 | 响应 | 说明 |
 |---|---|---|
-| `GET /api/knowledge/{company}` | `KnowledgeOverview` | 各类节点、关系的数量，工艺段落和文档段落数，资料库有几篇、入库了几篇 |
-| `GET /api/knowledge/{company}/search?q=&limit=` | `KnowledgeAnswer` | 最相关的段落：`from` 是 `doc`（带文档 id 和段号）或 `process`；`mode` 是 `lexical` 或 `ppr` |
+| `GET /api/knowledge/{company}` | `KnowledgeOverview` | 各类节点、关系的数量，工艺段落、工单、文档段落数，资料库有几篇、入库了几篇 |
+| `GET /api/knowledge/{company}/search?q=&limit=` | `KnowledgeAnswer` | 最相关的段落：`from` 是 `doc`（带文档 id 和段号）、`process` 或 `order`；`mode` 是 `lexical` 或 `ppr` |
 | `GET /api/knowledge/{company}/entity?name=` | `EntityAnswer` | 一样东西和它的全部关系、提到它的段落；没有同名的时给出候选 |
-| `GET /api/knowledge/{company}/graph` | `KnowledgeGraph` | 整张工艺图（节点带被提到的次数），供绘制 |
-| `POST /api/knowledge/{company}/rebuild` | `{docs}` | 重写工艺图、重新入库全部文档；管理员 |
+| `GET /api/knowledge/{company}/graph` | `KnowledgeGraph` | 整张图（工艺和工单，节点带被提到的次数），供绘制 |
+| `POST /api/knowledge/{company}/rebuild` | `{docs}` | 重写工艺图和工单、重新入库全部文档；管理员 |
 
-助手的 `search_docs` 在有知识库时搜的就是它（文档和工艺一起），另有 `process_graph` 查工艺图。
+助手的 `search_docs` 在有知识库时搜的就是它（文档、工艺、工单一起），另有 `process_graph` 查图里一样东西的关系。
 
 ### 生产工单（ERP）`/api/erp/{company}/orders`、`/api/admin/erp/{company}`
 

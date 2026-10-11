@@ -3559,6 +3559,9 @@
         "process": {
           "type": "number"
         },
+        "orders": {
+          "type": "number"
+        },
         "library": {
           "type": "number"
         },
@@ -3571,6 +3574,7 @@
         "relations",
         "docs",
         "process",
+        "orders",
         "library",
         "indexed"
       ],
@@ -3589,7 +3593,8 @@
                 "type": "string",
                 "enum": [
                   "doc",
-                  "process"
+                  "process",
+                  "order"
                 ]
               },
               "title": {
@@ -3656,7 +3661,8 @@
                 "machine",
                 "product",
                 "supplier",
-                "customer"
+                "customer",
+                "order"
               ]
             },
             "links": {
@@ -3762,7 +3768,8 @@
                   "machine",
                   "product",
                   "supplier",
-                  "customer"
+                  "customer",
+                  "order"
                 ]
               },
               "mentions": {
@@ -3798,7 +3805,10 @@
                   "is_a",
                   "feeds",
                   "supplies",
-                  "sold_to"
+                  "sold_to",
+                  "for_customer",
+                  "of_product",
+                  "runs_on"
                 ]
               }
             },
