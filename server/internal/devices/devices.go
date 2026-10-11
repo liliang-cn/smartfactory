@@ -32,7 +32,7 @@ import (
 type Config struct {
 	// How often equipment publishes / refreshes its registers and nodes (default 2s).
 	Every config.Duration `json:"every"`
-	// Twin server to fetch companies created at run time (MCP) from, e.g. http://192.168.123.65:44719
+	// Twin server to fetch companies created at run time (MCP) from, e.g. http://192.168.1.10:4720
 	ConfigFrom string  `json:"configFrom"`
 	Plants     []Plant `json:"plants"`
 }

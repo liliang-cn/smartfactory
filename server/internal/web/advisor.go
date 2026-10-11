@@ -15,7 +15,7 @@ import (
 // Advisor is the consulting service (DataIntelligence) that reads one company's history. The
 // twin talks to it for its viewers: they never need a login of their own there.
 type Advisor struct {
-	// API is the service's base URL, e.g. http://192.168.123.64:43610
+	// API is the service's base URL, e.g. http://192.168.1.20:43610
 	API string
 	// Token is the identity viewers' questions and reads go out as (an analyst).
 	Token string

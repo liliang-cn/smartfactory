@@ -1,5 +1,5 @@
 {
-  "scrape": ["http://192.168.123.98:9100/metrics"],
+  "scrape": ["http://192.168.1.30:9100/metrics"],
   "every": "2s",
   "metrics": {
     "cpu0": { "name": "node_hwmon_temp_celsius", "labels": { "chip": "platform_coretemp_0", "sensor": "temp1" } },
@@ -7,11 +7,11 @@
     "nvme": { "name": "node_hwmon_temp_celsius", "labels": { "chip": "nvme_nvme0", "sensor": "temp1" } }
   },
   "mqtt": {
-    "url": "tcp://192.168.123.65:41883",
+    "url": "tcp://192.168.1.10:41883",
     "username": "edge",
     "password": "change-me",
     "publish": [{ "metric": "cpu0", "topic": "sf/huaduan/p1/HP-101/temp" }]
   },
   "modbus": { "listen": "0.0.0.0:41502", "holding": [{ "metric": "cpu1", "address": 0, "scale": 10 }] },
-  "opcua": { "host": "192.168.123.64", "port": 41840, "nodes": [{ "metric": "nvme", "node": "dell.nvme.temp" }] }
+  "opcua": { "host": "192.168.1.20", "port": 41840, "nodes": [{ "metric": "nvme", "node": "dell.nvme.temp" }] }
 }

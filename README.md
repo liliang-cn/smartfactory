@@ -6,7 +6,7 @@
 
 ## 安装（Linux，systemd）
 
-下载对应架构的包（`linux-amd64` 或 `linux-arm64`），解开后：
+从 [Releases](https://github.com/liliang-cn/smartfactory/releases) 下载对应架构的包（`linux-amd64` 或 `linux-arm64`），用 `SHA256SUMS` 核对后解开，然后：
 
 ```sh
 sudo ./smartfactory install
@@ -103,3 +103,7 @@ scripts/release.sh            # 各平台的发布包和 SHA256SUMS：server/bin
 ```
 
 开发时运行 `npm run dev`（页面，端口 4719），另开一个终端运行 `go run ./server/cmd/smartfactory -demo`（服务端，端口 4720；`-demo` 会把每个内置模板各跑成一家公司）。
+
+## 许可证
+
+[AGPL-3.0](LICENSE)。企业自己部署、修改都可以免费使用；把它（或改过的版本）作为网络服务提供给别人用的，要按 AGPL 公开源码。需要别的授权方式请联系作者。
