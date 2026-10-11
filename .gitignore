@@ -10,3 +10,4 @@ server/internal/engine/js/*
 server/data/
 *.tsbuildinfo
 *.log
+.claude/
