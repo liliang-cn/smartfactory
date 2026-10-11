@@ -320,20 +320,28 @@ func (s *Service) Fit(ctx context.Context, company string, names []string, hours
 	return out, nil
 }
 
-// load reads a machine's period from the series store, a few hours at a time (raw readings are
-// returned at most series.MaxRaw at once).
+// load reads a machine's period from the series store, a few hours at a time; a span that comes
+// back with series.MaxRaw readings of a field (cut short) is read again in halves.
 func (s *Service) load(company, plant, asset string, from, to time.Time) (Data, error) {
 	var d Data
 	fields := []string{"temp", "power", "vib", "speed", "health", "cycles", "state"}
 	dst := map[string]*[]Sample{"temp": &d.Temp, "power": &d.Power, "vib": &d.Vib, "speed": &d.Speed, "health": &d.Health, "cycles": &d.Cycles}
-	for t := from; t.Before(to); t = t.Add(4 * time.Hour) {
-		end := t.Add(4 * time.Hour)
-		if end.After(to) {
-			end = to
-		}
+	var read func(t, end time.Time) error
+	read = func(t, end time.Time) error {
 		a, err := s.Series.Read(series.Query{Company: company, Plant: plant, Asset: asset, Fields: fields, From: t, To: end, Step: series.Raw})
 		if err != nil {
-			return d, err
+			return err
+		}
+		if end.Sub(t) > 5*time.Minute {
+			for _, f := range a.Series {
+				if len(f.Points) >= series.MaxRaw {
+					mid := t.Add(end.Sub(t) / 2)
+					if err := read(t, mid); err != nil {
+						return err
+					}
+					return read(mid, end)
+				}
+			}
 		}
 		for _, f := range a.Series {
 			out, ok := dst[f.Field]
@@ -351,6 +359,16 @@ func (s *Service) load(company, plant, asset string, from, to time.Time) (Data, 
 			if e.Field == "state" && e.Q == 0 {
 				d.States = append(d.States, StateChange{T: time.UnixMilli(e.T), State: e.V})
 			}
+		}
+		return nil
+	}
+	for t := from; t.Before(to); t = t.Add(4 * time.Hour) {
+		end := t.Add(4 * time.Hour)
+		if end.After(to) {
+			end = to
+		}
+		if err := read(t, end); err != nil {
+			return d, err
 		}
 	}
 	return d, nil
