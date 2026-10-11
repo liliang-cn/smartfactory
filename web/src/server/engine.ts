@@ -6,8 +6,8 @@ import { z } from 'zod';
 import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
 import { History } from '@/sim/history';
-import { PlantSim, type SavedPlant } from '@/sim/plant';
-import type { Command, ExtOrder, OrderEvent } from '@/sim/types';
+import { isMachineSpec, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
+import type { Calibration, Command, ExtOrder, OrderEvent } from '@/sim/types';
 import type { PlantLayout } from '@/core/layout';
 
 declare const host: { log(msg: string): void };
@@ -30,6 +30,7 @@ function register(bundle: CompanyBundle) {
   const plants = bundle.plants.map((l) => new PlantSim(l));
   attachFeed(bundle.company.id, plants);
   companies.set(bundle.company.id, { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])), timeScale: 1 });
+  applyCalibration(bundle.company.id);
   pending.delete(bundle.company.id);
   if (recording.has(bundle.company.id)) attach(bundle.company.id, Date.now());
 }
@@ -339,6 +340,60 @@ function stopOrders(c: string) {
   feeds.delete(c);
 }
 
+// ---------- calibration (parameters fitted from measurements) ----------
+
+/** company → "plant/asset" → the parameters that replace the machine's template's */
+const calibrations = new Map<string, Record<string, Calibration>>();
+
+/** Puts the company's calibration on its machines (and the template back on the rest); says which keys name no machine. */
+function applyCalibration(c: string): string[] {
+  const co = get(c);
+  if (!co) return [];
+  const want = calibrations.get(c) ?? {};
+  for (const p of co.plants) {
+    for (const a of p.assets.values()) {
+      const cal = want[`${p.layout.id}/${a.id}`];
+      if (cal) p.calibrate(a.id, cal);
+      else if (a.calib) p.calibrate(a.id, {});
+    }
+  }
+  return Object.keys(want).filter((k) => {
+    const [plant, asset] = k.split('/');
+    return !co.byId[plant]?.assets.has(asset);
+  });
+}
+
+/** Sets a company's calibration ({"plant/asset": parameters}); it stays with the company when it is rebuilt or saved. */
+function calibrate(c: string, json: string): string {
+  return result(() => {
+    if (!get(c)) throw new Error(`没有公司 ${c}`);
+    calibrations.set(c, JSON.parse(json) as Record<string, Calibration>);
+    return { missing: applyCalibration(c) };
+  });
+}
+
+/** What each reporting machine's model got wrong since the last call, per field. */
+function residuals(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify(co.plants.flatMap((p) => p.takeResiduals().map((r) => ({ plant: p.layout.id, ...r }))));
+}
+
+/** Every machine's parameters: the template's, the calibration in force, and whether it is reporting now. */
+function machineParams(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify(co.plants.flatMap((p) => p.lines.flatMap((l) => l.stations.flatMap((a) => {
+    const s = a.spec;
+    if (!isMachineSpec(s)) return [];
+    const template: Calibration = a.template ?? {
+      idleRise: s.idleRise, runRise: s.runRise, tau: s.tau ?? 40, pIdle: s.pIdle, pRun: s.pRun, vib: s.vib, cycle: a.cycle,
+      mtbf: a.machine?.upkeep.mtbf ?? 3.33, repair: a.machine?.upkeep.repair ?? [1, 3],
+    };
+    return [{ plant: p.layout.id, plantName: p.layout.name, line: l.name, asset: a.id, name: a.name, label: s.label, template, calib: a.calib ?? null, live: !!liveFields(a) }];
+  }))));
+}
+
 /** Sim time not yet stepped, for companies advanced in coarse steps. */
 const pending = new Map<string, number>();
 
@@ -413,7 +468,7 @@ const SAVE_VERSION = 1;
 function save(c: string): string {
   const co = get(c);
   if (!co) return 'null';
-  return JSON.stringify({ v: SAVE_VERSION, company: c, timeScale: co.timeScale, plants: Object.fromEntries(co.plants.map((p) => [p.layout.id, p.saveState()])) });
+  return JSON.stringify({ v: SAVE_VERSION, company: c, timeScale: co.timeScale, calib: calibrations.get(c), plants: Object.fromEntries(co.plants.map((p) => [p.layout.id, p.saveState()])) });
 }
 
 /** Carries a company on from a saved state; plants whose structure changed start fresh. */
@@ -422,7 +477,7 @@ function restore(c: string, json: string): string {
   const restored: string[] = [];
   const skipped: string[] = [];
   if (!co) return JSON.stringify({ restored, skipped: ['(unknown company)'] });
-  let d: { v: number; timeScale?: number; plants: Record<string, SavedPlant> };
+  let d: { v: number; timeScale?: number; calib?: Record<string, Calibration>; plants: Record<string, SavedPlant> };
   try {
     d = JSON.parse(json);
   } catch (e) {
@@ -435,6 +490,9 @@ function restore(c: string, json: string): string {
     if (saved && p.restoreState(saved)) restored.push(p.layout.id);
     else skipped.push(p.layout.id);
   }
+  // a copy of the plant (a what-if) runs on the same fitted parameters
+  if (d.calib) calibrations.set(c, d.calib);
+  applyCalibration(c);
   return JSON.stringify({ restored, skipped });
 }
 
@@ -593,6 +651,8 @@ function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt
     const changes = JSON.parse(changesJson || '[]') as Change[];
     const saved = p.saveState();
     const random = Math.random;
+    // the plant goes on as it was once the trial runs are done: recording, reporting, taking orders
+    const { headless, history } = p;
     const run = (apply: boolean, seed: number) => {
       p.restoreState(saved);
       for (const a of p.assets.values()) a.live = undefined;
@@ -632,14 +692,26 @@ function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt
       return {
         company: c, plant: plantId, hours, runs: n, seeds: [seed, seed + n - 1], lines: lines.map((l) => l.name), changes: plan[0].applied,
         说明: '现状 = 不做任何改动；方案 = 应用 changes 之后；两边各跑 runs 次（同一组随机种子）取平均。变化 = 方案 − 现状。每次的 OEE 和废品率列在 每次 里，用来判断差异是否大于随机波动。',
+        校准: calibratedIn(lines),
         现状: before, 方案: after, 变化: difference(before, after),
         每次: base.map((b, i) => ({ seed: seed + i, 现状: b.lines.map((l) => ({ line: l.line, oee: l.oee, scrapRate: l.scrapRate })), 方案: plan[i].lines.map((l) => ({ line: l.line, oee: l.oee, scrapRate: l.scrapRate })) })),
       };
     } finally {
       Math.random = random;
       p.restoreState(saved);
+      p.headless = headless;
+      p.history = history;
     }
   });
+}
+
+const PARAM_LABEL: Record<keyof Calibration, string> = {
+  idleRise: '待机温升', runRise: '运行温升', tau: '升温时间常数', pIdle: '待机功率', pRun: '运行功率', vib: '振动', cycle: '节拍', mtbf: '故障间隔', repair: '修复时间',
+};
+
+/** The machines of these lines that run on fitted parameters, and which ones. */
+function calibratedIn(lines: PlantSim['lines']) {
+  return lines.flatMap((l) => l.stations.filter((a) => a.calib).map((a) => `${a.id}：${Object.keys(a.calib!).map((k) => PARAM_LABEL[k as keyof Calibration] ?? k).join('、')}按实测拟合`));
 }
 
 type Summary = ReturnType<typeof sum>;
@@ -729,5 +801,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
-  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward,
+  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams,
 };
