@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,19 +66,46 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": s.Engine.CompanyIDs(), "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(), "sources": s.sources()})
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		// each customer's factory is its own: the companies and equipment listed are the caller's
+		who := s.caller(r)
+		companies := []string{}
+		for _, c := range s.Engine.CompanyIDs() {
+			if who.Key != "" && who.In(c) {
+				companies = append(companies, c)
+			}
+		}
+		writeJSON(w, map[string]any{"ok": true, "version": s.Version, "companies": companies, "stepMs": s.Engine.StepCost().Seconds() * 1000, "savedAt": s.Engine.SavedAt(),
+			"sources": s.sourcesFor(func(c string) bool { return who.Key != "" && who.In(c) })})
 	})
-	mux.HandleFunc("GET /api/advisors", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, s.Advisors)
+	// a factory's page asks about its own company (?company=); without it, the caller's companies
+	mux.HandleFunc("GET /api/advisors", func(w http.ResponseWriter, r *http.Request) {
+		show := s.scoped(r)
+		out := map[string]string{}
+		for c, url := range s.Advisors {
+			if show(c) {
+				out[c] = url
+			}
+		}
+		writeJSON(w, out)
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		writeJSON(w, s.Hub.Last(q.Get("company"), q.Get("plant"), q.Get("asset")))
+		show := s.scoped(r)
+		out := s.Hub.Last(q.Get("company"), q.Get("plant"), q.Get("asset"))
+		out = slices.DeleteFunc(out, func(t tags.Tag) bool { return !show(t.Company) })
+		writeJSON(w, out)
 	})
-	// companies created at run time (MCP), for browsers
-	mux.HandleFunc("GET /api/config/directory", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, s.Engine.RuntimeDirectory())
+	// companies created at run time, the ones the caller's token covers
+	mux.HandleFunc("GET /api/config/directory", func(w http.ResponseWriter, r *http.Request) {
+		who := s.caller(r)
+		out := []map[string]string{}
+		for _, c := range s.Engine.RuntimeDirectory() {
+			if who.Key != "" && who.In(c["id"]) {
+				out = append(out, c)
+			}
+		}
+		writeJSON(w, out)
 	})
 	mux.HandleFunc("GET /api/config/company/{id}", func(w http.ResponseWriter, r *http.Request) {
 		company, industries, ok := s.Engine.RuntimeCompany(r.PathValue("id"))
@@ -165,7 +193,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "role": who.RoleIn(first), "name": who.Name, "sim": true, "version": s.Version, "sources": s.sources()})
+	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "role": who.RoleIn(first), "name": who.Name, "sim": true, "version": s.Version, "sources": s.sourcesFor(func(c string) bool { return c == first })})
 
 	var (
 		company  string
@@ -291,7 +319,11 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		case <-status.C:
-			if err := wsjson.Write(ctx, c, map[string]any{"type": "sources", "sources": s.sources()}); err != nil {
+			watching := company
+			if watching == "" {
+				watching = first
+			}
+			if err := wsjson.Write(ctx, c, map[string]any{"type": "sources", "sources": s.sourcesFor(func(c string) bool { return c == watching })}); err != nil {
 				return
 			}
 		}
@@ -338,6 +370,39 @@ func (s *Server) scheduleRevert(company string, m clientMsg) {
 			s.Hub.Command(tags.Command{Company: company, Plant: m.Plant, Asset: m.Asset, Cmd: back, Arg: arg, By: "auto"})
 		}
 	})
+}
+
+// scoped says which companies a request may see things of: the one it names (?company=, a
+// factory's own page), else those its token covers.
+func (s *Server) scoped(r *http.Request) func(string) bool {
+	if c := r.URL.Query().Get("company"); c != "" {
+		return func(x string) bool { return x == c }
+	}
+	who := s.caller(r)
+	return func(x string) bool { return who.Key != "" && who.In(x) }
+}
+
+// sourcesFor is the adapters with only the equipment of the companies show admits; an adapter
+// feeding none of them is left out. A factory's page sees its own equipment, never another
+// customer's.
+func (s *Server) sourcesFor(show func(company string) bool) []tags.SourceStatus {
+	out := []tags.SourceStatus{}
+	for _, src := range s.sources() {
+		var targets, labels []string
+		for i, t := range src.Targets {
+			if show(strings.SplitN(t, "/", 2)[0]) {
+				targets = append(targets, t)
+				if i < len(src.Labels) {
+					labels = append(labels, src.Labels[i])
+				}
+			}
+		}
+		if len(targets) > 0 {
+			src.Targets, src.Labels = targets, labels
+			out = append(out, src)
+		}
+	}
+	return out
 }
 
 // sources adds readable names (company and plant names from the simulation) to each target.

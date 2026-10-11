@@ -167,13 +167,15 @@
 
 ## 3. HTTP 接口
 
+一个页面只是一家客户的工厂：实时通道的 `hello` 和 `sources` 只带这家公司的采集源，下面这些公开接口也不会列出别的客户。在客户之间切换是后台（`/admin`）的事。
+
 | 方法 路径 | 响应 | 说明 |
 |---|---|---|
-| `GET /api/health` | `Health` | 版本、公司列表、单步耗时 `stepMs`、上次存盘时间 `savedAt`、采集源 |
-| `GET /api/config/directory` | `Directory` | 运行时（经 MCP）创建的公司：`[{id, name, short}]` |
+| `GET /api/health` | `Health` | 版本、单步耗时 `stepMs`、上次存盘时间 `savedAt`；公司列表和采集源只列令牌管的公司（访客为空） |
+| `GET /api/config/directory` | `Directory` | 运行时创建的公司中令牌管的那些：`[{id, name, short}]`（访客为空） |
 | `GET /api/config/company/{id}` | `RuntimeCompany` | 运行时创建的公司配置及其行业包，格式见 `src/config/schema/*.json`；不存在时 404 |
-| `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t}]` |
-| `GET /api/advisors` | `Advisors` | 每家公司的顾问控制台地址 |
+| `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t}]`；不带 `company` 时只有令牌管的公司 |
+| `GET /api/advisors?company=` | `Advisors` | 这家公司的顾问控制台地址；不带 `company` 时是令牌管的公司的 |
 | `GET /api/devices/{company}/{plant}` | `DeviceMap` | 这个厂在设备约定下的地址表（MQTT topic、Modbus 寄存器、OPC UA 节点），见 devices.md 第 6 节 |
 | `GET /api/audit/{company}?before=&limit=` | `AuditLog` | 这家公司的改动，新的在前：谁（`who`、`role`、`key`）、从哪来（`via`：`page` 页面、`live` 实时通道、`assistant` 助手、`mcp`）、做了什么（`action`、`target`、`detail`）、成没成（`ok`、`error`）。`limit` 默认 100、最多 500，`before` 是上一页最后一条的 `id`。需要该公司操作员以上。访客的试操作不记 |
 

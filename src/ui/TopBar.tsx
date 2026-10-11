@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BarChart3Icon, BellIcon, BotIcon, BoxIcon, CheckIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, ScrollTextIcon, SearchIcon } from 'lucide-react';
+import { BarChart3Icon, BellIcon, BotIcon, BoxIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, ScrollTextIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -41,44 +41,25 @@ function SiteBadge({ text, tone = 'primary' }: { text: React.ReactNode; tone?: '
 
 const AllBadge = () => <SiteBadge text={<LayoutGridIcon className="size-4" />} />;
 
-/** Company switch reloads with another config; plant switch is instant (all plants are simulated). */
+/**
+ * The customer this page is the factory of (one customer per page: moving between customers is the
+ * console's job), and the switch between its plants, which is instant (all are simulated).
+ */
 function SiteSwitcher() {
   useTick();
   const plant = usePlant();
   const campus = useCampus();
   const rt = runtime();
-  const { company, directory } = rt.bundle;
+  const { company } = rt.bundle;
   const L = plant.layout;
   const lines = rt.plants.reduce((n, p) => n + p.layout.lines.length, 0);
   const group = rt.plants.length > 1 ? groupFigures(rt.plants) : null;
-  const goCompany = (id: string) => {
-    if (id === company.id) return;
-    const url = new URL(location.href);
-    url.searchParams.set('company', id);
-    url.searchParams.delete('plant');
-    location.href = url.toString();
-  };
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-11 gap-2 rounded-xl pl-1.5 pr-2.5 max-md:h-[38px] max-md:pr-1.5" aria-label="切换公司">
-            <SiteBadge text={company.short} tone="ink" />
-            <b className="max-w-36 truncate text-[13.5px] max-lg:hidden">{company.name}</b>
-            <ChevronDownIcon className="text-muted-foreground max-md:hidden" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-[300px] rounded-2xl p-2 shadow-float max-md:w-[calc(100vw-20px)]">
-          <DropdownMenuLabel className="text-xs text-muted-foreground">切换公司</DropdownMenuLabel>
-          {directory.map((c) => (
-            <DropdownMenuItem key={c.id} onSelect={() => goCompany(c.id)} className={cn('gap-2.5 rounded-xl p-2', c.id === company.id && 'bg-accent')}>
-              <SiteBadge text={c.short} tone="ink" />
-              <b className="text-[13.5px]">{c.name}</b>
-              {c.id === company.id && <CheckIcon className="ml-auto text-primary" />}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex h-11 items-center gap-2 rounded-xl pl-1.5 pr-2.5 max-md:h-[38px] max-md:pr-1.5" title={company.name}>
+        <SiteBadge text={company.short} tone="ink" />
+        <b className="max-w-36 truncate text-[13.5px] max-lg:hidden">{company.name}</b>
+      </div>
       <span className="text-muted-foreground/50 max-md:hidden">/</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -248,7 +229,7 @@ function BusinessEntry() {
   const biz = useBiz((s) => s.open);
   const agents = useAgents((s) => s.open);
   useEffect(() => {
-    advisors ??= fetch('/api/advisors').then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    advisors ??= fetch(`/api/advisors?company=${encodeURIComponent(company)}`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
     assistants[company] ??= fetch(`/api/agents/${encodeURIComponent(company)}`).then((r) => r.ok && (r.headers.get('Content-Type') ?? '').includes('json')).catch(() => false);
     Promise.all([advisors, assistants[company]]).then(([m, a]) => {
       setHas({ biz: !!m?.[company], agents: a });
@@ -299,15 +280,8 @@ function LiveLinks() {
   const up = sources.filter((s) => s.connected);
   const rt = runtime();
   const here = (campus ? rt.plants.map((p) => p.sim) : [sim]).reduce((n, s) => n + [...s.assets.values()].filter((a) => liveFields(a)).length, 0);
-  const place = (c: string, p: string) =>
-    c === rt.bundle.company.id
-      ? rt.byId[p]?.layout.name ?? p
-      : `${rt.bundle.directory.find((d) => d.id === c)?.name ?? c} ${p}`;
-  const go = (c: string, p: string, a: string) => {
-    if (c !== rt.bundle.company.id) {
-      location.href = `?company=${encodeURIComponent(c)}&plant=${encodeURIComponent(p)}&asset=${encodeURIComponent(a)}`;
-      return;
-    }
+  const place = (p: string) => rt.byId[p]?.layout.name ?? p;
+  const go = (p: string, a: string) => {
     const ui = useUI.getState();
     const switching = ui.plantId !== p;
     if (switching) ui.setPlant(p);
@@ -345,11 +319,11 @@ function LiveLinks() {
               </span>
             </div>
             {(s.targets ?? []).map((t, i) => {
-              const [c, p, a] = t.split('/');
-              const local = c === rt.bundle.company.id && p === layout.id;
+              const [, p, a] = t.split('/');
+              const local = p === layout.id;
               return (
-                <DropdownMenuItem key={t} onSelect={() => go(c, p, a)} className="mt-0.5 ml-4 rounded-lg py-1 text-[12.5px]">
-                  <span className={cn('truncate', local ? 'font-bold text-primary' : 'text-muted-foreground')}>→ {s.labels?.[i] ?? `${place(c, p)} · ${a}`}</span>
+                <DropdownMenuItem key={t} onSelect={() => go(p, a)} className="mt-0.5 ml-4 rounded-lg py-1 text-[12.5px]">
+                  <span className={cn('truncate', local ? 'font-bold text-primary' : 'text-muted-foreground')}>→ {`${place(p)} · ${a}`}</span>
                 </DropdownMenuItem>
               );
             })}

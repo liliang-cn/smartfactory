@@ -72,16 +72,6 @@ export function layoutCompany(company: CompanyCfg, industries: Map<string, Indus
   });
 }
 
-/** Companies created on the server at run time (MCP), when the app is served by it. */
-async function serverDirectory(): Promise<{ id: string; name: string; short: string }[]> {
-  try {
-    const r = await fetch('/api/config/directory');
-    return r.ok ? await r.json() : [];
-  } catch {
-    return [];
-  }
-}
-
 function bundle(picked: CompanyEntry, all: CompanyEntry[], industries: Map<string, IndustryCfg>): CompanyBundle {
   const company = picked.cfg!;
   const plants = layoutCompany(company, industries, picked.path);
@@ -92,13 +82,12 @@ export async function loadCompany(wanted: string | null): Promise<CompanyBundle>
   // A broken file only blocks its own company; the others stay loadable from the switcher.
   const all = parseCompanies(await Promise.all(Object.entries(companyFiles).map(async ([path, load]) => [path, (await load()).default] as [string, unknown])));
   if (!all.length) throw new ConfigError('src/config/companies', ['没有任何公司配置，至少放一个 JSON 文件']);
-  const runtime = await serverDirectory();
-  const directory = [...all.map((c) => ({ id: c.id, name: c.cfg ? c.name : `${c.name}（配置有误）`, short: c.short })), ...runtime.filter((r) => !all.some((c) => c.id === r.id))];
+  const directory = all.map((c) => ({ id: c.id, name: c.cfg ? c.name : `${c.name}（配置有误）`, short: c.short }));
 
   // A company created on the server: its config (and any industry packs it brings) come from there.
-  if (wanted && !all.some((c) => c.id === wanted) && runtime.some((r) => r.id === wanted)) {
-    const r = await fetch(`/api/config/company/${encodeURIComponent(wanted)}`);
-    if (r.ok) {
+  if (wanted && !all.some((c) => c.id === wanted)) {
+    const r = await fetch(`/api/config/company/${encodeURIComponent(wanted)}`).catch(() => null);
+    if (r?.ok) {
       const d: { company: unknown; industries: Record<string, unknown> } = await r.json();
       const company = validateCompany(d.company, `服务器上的公司 ${wanted}`);
       const industries = new Map<string, IndustryCfg>();
