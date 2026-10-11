@@ -1,9 +1,3 @@
-github.com/0x51-dev/rdf v0.1.0 h1:FVfgKlpDyDbcXCw2Bl67WwSiyXmN4eN86FPdyUlF5WA=
-github.com/0x51-dev/rdf v0.1.0/go.mod h1:2Ie8KGb6ATQ8sxbW4244htReuQROnY7X2MKqPXWmICg=
-github.com/0x51-dev/rids v0.1.0 h1:uCb0lrYeE374b43rhy4keFUrVCSbMYSaSqLfoGveQH8=
-github.com/0x51-dev/rids v0.1.0/go.mod h1:l/rEmCVwqu6nRMdLIwF6HriyB0M4KevDdSKAlaNVw7U=
-github.com/0x51-dev/upeg v0.1.0 h1:ze3Uu4H9q0Fq8FuJmV1RsrTl85LholOZExCBwpujiPc=
-github.com/0x51-dev/upeg v0.1.0/go.mod h1:ts9/Zafxb9W9drZFTmQNMR7kLOyHyBw37NuowyiDork=
 github.com/JohannesKaufmann/dom v0.3.1 h1:J16l9JAHWgkFPR3VIPbQ1gvS0cWab6laK1q7PFL3qh0=
 github.com/JohannesKaufmann/dom v0.3.1/go.mod h1:BZPkf8ZeYrBgABjwJn9iiKt8aiCtkxpHkevms+Yp2DE=
 github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 h1:XFJZFWESIWlUEHHjzBuv8RvrtCWnSGlimEX17ysSDb8=
@@ -58,6 +52,8 @@ github.com/blevesearch/zapx/v16 v16.3.4 h1:hDAqA8qusZTNbPEL7//w5P65UZ2de6yhSeUaT
 github.com/blevesearch/zapx/v16 v16.3.4/go.mod h1:zqkPPqs9GS9FzVWzCO3Wf1X044yWAV17+4zb+FTiEHg=
 github.com/blevesearch/zapx/v17 v17.2.3 h1:UYYJPAt5b2tVxldx5h0jmv23RMsg8/UZKFVya7v92po=
 github.com/blevesearch/zapx/v17 v17.2.3/go.mod h1:r7mb4QWbDQSkbAnOjCb9iCfkcrzajB4yBdJpuBIo/fE=
+github.com/cayleygraph/quad v1.3.0 h1:xg7HOLWWPgvZ4CcvzEpfCwq42L8mzYUR+8V0jtYoBzc=
+github.com/cayleygraph/quad v1.3.0/go.mod h1:NadtM7uMm78FskmX++XiOOrNvgkq0E1KvvhQdMseMz4=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327 h1:UQ4AU+BGti3Sy/aLU8KVseYKNALcX9UXY6DfpwQ6J8E=
@@ -181,8 +177,8 @@ github.com/liliang-cn/agent-go/v3 v3.51.6 h1:s0jxL3tqqlJHVfNh2+/Q2y9YFpACDRvCfAd
 github.com/liliang-cn/agent-go/v3 v3.51.6/go.mod h1:RfIFY/C0mIiq6CRgXp9pq/kBoZeOdb94pAUcEv0Gc9I=
 github.com/liliang-cn/agentexec v0.5.0 h1:cTdZF/ccLQOFbx6qdUOrknHe9zRkFErQchDeQzviZvY=
 github.com/liliang-cn/agentexec v0.5.0/go.mod h1:Lt1DVrf3IX0u/2B4YokbMOfQElXKN4bd1xgKNI4acIo=
-github.com/liliang-cn/cortexdb/v2 v2.98.0 h1:okXKYnslIz1RxCjiiPr30tqdbsNQeuUpgXh91WiWQ3Q=
-github.com/liliang-cn/cortexdb/v2 v2.98.0/go.mod h1:O4EPYRbBsEpEsRisT2Hs2jhKVoEMPuRm87xAXpwLMwc=
+github.com/liliang-cn/cortexdb/v2 v2.124.0 h1:hMKprG862zdO/cQPufhzDB2Ib7D3vPJZDo587FtM5TY=
+github.com/liliang-cn/cortexdb/v2 v2.124.0/go.mod h1:EIBy+2JQDHiBgxSD84fx4vvZ2B9o46Q3yVBSjB+bInU=
 github.com/liliang-cn/mcp-swagger-server v1.3.0 h1:PFnm9mSbjVoFv4AelRzmHuxuuJXI8QRUYVeYmjkpsPw=
 github.com/liliang-cn/mcp-swagger-server v1.3.0/go.mod h1:xci2K+i6OU3pMeb/hQOialGiIUrMS38ZswQdOFoRraw=
 github.com/liliang-cn/pipeit v0.1.0 h1:ZU5hkL5SXr6vHtn/gcJBX9i55l0HM4rVsYTfxqn5M34=
@@ -212,10 +208,14 @@ github.com/openai/openai-go/v3 v3.56.0 h1:Xb+gsS7Gsb5dx+Uat9BHTWhifAOvQjU+pQNWT/
 github.com/openai/openai-go/v3 v3.56.0/go.mod h1:ufI1+K+t0ijRB3gk8eztiw1crcDpsBuxRQL4sbLIrts=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde h1:x0TT0RDC7UhAVbbWWBzr41ElhJx5tXPWkIHA2HWPRuw=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
+github.com/piprate/json-gold v0.8.0 h1:2NGd69cEpaW13eDlj6Q7q5vXAsvbqUftFwXg8IS7c4Q=
+github.com/piprate/json-gold v0.8.0/go.mod h1:gcirrR3WDKegzR9SNouIB0uFhVqY2FXb2b46f4FN6Ec=
 github.com/pkoukk/tiktoken-go v0.1.8 h1:85ENo+3FpWgAACBaEUVp+lctuTcYUO7BtmfhlN/QTRo=
 github.com/pkoukk/tiktoken-go v0.1.8/go.mod h1:9NiV+i9mJKGj1rYOT+njbv+ZwA/zJxYdewGl6qVatpg=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/pquerna/cachecontrol v0.2.0 h1:vBXSNuE5MYP9IJ5kjsdo8uq+w41jSPgvba2DEnkRx9k=
+github.com/pquerna/cachecontrol v0.2.0/go.mod h1:NrUG3Z7Rdu85UNR3vm7SOsl1nFIeSiQnrHV5K9mBcUI=
 github.com/qdrant/go-client v1.19.1 h1:zBEe3qLw841OG6EEShgguE4G0Qm+wJyf/CCVPFp1fqo=
 github.com/qdrant/go-client v1.19.1/go.mod h1:etxS7W+x+NFEPDk+FUhUPKEq95hckHxeXQqWiljJIYw=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
@@ -248,6 +248,7 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
 github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
+github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
@@ -290,8 +291,10 @@ golang.org/x/oauth2 v0.36.0/go.mod h1:YDBUJMTkDnJS+A4BP4eZBjCqtokkg1hODuPjwiGPO7
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
 golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
-golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+golang.org/x/term v0.47.0 h1:cpyOwQkr2Nzxe2p6KnrTG7Ei2wtzjsuSjhpXXepZ/BM=
+golang.org/x/term v0.47.0/go.mod h1:efAfAuG6RKABvg1ArGebRkvX6LXul14SM67o2e4mUCY=
 golang.org/x/text v0.41.0 h1:vz/seA0lnX87Othu2f/0L24RcgrXD9/YFTSuGjj3rH8=
 golang.org/x/text v0.41.0/go.mod h1:jvf1O8ajNzZqhSrQBPbutR/EB83Cc0CFrezNQIwbb5M=
 golang.org/x/time v0.15.0 h1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=

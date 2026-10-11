@@ -1,6 +1,6 @@
 // One customer: what their twin is made of, their assistants and documents, the equipment that
 // feeds it, who holds a token, and what was done.
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   BookOpenTextIcon, BotIcon, BoxIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, KeyRoundIcon, NotebookPenIcon,
@@ -22,6 +22,8 @@ import { PageHead, useConsole } from './Console';
 import { Badge, totals } from './Customers';
 import { forget, useCompany } from './layouts';
 import { go, query, usePath } from './router';
+
+const KnowledgeBase = lazy(() => import('./Knowledge'));
 
 const TABS = [
   { id: 'scene', label: '场景', icon: BoxIcon },
@@ -129,7 +131,7 @@ function AI({ c }: { c: api.Company }) {
   );
 }
 
-function Knowledge({ c }: { c: api.Company }) {
+function Library({ c }: { c: api.Company }) {
   const { ov } = useConsole();
   const [docs, setDocs] = useState<Awaited<ReturnType<typeof api.docs>> | null>(null);
   const [error, setError] = useState<string>();
@@ -281,7 +283,10 @@ export default function Customer({ id }: { id: string }) {
           {data?.plants.map((p) => <PlantPanel key={p.id} plant={p} info={c.plants.find((x) => x.id === p.id)} />)}
         </TabsContent>
         <TabsContent value="ai"><AI c={c} /></TabsContent>
-        <TabsContent value="knowledge"><Knowledge c={c} /></TabsContent>
+        <TabsContent value="knowledge" className="grid gap-5">
+          <Suspense fallback={null}><KnowledgeBase company={c.id} admin={ov.me.role === 'admin'} /></Suspense>
+          <Library c={c} />
+        </TabsContent>
         <TabsContent value="connect"><Connect c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
         <TabsContent value="activity"><ActivityList company={c.id} /></TabsContent>

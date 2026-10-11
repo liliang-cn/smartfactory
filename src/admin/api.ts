@@ -14,6 +14,14 @@ export type CompanyCreated = z.infer<typeof P.CompanyCreated>;
 export type AuditEntry = z.infer<typeof P.AuditEntry>;
 export type Role = z.infer<typeof P.Role>;
 export type ComposeEvent = z.infer<typeof P.ComposeEvent>;
+export type ConsoleEvent = z.infer<typeof P.ConsoleEvent>;
+export type ConsoleAction = z.infer<typeof P.ConsoleAction>;
+export type KnowledgeOverview = z.infer<typeof P.KnowledgeOverview>;
+export type KnowledgeAnswer = z.infer<typeof P.KnowledgeAnswer>;
+export type Passage = z.infer<typeof P.Passage>;
+export type EntityAnswer = z.infer<typeof P.EntityAnswer>;
+export type KnowledgeGraph = z.infer<typeof P.KnowledgeGraph>;
+export type EntityKind = z.infer<typeof P.EntityKind>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -75,12 +83,29 @@ export const activity = (company: string, before?: number) => {
 };
 
 /** The scene architect: brief in, events out (server-sent), until it ends or signal aborts. */
-export async function compose(brief: string, base: unknown, signal: AbortSignal, on: (ev: ComposeEvent) => void) {
+export const compose = (brief: string, base: unknown, signal: AbortSignal, on: (ev: ComposeEvent) => void) =>
+  stream('/api/admin/compose', { brief, ...(base ? { base } : {}) }, signal, on);
+
+/** The console agent: one turn of a conversation; changes come back as actions to confirm. */
+export const agent = (conversation: string | null, text: string, signal: AbortSignal, on: (ev: ConsoleEvent) => void) =>
+  stream('/api/admin/agent', { conversation: conversation ?? '', text }, signal, on);
+
+/** Carry out an action (one the console agent proposed), as the signed-in person. */
+export const doAction = (a: ConsoleAction) => call<unknown>('POST', '/api/admin/actions', a);
+
+const kbPath = (c: string) => `/api/knowledge/${encodeURIComponent(c)}`;
+export const knowledge = (c: string) => call<KnowledgeOverview>('GET', kbPath(c));
+export const knowledgeSearch = (c: string, q: string) => call<KnowledgeAnswer>('GET', `${kbPath(c)}/search?q=${encodeURIComponent(q)}&limit=8`);
+export const knowledgeEntity = (c: string, name: string) => call<EntityAnswer>('GET', `${kbPath(c)}/entity?name=${encodeURIComponent(name)}`);
+export const knowledgeGraph = (c: string) => call<KnowledgeGraph>('GET', `${kbPath(c)}/graph`);
+export const rebuildKnowledge = (c: string) => call<{ docs: number }>('POST', `${kbPath(c)}/rebuild`);
+
+async function stream<E>(path: string, body: unknown, signal: AbortSignal, on: (ev: E) => void) {
   const t = token();
-  const res = await fetch('/api/admin/compose', {
+  const res = await fetch(path, {
     method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', ...(t && { Authorization: `Bearer ${t}` }) },
-    body: JSON.stringify({ brief, ...(base ? { base } : {}) }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
     let msg = `请求失败（${res.status}）`;
@@ -92,7 +117,7 @@ export async function compose(brief: string, base: unknown, signal: AbortSignal,
   let buf = '';
   const flush = (chunk: string) => {
     const data = chunk.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('\n');
-    if (data) try { on(JSON.parse(data) as ComposeEvent); } catch { /* partial */ }
+    if (data) try { on(JSON.parse(data) as E); } catch { /* partial */ }
   };
   for (;;) {
     const { value, done } = await reader.read();

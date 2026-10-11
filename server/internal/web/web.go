@@ -24,6 +24,8 @@ import (
 	"smartfactory/internal/auth"
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/knowledge"
+	"smartfactory/internal/ops"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
 )
@@ -51,6 +53,10 @@ type Server struct {
 	Prefix string
 	// Agents are the companies' own assistants (nil when the server keeps no data).
 	Agents *agents.Runner
+	// Knowledge is the companies' knowledge bases (nil when the server keeps no data).
+	Knowledge *knowledge.Base
+	// Ops is what the console does; built from the fields above when nil.
+	Ops *ops.Ops
 
 	namesOnce sync.Once
 	names     map[string]string

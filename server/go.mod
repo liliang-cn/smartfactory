@@ -11,17 +11,16 @@ require (
 	github.com/gopcua/opcua v0.9.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/liliang-cn/agent-go/v3 v3.51.6
+	github.com/liliang-cn/cortexdb/v2 v2.124.0
 	github.com/liliang-cn/semantic-go v0.2.2
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/simonvetter/modbus v1.6.4
+	golang.org/x/term v0.47.0
 	modernc.org/sqlite v1.58.0
 )
 
 require (
-	github.com/0x51-dev/rdf v0.1.0 // indirect
-	github.com/0x51-dev/rids v0.1.0 // indirect
-	github.com/0x51-dev/upeg v0.1.0 // indirect
 	github.com/JohannesKaufmann/dom v0.3.1 // indirect
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/PuerkitoBio/goquery v1.13.0 // indirect
@@ -48,6 +47,7 @@ require (
 	github.com/blevesearch/zapx/v15 v15.4.3 // indirect
 	github.com/blevesearch/zapx/v16 v16.3.4 // indirect
 	github.com/blevesearch/zapx/v17 v17.2.3 // indirect
+	github.com/cayleygraph/quad v1.3.0 // indirect
 	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327 // indirect
 	github.com/chromedp/chromedp v0.14.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
@@ -84,7 +84,6 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/json-iterator/go v0.0.0-20171115153421-f7279a603ede // indirect
 	github.com/liliang-cn/agentexec v0.5.0 // indirect
-	github.com/liliang-cn/cortexdb/v2 v2.98.0 // indirect
 	github.com/liliang-cn/mcp-swagger-server v1.3.0 // indirect
 	github.com/liliang-cn/pipeit v0.1.0 // indirect
 	github.com/liliang-cn/skills-go v1.9.0 // indirect
@@ -95,7 +94,9 @@ require (
 	github.com/oasdiff/yaml v0.1.0 // indirect
 	github.com/oasdiff/yaml3 v0.0.13 // indirect
 	github.com/openai/openai-go/v3 v3.56.0 // indirect
+	github.com/piprate/json-gold v0.8.0 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
+	github.com/pquerna/cachecontrol v0.2.0 // indirect
 	github.com/qdrant/go-client v1.19.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
@@ -115,7 +116,7 @@ require (
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect

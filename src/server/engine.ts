@@ -119,6 +119,32 @@ function companyConfig(id: string): string {
   return c ? JSON.stringify(c.bundle.company) : 'null';
 }
 
+/**
+ * A company's process as the knowledge base keeps it: plants, their lines in order, each line's
+ * product and stations, and who supplies and buys each product.
+ */
+function processModel(id: string): string {
+  const c = companies.get(id);
+  if (!c) return 'null';
+  const cfg = c.bundle.company;
+  return JSON.stringify({
+    id: cfg.id, name: cfg.name,
+    plants: c.plants.map(({ layout: p }) => ({
+      id: p.id, name: p.name, hall: p.hall, site: p.site, industry: p.industry.name, unit: p.unit,
+      warehouse: p.warehouse.name, finishedGoods: p.fg.name,
+      carriers: p.freight.map((f) => f.carrier),
+      lines: p.lines.map((l) => ({
+        id: l.id, name: l.name, note: l.note,
+        product: {
+          key: l.product.key, name: l.product.name, stages: l.product.order, partNo: l.product.partNo, material: l.product.material,
+          weight: l.product.weight, customers: (l.product.customers ?? []).map((x) => x.name), suppliers: (l.product.suppliers ?? []).map((x) => x.name),
+        },
+        stations: l.stations.map((st) => ({ id: st.id, label: st.machine.label, name: st.name, code: st.machine.code, cycle: st.cycle, makes: st.makes ?? '', kind: st.machine.look.archetype })),
+      })),
+    })),
+  });
+}
+
 function removeCompany(id: string): string {
   return result(() => {
     if (builtinCompanies.has(id)) throw new ConfigError(`公司 ${id}`, [`${id} 是内置公司，不能删除`]);
@@ -520,6 +546,6 @@ function list(): string {
 
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
-  addIndustry, addCompany, checkCompany, companyConfig, removeCompany, industryList, industry, schema,
+  addIndustry, addCompany, checkCompany, companyConfig, processModel, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock,
 };

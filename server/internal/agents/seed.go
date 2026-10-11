@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"io/fs"
@@ -57,7 +58,7 @@ func (r *Runner) Ensure(company string) error {
 			if i := strings.IndexByte(title, '-'); i >= 0 {
 				title = title[i+1:]
 			}
-			if _, err := r.Store.AddDoc(company, title, string(b), "资料室"); err != nil {
+			if _, err := r.AddDoc(context.Background(), company, title, string(b), "资料室"); err != nil {
 				return err
 			}
 		}

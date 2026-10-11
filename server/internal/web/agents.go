@@ -308,7 +308,7 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			writeError(w, http.StatusBadRequest, "文档是空的，或者不是 UTF-8 文本")
 			return
 		}
-		d, err := a.Store.AddDoc(c, in.Title, in.Body, who.Name)
+		d, err := a.AddDoc(r.Context(), c, in.Title, in.Body, who.Name)
 		s.Audit.Record(who, "page", c, "doc.add", d.ID+" "+in.Title, "", err)
 		if found(w, err, "公司") {
 			writeJSON(w, d)
@@ -323,7 +323,7 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 		if !ok {
 			return
 		}
-		err := a.Store.DeleteDoc(c, r.PathValue("doc"))
+		err := a.DeleteDoc(r.Context(), c, r.PathValue("doc"))
 		s.Audit.Record(who, "page", c, "doc.delete", r.PathValue("doc"), "", err)
 		if found(w, err, "文档") {
 			writeJSON(w, map[string]bool{"ok": true})

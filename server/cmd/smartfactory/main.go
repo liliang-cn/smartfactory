@@ -6,6 +6,9 @@
 //	smartfactory devices -config devices.json
 //	smartfactory token -name 张工 -role operator -company huaduan
 //	smartfactory version
+//
+// and, against a running server, the console's commands (cli.go): login, customers, industries,
+// tokens, kb, activity, agent.
 package main
 
 import (
@@ -36,6 +39,7 @@ import (
 	"smartfactory/internal/edge"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/history"
+	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
@@ -51,6 +55,16 @@ func main() {
 	defer stop()
 
 	args := os.Args[1:]
+	// the command line for administrators, against a running server
+	if len(args) > 0 {
+		if run, ok := cliCommands[args[0]]; ok {
+			if err := run(ctx, args[1:]); err != nil {
+				fmt.Fprintln(os.Stderr, red(err.Error()))
+				os.Exit(1)
+			}
+			return
+		}
+	}
 	cmd := "serve"
 	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "token" || args[0] == "version") {
 		cmd, args = args[0], args[1:]
@@ -187,9 +201,43 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if assistants != nil {
 		assistants.Audit = trail
 	}
+	// each company's knowledge base: its process as a graph, its documents linked to it
+	var kb *knowledge.Base
+	if cfg.Data != "" {
+		if kb, err = knowledge.Open(filepath.Join(cfg.Data, "knowledge"), eng, log); err != nil {
+			return fmt.Errorf("knowledge: %w", err)
+		}
+		defer kb.Close()
+		if assistants != nil {
+			assistants.KB = kb
+		}
+		eng.OnChange = func(company string, deleted bool) {
+			if deleted {
+				kb.Drop(company)
+				return
+			}
+			if err := kb.SyncProcess(ctx, company); err != nil {
+				log.Error("knowledge: process", "company", company, "err", err)
+			}
+		}
+		go func() {
+			for _, c := range eng.CompanyIDs() {
+				if err := kb.SyncProcess(ctx, c); err != nil {
+					log.Error("knowledge: process", "company", c, "err", err)
+				}
+				if assistants != nil {
+					if n, err := assistants.IndexDocs(ctx, c, false); err != nil {
+						log.Error("knowledge: documents", "company", c, "err", err)
+					} else if n > 0 {
+						log.Info("knowledge: documents indexed", "company", c, "docs", n)
+					}
+				}
+			}
+		}()
+	}
 	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

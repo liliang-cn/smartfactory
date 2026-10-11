@@ -1,7 +1,7 @@
 // How the audit log reads: each entry as a sentence, where it came from, the day it falls on.
 // Shared by the twin's activity sheet and the console.
 import type { z } from 'zod';
-import { BotIcon, MousePointerClickIcon, PlugIcon, RadioTowerIcon, type LucideIcon } from 'lucide-react';
+import { BotIcon, MousePointerClickIcon, PlugIcon, RadioTowerIcon, SquareTerminalIcon, type LucideIcon } from 'lucide-react';
 import { CMD_LABEL } from '@/live/client';
 import type * as P from '@/protocol/sfp';
 import type { Command } from '@/sim/types';
@@ -14,6 +14,7 @@ export const VIA: Record<Via, { label: string; icon: LucideIcon }> = {
   live: { label: '实时', icon: RadioTowerIcon },
   assistant: { label: '助手', icon: BotIcon },
   mcp: { label: 'MCP', icon: PlugIcon },
+  cli: { label: '命令行', icon: SquareTerminalIcon },
 };
 export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员' };
 const STATUS_ADVISOR: Record<string, string> = {
@@ -59,6 +60,7 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     case 'industry.create': return { text: `建立或替换行业包 ${e.target}` };
     case 'token.issue': return { text: `发令牌给${titleOf(e.target)}（${ROLE[e.detail as Entry['role']] ?? e.detail}）` };
     case 'token.revoke': return { text: `撤销${titleOf(e.target)}的令牌` };
+    case 'knowledge.rebuild': return { text: `重建 ${e.target} 的知识库` };
   }
   if (e.action.startsWith('advisor.')) {
     const verb = e.action.slice('advisor.'.length);

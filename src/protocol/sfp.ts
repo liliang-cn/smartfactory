@@ -489,10 +489,10 @@ export const AuditEntry = z.object({
   id: num, at: time, who: str, role: Role,
   /** which token: the start of its hash ("token" for the original single token) */
   key: str,
-  via: z.enum(['page', 'live', 'assistant', 'mcp']),
+  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
 });
@@ -581,6 +581,66 @@ export const ComposeEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('error'), text: str }),
 ]).meta({ description: 'One server-sent event of the scene architect: `data: <ComposeEvent JSON>`' });
 
+// ---------- knowledge base (/api/knowledge/{company}) ----------
+
+/** What a thing in the process graph is. */
+export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer']);
+/** has_plant · has_line · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to */
+export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to']);
+
+export const KnowledgeOverview = z.object({
+  kinds: z.record(str, num),
+  relations: z.record(str, num),
+  /** passages from documents, and from the process */
+  docs: num, process: num,
+  /** documents in the library, and how many are in the knowledge base */
+  library: num, indexed: num,
+}).meta({ description: 'GET /api/knowledge/{company} — members and above' });
+
+export const Passage = z.object({
+  /** doc: a passage of a library document (doc, part locate it) · process: the company's process */
+  from: z.enum(['doc', 'process']),
+  title: str, doc: str.optional(), part: num, text: str, entities: z.array(str).optional(),
+});
+export const KnowledgeAnswer = z.object({
+  passages: z.array(Passage),
+  /** how it searched: lexical, or ppr (a walk over the graph from the things the question names) */
+  mode: str,
+  entities: z.array(str).optional(),
+}).meta({ description: 'GET /api/knowledge/{company}/search?q=&limit=' });
+
+const Link = z.object({ type: str, out: z.boolean(), name: str, kind: str, title: str.optional() });
+export const EntityAnswer = z.object({
+  entity: z.object({ name: str, kind: EntityKind, links: z.array(Link), mentions: z.array(str) }).optional(),
+  /** when nothing has exactly that name: things whose names contain it */
+  candidates: z.array(Link),
+}).meta({ description: 'GET /api/knowledge/{company}/entity?name=' });
+
+export const KnowledgeGraph = z.object({
+  nodes: z.array(z.object({ name: str, kind: EntityKind, mentions: num })),
+  edges: z.array(z.object({ from: str, to: str, type: RelationType })),
+}).meta({ description: 'GET /api/knowledge/{company}/graph — the process graph whole, for drawing' });
+
+// ---------- the console agent (/api/admin/agent) ----------
+
+/** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
+export const ConsoleAction = z.object({
+  kind: z.enum(['create_company', 'delete_company', 'issue_token', 'revoke_token', 'rebuild_knowledge']),
+  title: str, detail: str.optional(), args: z.record(str, z.unknown()),
+});
+export const ConsoleEvent = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('conversation'), id: str }),
+  z.object({ kind: z.literal('thinking') }),
+  z.object({ kind: z.literal('tool_call'), tool: str, args: z.record(str, z.unknown()).optional() }),
+  z.object({ kind: z.literal('tool_result'), tool: str, result: z.unknown().optional() }),
+  z.object({ kind: z.literal('delta'), text: str }),
+  z.object({ kind: z.literal('reset') }),
+  /** a change to confirm */
+  z.object({ kind: z.literal('action'), result: ConsoleAction }),
+  z.object({ kind: z.literal('complete'), text: str.optional() }),
+  z.object({ kind: z.literal('error'), text: str }),
+]).meta({ description: 'One server-sent event of the console agent: `data: <ConsoleEvent JSON>`' });
+
 export const DEFS = {
   ClientMessage, ServerMessage, PlantState,
   ErrorBody, Health, Directory, RuntimeCompany, Tags, Advisors, DeviceMap,
@@ -590,6 +650,7 @@ export const DEFS = {
   Docs, Doc, DocView, DocUpload, Notes, Note, Tickets, Ticket, TicketPatch, Done,
   AuditLog,
   AdminOverview, CompanyCreated, ConfigProblem, Accounts, Account, IssueToken, IssuedToken, ComposeRequest, ComposeEvent,
+  KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, ConsoleAction, ConsoleEvent,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

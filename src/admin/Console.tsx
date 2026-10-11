@@ -1,7 +1,8 @@
 // The console (/admin): where administrators build what the twin shows — customers with their
 // plants and lines, the industry packs they are built from, who may do what, and what was done.
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
-import { Building2Icon, ExternalLinkIcon, KeyRoundIcon, LayersIcon, LogOutIcon, MenuIcon, ScrollTextIcon, type LucideIcon } from 'lucide-react';
+import { Building2Icon, ExternalLinkIcon, KeyRoundIcon, LayersIcon, LogOutIcon, MenuIcon, ScrollTextIcon, SparklesIcon, type LucideIcon } from 'lucide-react';
+import { Kbd } from '@/components/ui/kbd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
@@ -10,6 +11,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import * as api from './api';
 import { go, match, usePath } from './router';
+import { AgentPanel, useAgent } from './AgentPanel';
 
 // pages load on first visit
 const Customers = lazy(() => import('./Customers'));
@@ -164,6 +166,11 @@ export default function Console() {
               </span>
             </a>
             <Nav path={path} />
+            <button type="button" onClick={() => useAgent.getState().setOpen(true)}
+              className="group flex h-11 items-center gap-2.5 rounded-xl bg-foreground px-3 text-[14px] font-bold text-background transition-opacity hover:opacity-90">
+              <SparklesIcon className="size-[18px]" />工作台助手
+              <Kbd className="ml-auto bg-background/15 text-background/80">⌘J</Kbd>
+            </button>
             <div className="mt-auto grid gap-2">
               <a href="/" className="flex h-9 items-center gap-2 rounded-xl px-3 text-[13px] font-bold text-muted-foreground hover:bg-surface hover:text-foreground">
                 <ExternalLinkIcon className="size-4" />打开孪生
@@ -175,6 +182,9 @@ export default function Console() {
             <Button variant="ghost" size="icon" className="rounded-xl" aria-label="菜单" onClick={() => setMenu(true)}><MenuIcon /></Button>
             <Mark className="size-7" />
             <b className="text-[15px] font-extrabold">工作台</b>
+            <Button size="sm" className="ml-auto h-9 rounded-xl bg-foreground font-bold text-background hover:bg-foreground/90" onClick={() => useAgent.getState().setOpen(true)}>
+              <SparklesIcon />助手
+            </Button>
           </header>
           <Sheet open={menu} onOpenChange={setMenu}>
             <SheetContent side="left" className="w-[280px] gap-5 p-4">
@@ -191,6 +201,7 @@ export default function Console() {
             <Suspense fallback={null}><Page path={path} /></Suspense>
           </main>
         </div>
+        <AgentPanel />
         <Toaster theme="light" position="top-center" />
       </TooltipProvider>
     </ConsoleCtx.Provider>

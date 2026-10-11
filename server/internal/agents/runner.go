@@ -20,6 +20,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/knowledge"
 )
 
 var shanghai = func() *time.Location {
@@ -42,6 +43,8 @@ type Runner struct {
 	Log   *slog.Logger
 	// Audit keeps what the assistants write, under the person they wrote it for.
 	Audit *audit.Log
+	// KB is the companies' knowledge bases; without one the assistants search the library alone.
+	KB *knowledge.Base
 
 	dir string
 	llm domain.Generator
@@ -141,6 +144,11 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 		return nil, err
 	}
 	all := tools(r.Store, r.Eng, a.Company)
+	if r.KB != nil {
+		for _, t := range knowledgeTools(r.KB, a.Company) {
+			all[t.name] = t
+		}
+	}
 	writes := map[string]bool{}
 	for _, name := range t.Tools {
 		tl := all[name]
@@ -311,4 +319,60 @@ func compact(v any) any {
 		}
 	}
 	return string([]rune(string(b))[:min(len([]rune(string(b))), 3000)]) + "…"
+}
+
+// NewAgent builds an agent on the assistants' model for something else the server runs (the
+// console agent); the caller adds its tools and closes it.
+func (r *Runner) NewAgent(name, prompt string) (*agentpkg.Service, error) {
+	if r.llm == nil {
+		return nil, ErrNoModel
+	}
+	return agentpkg.New(name).WithLLM(r.llm).WithSystemPrompt(prompt).
+		WithDBPath(filepath.Join(r.dir, "agentgo.db")).WithTimezone(shanghai).Build()
+}
+
+// Run puts goal to svc in session and passes its steps on as events: the calls of the tools
+// named own (agent-go's own tools are how a run ends, not steps), the answer as it is written,
+// and how it ended. It returns the answer.
+func Run(ctx context.Context, svc *agentpkg.Service, goal, session string, turns int, own []string, emit func(Event)) (string, error) {
+	ch, err := svc.RunStreamWithOptions(ctx, goal, agentpkg.WithSessionID(session), agentpkg.WithMaxTurns(turns))
+	if err != nil {
+		return "", err
+	}
+	var answer, partial, failure string
+	for ev := range ch {
+		if (ev.Type == agentpkg.EventTypeToolCall || ev.Type == agentpkg.EventTypeToolResult) && !slices.Contains(own, ev.ToolName) {
+			continue
+		}
+		switch ev.Type {
+		case agentpkg.EventTypeThinking:
+			emit(Event{Kind: "thinking"})
+		case agentpkg.EventTypeToolCall:
+			emit(Event{Kind: "tool_call", Tool: ev.ToolName, Args: ev.ToolArgs})
+		case agentpkg.EventTypeToolResult:
+			emit(Event{Kind: "tool_result", Tool: ev.ToolName, Result: compact(ev.ToolResult)})
+		case agentpkg.EventTypePartial:
+			partial += ev.Content
+			emit(Event{Kind: "delta", Text: ev.Content})
+		case agentpkg.EventTypeTombstone:
+			partial = ""
+			emit(Event{Kind: "reset"})
+		case agentpkg.EventTypeComplete:
+			answer = ev.Content
+		case agentpkg.EventTypeError:
+			failure = ev.Content
+		}
+	}
+	if answer == "" {
+		answer = partial
+	}
+	switch {
+	case ctx.Err() != nil:
+	case answer == "" && failure != "":
+		emit(Event{Kind: "error", Text: failure})
+		return "", errors.New(failure)
+	default:
+		emit(Event{Kind: "complete", Text: answer})
+	}
+	return answer, nil
 }

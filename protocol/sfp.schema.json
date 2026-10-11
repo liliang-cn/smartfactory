@@ -2876,7 +2876,8 @@
               "page",
               "live",
               "assistant",
-              "mcp"
+              "mcp",
+              "cli"
             ]
           },
           "company": {
@@ -3476,6 +3477,483 @@
         }
       ],
       "description": "One server-sent event of the scene architect: `data: <ComposeEvent JSON>`"
+    },
+    "KnowledgeOverview": {
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "relations": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "docs": {
+          "type": "number"
+        },
+        "process": {
+          "type": "number"
+        },
+        "library": {
+          "type": "number"
+        },
+        "indexed": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "kinds",
+        "relations",
+        "docs",
+        "process",
+        "library",
+        "indexed"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company} — members and above"
+    },
+    "KnowledgeAnswer": {
+      "type": "object",
+      "properties": {
+        "passages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "enum": [
+                  "doc",
+                  "process"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "doc": {
+                "type": "string"
+              },
+              "part": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              },
+              "entities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "from",
+              "title",
+              "part",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "mode": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "passages",
+        "mode"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/search?q=&limit="
+    },
+    "EntityAnswer": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "company",
+                "plant",
+                "line",
+                "station",
+                "machine",
+                "product",
+                "supplier",
+                "customer"
+              ]
+            },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "out": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "out",
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "mentions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "links",
+            "mentions"
+          ],
+          "additionalProperties": false
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "out": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "out",
+              "name",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "candidates"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/entity?name="
+    },
+    "KnowledgeGraph": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "company",
+                  "plant",
+                  "line",
+                  "station",
+                  "machine",
+                  "product",
+                  "supplier",
+                  "customer"
+                ]
+              },
+              "mentions": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "mentions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "has_plant",
+                  "has_line",
+                  "makes",
+                  "has_station",
+                  "is_a",
+                  "feeds",
+                  "supplies",
+                  "sold_to"
+                ]
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/graph — the process graph whole, for drawing"
+    },
+    "ConsoleAction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "create_company",
+            "delete_company",
+            "issue_token",
+            "revoke_token",
+            "rebuild_knowledge"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "ConsoleEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "conversation"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "thinking"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_call"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_result"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "result": {}
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "delta"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "reset"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "action"
+            },
+            "result": {
+              "$ref": "#/$defs/ConsoleAction"
+            }
+          },
+          "required": [
+            "kind",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "complete"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "error"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "One server-sent event of the console agent: `data: <ConsoleEvent JSON>`"
     },
     "Source": {
       "type": "object",

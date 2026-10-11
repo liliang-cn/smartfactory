@@ -49,6 +49,8 @@ type Engine struct {
 	Done chan struct{}
 	// offline engines have no Run loop: calls go straight to the JS (history backfill, what-if runs)
 	offline bool
+	// OnChange hears of every company created, replaced, rebuilt or deleted at run time.
+	OnChange func(company string, deleted bool)
 
 	// values from equipment waiting for the loop, which applies all of them at once
 	inMu    sync.Mutex
@@ -116,7 +118,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkCompany", "companyConfig", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkCompany", "companyConfig", "processModel", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -633,6 +635,11 @@ func (e *Engine) CreateIndustry(raw []byte) ConfigResult {
 		if err := e.persistConfig("industries", configID(raw), raw); err != nil {
 			e.log.Error("keep industry", "err", err)
 		}
+		var d struct{ Rebuilt []string }
+		json.Unmarshal(r.Detail, &d)
+		for _, id := range d.Rebuilt {
+			e.changed(id, false)
+		}
 	}
 	return r
 }
@@ -653,6 +660,7 @@ func (e *Engine) CreateCompany(raw []byte) ConfigResult {
 		if err := e.persistConfig("companies", id, raw); err != nil {
 			e.log.Error("keep company", "err", err)
 		}
+		e.changed(id, false)
 	}
 	return r
 }
@@ -668,6 +676,17 @@ func (e *Engine) CheckCompany(raw []byte) ConfigResult {
 // CompanyConfig is a running company's config (JSON), or "null".
 func (e *Engine) CompanyConfig(id string) string { return e.str("companyConfig", id) }
 
+// ProcessModel is a company's plants, lines, products and stations as laid out (JSON), or "null".
+func (e *Engine) ProcessModel(id string) string { return e.str("processModel", id) }
+
+// changed tells whoever follows the companies (the knowledge base) that one was created,
+// replaced or deleted.
+func (e *Engine) changed(id string, deleted bool) {
+	if e.OnChange != nil {
+		go e.OnChange(id, deleted)
+	}
+}
+
 // DeleteCompany stops simulating a company created at run time and forgets it.
 func (e *Engine) DeleteCompany(id string) ConfigResult {
 	if r, bad := badID(id); bad {
@@ -682,6 +701,7 @@ func (e *Engine) DeleteCompany(id string) ConfigResult {
 			os.Remove(filepath.Join(e.configDir("companies"), id+".json"))
 			os.Remove(filepath.Join(e.Dir, id+".json"))
 		}
+		e.changed(id, true)
 	}
 	return r
 }

@@ -15,6 +15,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/knowledge"
 	"smartfactory/internal/sfptest"
 	"smartfactory/internal/tags"
 )
@@ -54,7 +55,12 @@ func TestAdminConsole(t *testing.T) {
 	if err := keys.Attach(store); err != nil {
 		t.Fatal(err)
 	}
-	srv := &Server{Hub: tags.NewHub(), Engine: eng, Keys: keys, Audit: trail, Log: log}
+	kb, err := knowledge.Open(t.TempDir(), eng, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer kb.Close()
+	srv := &Server{Hub: tags.NewHub(), Engine: eng, Keys: keys, Audit: trail, Log: log, Knowledge: kb}
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -182,6 +188,47 @@ func TestAdminConsole(t *testing.T) {
 	}
 	if _, ok := again.Lookup(zhang); ok {
 		t.Error("a revoked token came back after a restart")
+	}
+
+	// the knowledge base: members of the company read it, its administrators rebuild it
+	if err := kb.SyncProcess(t.Context(), "huaduan"); err != nil {
+		t.Fatal(err)
+	}
+	for token, want := range map[string]int{"": 401, member: 200, local: 200} {
+		if got, _, b := do(token, "GET", "/api/knowledge/huaduan", nil); got != want {
+			t.Errorf("knowledge stats: %d, want %d: %s", got, want, b)
+		} else if got == 200 {
+			std.Check("KnowledgeOverview", b)
+		}
+	}
+	_, _, b = do(member, "GET", "/api/knowledge/huaduan/search?q=IH-101", nil)
+	std.Check("KnowledgeAnswer", b)
+	_, m, b = do(member, "GET", "/api/knowledge/huaduan/entity?name=IH-101", nil)
+	std.Check("EntityAnswer", b)
+	if m["entity"] == nil {
+		t.Errorf("IH-101 is not in the graph: %s", b)
+	}
+	_, _, b = do(member, "GET", "/api/knowledge/huaduan/graph", nil)
+	std.Check("KnowledgeGraph", b)
+	if got, _, _ := do(member, "POST", "/api/knowledge/huaduan/rebuild", nil); got != 403 {
+		t.Errorf("a member rebuilt the knowledge base: %d", got)
+	}
+	if got, _, b := do(local, "POST", "/api/knowledge/huaduan/rebuild", nil); got != 200 {
+		t.Errorf("rebuild: %d %s", got, b)
+	}
+
+	// actions: what the console agent proposes runs as whoever confirms it
+	act := map[string]any{"kind": "issue_token", "args": map[string]any{"name": "王工", "role": "member", "companies": []string{"huaduan"}}}
+	if got, _, b := do(local, "POST", "/api/admin/actions", act); got != 200 {
+		t.Errorf("action: %d %s", got, b)
+	} else {
+		std.Check("IssuedToken", b)
+	}
+	if got, _, _ := do(local, "POST", "/api/admin/actions", map[string]any{"kind": "delete_company", "args": map[string]any{"id": "xinghe"}}); got != 403 {
+		t.Errorf("an administrator of huaduan deleted xinghe through an action: %d", got)
+	}
+	if got, _, _ := do(root, "POST", "/api/admin/actions", map[string]any{"kind": "drop_everything"}); got != 400 {
+		t.Errorf("an unknown action: %d", got)
 	}
 
 	// the log
