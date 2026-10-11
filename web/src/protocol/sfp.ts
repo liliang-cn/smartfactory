@@ -620,23 +620,26 @@ export const SaveTemplate = z.object({
 
 // ---------- knowledge base (/api/knowledge/{company}) ----------
 
-/** What a thing in the process graph is. */
-export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer']);
-/** has_plant · has_line · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to */
-export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to']);
+/** What a thing in the graph is: the process, and the production orders from the ERP. */
+export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order']);
+/**
+ * has_plant · has_line · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to ·
+ * for_customer (order → customer) · of_product (order → product) · runs_on (order → line)
+ */
+export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on']);
 
 export const KnowledgeOverview = z.object({
   kinds: z.record(str, num),
   relations: z.record(str, num),
-  /** passages from documents, and from the process */
-  docs: num, process: num,
+  /** passages from documents, from the process, and one per production order kept */
+  docs: num, process: num, orders: num,
   /** documents in the library, and how many are in the knowledge base */
   library: num, indexed: num,
 }).meta({ description: 'GET /api/knowledge/{company} — members and above' });
 
 export const Passage = z.object({
-  /** doc: a passage of a library document (doc, part locate it) · process: the company's process */
-  from: z.enum(['doc', 'process']),
+  /** doc: a passage of a library document (doc, part locate it) · process: the company's process · order: a production order */
+  from: z.enum(['doc', 'process', 'order']),
   title: str, doc: str.optional(), part: num, text: str, entities: z.array(str).optional(),
 });
 export const KnowledgeAnswer = z.object({

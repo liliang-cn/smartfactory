@@ -75,7 +75,7 @@ func (r *Runner) IndexDocs(ctx context.Context, company string, again bool) (int
 // process graph itself.
 func knowledgeTools(kb *knowledge.Base, company string) []tool {
 	return []tool{
-		{name: "search_docs", desc: "在公司的知识库里搜索：资料库文档的段落，和公司工艺（工厂、产线、工序顺序、设备、产品、供应商、客户）的说明。问题里提到设备编号、产线、产品时，会沿着工艺图找到讲它们的资料。返回最相关的段落：from=doc 是文档（带文档编号和段号），from=process 是工艺。",
+		{name: "search_docs", desc: "在公司的知识库里搜索：资料库文档的段落，公司工艺（工厂、产线、每个工位的上下游、设备、产品、供应商、客户）的说明，和生产工单（ERP 下达的，含客户、产品、产线、进度、交期）。问题里提到设备编号、产线、产品、客户或工单号时，会沿着知识图谱找到讲它们的段落。返回最相关的段落：from=doc 是文档（带文档编号和段号），from=process 是工艺，from=order 是工单。",
 			params: obj(map[string]any{
 				"query":    prop("string", "要找的问题，原话即可"),
 				"names":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "问题涉及的设备编号、设备名、产线、产品、客户名（可省）"},
@@ -85,7 +85,7 @@ func knowledgeTools(kb *knowledge.Base, company string) []tool {
 			run: func(ctx context.Context, a args) (any, error) {
 				return kb.Search(ctx, company, a.str("query"), a.list("names"), a.list("keywords"), max(1, min(a.num("limit", 6), 12)))
 			}},
-		{name: "process_graph", desc: "查工艺图里的一样东西（工位编号如 HP-101、设备名、产线、产品、供应商、客户）和它的全部关系：上下游工位、属于哪条线、是什么设备、生产什么、谁供货、卖给谁，以及哪些资料段落提到它。名字不完整时返回可能的候选。",
+		{name: "process_graph", desc: "查知识图谱里的一样东西（工位编号如 HP-101、设备名、产线、产品、供应商、客户、工单号）和它的全部关系：上下游工位、属于哪条线、是什么设备、生产什么、谁供货、卖给谁、客户有哪些工单、工单在哪条线做什么产品，以及哪些段落提到它。名字不完整时返回可能的候选。",
 			params: obj(map[string]any{"name": prop("string", "名字或编号")}, "name"),
 			run: func(ctx context.Context, a args) (any, error) {
 				name := a.str("name")

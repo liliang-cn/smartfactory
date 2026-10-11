@@ -156,6 +156,7 @@ export const pullERP = (c: string, dry: boolean) => call<PullResult>('POST', `${
 export const rotateERPSecret = (c: string) => call<{ secret: string }>('POST', `${erpPath(c)}/secret`);
 export const orders = (c: string, status: string[] = [], q = '') =>
   call<Order[]>('GET', `${ordersPath(c)}?status=${status.join(',')}&q=${encodeURIComponent(q)}`);
+export const order = (c: string, no: string) => call<Order>('GET', `${ordersPath(c)}/${encodeURIComponent(no)}`);
 export const sendOrders = (c: string, list: OrderInput[]) => call<OrderResults>('POST', ordersPath(c), list);
 export const cancelOrder = (c: string, no: string) => call<Order>('DELETE', `${ordersPath(c)}/${encodeURIComponent(no)}`);
 
