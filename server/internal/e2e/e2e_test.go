@@ -64,10 +64,10 @@ node_hwmon_temp_celsius{chip="nvme_nvme0",sensor="temp1"} 54.85
 		},
 	}
 	jsonCfg := fmt.Sprintf(`{
-		"mqtt": {"url": "tcp://127.0.0.1:%d", "publish": [{"metric": "cpu0", "topic": "sf/huaduan/p1/HP-101/temp"}]},
+		"mqtt": {"url": "tcp://127.0.0.1:%d", "publish": [{"metric": "cpu0", "topic": "sf/huaduan/p1/HP-101/temp"}], "buffer": %q},
 		"modbus": {"listen": "127.0.0.1:%d", "holding": [{"metric": "cpu1", "address": 10, "scale": 10}]},
 		"opcua": {"host": "127.0.0.1", "port": %d, "nodes": [{"metric": "nvme", "node": "dell.nvme.temp"}]}
-	}`, mqttPort, modbusPort, opcPort)
+	}`, mqttPort, t.TempDir()+"/buffer.jsonl", modbusPort, opcPort)
 	if err := jsonUnmarshal(jsonCfg, &ecfg); err != nil {
 		t.Fatal(err)
 	}

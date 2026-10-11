@@ -44,6 +44,7 @@ import (
 	"smartfactory/internal/history"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
+	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
@@ -137,6 +138,19 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	eng, err := engine.New(log)
 	if err != nil {
 		return err
+	}
+	// readings no machine could give are kept but not believed (cfg.Series.Limits, machine specs)
+	validator := &series.Validator{Limits: cfg.Series.Limits, Machines: eng.Machines}
+	hub.Check = validator.Check
+	// every reading equipment sends, kept in the data directory
+	var readings *series.Store
+	if cfg.Data != "" {
+		if readings, err = series.Open(cfg.Data, series.RetentionFrom(cfg.Series), log); err != nil {
+			return fmt.Errorf("series: %w", err)
+		}
+		hub.Tap = readings.Add
+		readings.Start(ctx)
+		defer readings.Close()
 	}
 	eng.Dir = cfg.Data
 	switch {
@@ -317,7 +331,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Series: readings, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

@@ -64,7 +64,7 @@ type Store struct {
 	dropped atomic.Uint64
 	stored  atomic.Uint64
 	wg      sync.WaitGroup
-	once    sync.Once
+	cancel  context.CancelFunc
 
 	mu      sync.Mutex
 	ids     map[string]int64  // company/plant/asset/field → series id
@@ -176,10 +176,16 @@ func (s *Store) Stats() Stats {
 	return Stats{Stored: s.stored.Load(), Dropped: s.dropped.Load(), Series: n, Bytes: s.size()}
 }
 
-// Run writes readings as they come and seals, ages and trims the store in the background until
-// ctx ends; then it writes what is left.
-func (s *Store) Run(ctx context.Context) {
+// Start writes readings as they come and seals, ages and trims the store in the background,
+// until ctx ends or Close.
+func (s *Store) Start(ctx context.Context) {
+	ctx, s.cancel = context.WithCancel(ctx)
 	s.wg.Add(1)
+	go s.run(ctx)
+}
+
+// run writes until ctx ends, then writes what is left.
+func (s *Store) run(ctx context.Context) {
 	defer s.wg.Done()
 	flush := time.NewTicker(time.Second)
 	defer flush.Stop()
@@ -224,8 +230,11 @@ func (s *Store) Run(ctx context.Context) {
 	}
 }
 
-// Close waits for Run to finish, then closes the database.
+// Close stops the writer once it has written what is waiting, then closes the database.
 func (s *Store) Close() error {
+	if s.cancel != nil {
+		s.cancel()
+	}
 	s.wg.Wait()
 	return s.db.Close()
 }

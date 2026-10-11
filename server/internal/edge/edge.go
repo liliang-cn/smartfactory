@@ -39,6 +39,11 @@ type Config struct {
 			Metric string `json:"metric"`
 			Topic  string `json:"topic"`
 		} `json:"publish"`
+		// Buffer is the file readings wait in while the broker cannot be reached (default
+		// edge-buffer.jsonl in the working directory); they are sent with the time they were
+		// taken once it can. BufferMax readings at most (default 100000), the oldest dropped first.
+		Buffer    string `json:"buffer"`
+		BufferMax int    `json:"bufferMax"`
 	} `json:"mqtt"`
 	Modbus *struct {
 		Listen string `json:"listen"`
@@ -120,7 +125,19 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	}
 
 	var mc paho.Client
+	var buf *Buffer
 	if cfg.MQTT != nil {
+		path := cfg.MQTT.Buffer
+		if path == "" {
+			path = "edge-buffer.jsonl"
+		}
+		var err error
+		if buf, err = OpenBuffer(path, cfg.MQTT.BufferMax); err != nil {
+			return fmt.Errorf("mqtt buffer: %w", err)
+		}
+		if n := buf.Len(); n > 0 {
+			log.Info("mqtt buffer: readings waiting from before", "readings", n, "file", path)
+		}
 		host, _ := os.Hostname()
 		opts := paho.NewClientOptions().AddBroker(cfg.MQTT.URL).SetClientID("smartfactory-edge-" + host).
 			SetUsername(cfg.MQTT.Username).SetPassword(cfg.MQTT.Password).
@@ -161,17 +178,52 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 				}
 			}
 		}
-		if mc != nil && mc.IsConnected() {
-			for _, p := range cfg.MQTT.Publish {
-				if v, ok := fresh[p.Metric]; ok {
-					mc.Publish(p.Topic, 0, false, strconv.FormatFloat(v, 'f', 2, 64))
-				}
-			}
+		if mc != nil {
+			publish(mc, buf, cfg, fresh, time.Now(), log)
 		}
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-tick.C:
+		}
+	}
+}
+
+// publish sends this round's readings; while the broker cannot be reached they wait in buf,
+// and once it can, what waited goes first (in order, with the time each was taken).
+func publish(mc paho.Client, buf *Buffer, cfg Config, fresh map[string]float64, now time.Time, log *slog.Logger) {
+	// IsConnected is also true while paho reconnects; only an open connection takes a publish
+	if !mc.IsConnectionOpen() {
+		for _, p := range cfg.MQTT.Publish {
+			if v, ok := fresh[p.Metric]; ok {
+				if err := buf.Add(p.Topic, v, now); err != nil {
+					log.Error("mqtt buffer", "err", err)
+				}
+			}
+		}
+		return
+	}
+	if buf.Len() > 0 {
+		n, err := buf.Drain(func(topic string, payload []byte) error {
+			tok := mc.Publish(topic, 1, false, payload)
+			if !tok.WaitTimeout(5 * time.Second) {
+				return fmt.Errorf("broker did not acknowledge")
+			}
+			return tok.Error()
+		})
+		log.Info("mqtt buffer: sent what waited", "readings", n, "left", buf.Len(), "dropped", buf.Dropped(), "err", err)
+		if err != nil {
+			for _, p := range cfg.MQTT.Publish {
+				if v, ok := fresh[p.Metric]; ok {
+					buf.Add(p.Topic, v, now)
+				}
+			}
+			return
+		}
+	}
+	for _, p := range cfg.MQTT.Publish {
+		if v, ok := fresh[p.Metric]; ok {
+			mc.Publish(p.Topic, 0, false, strconv.FormatFloat(v, 'f', 2, 64))
 		}
 	}
 }

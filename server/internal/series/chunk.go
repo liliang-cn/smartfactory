@@ -130,15 +130,15 @@ func decodePoints(base int64, data []byte) ([]Point, error) {
 	return ps, nil
 }
 
-// mergePoints puts b into a in time order; a reading at the same instant as one already there
-// replaces it (a gateway sending the same reading twice).
+// mergePoints puts b into a in time order; the same reading at the same instant twice (a
+// gateway sending it again) is kept once.
 func mergePoints(a, b []Point) []Point {
 	all := append(append(make([]Point, 0, len(a)+len(b)), a...), b...)
 	sort.SliceStable(all, func(i, j int) bool { return all[i].T < all[j].T })
 	out := all[:0]
 	for _, p := range all {
-		if len(out) > 0 && out[len(out)-1].T == p.T {
-			out[len(out)-1] = p
+		if n := len(out); n > 0 && out[n-1].T == p.T && out[n-1].V == p.V {
+			out[n-1] = p
 			continue
 		}
 		out = append(out, p)
