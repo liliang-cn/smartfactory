@@ -8,10 +8,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { liveFields } from '@/sim/plant';
 import type { Asset } from '@/sim/types';
-import { usePlant, useTick, useUI } from '@/state/store';
+import { runtime, usePlant, useTick, useUI } from '@/state/store';
 import { fgCapacity } from '@/three/logistics';
 import { AssetIcon } from './icons';
 import { CHIP, STATE_LABEL, hhmm } from './status';
+import { HistoryChart, RANGES, type Range, type Summary } from './History';
 import { TrendChart, spcStats, type Metric } from './TrendChart';
 import { InventoryList } from './Panels';
 
@@ -166,18 +167,24 @@ function Controls({ a }: { a: Asset }) {
   );
 }
 
+/** the field a device reports for what a metric shows */
+const FIELD: Record<Metric, string> = { meas: 'measure', temp: 'temp', power: 'power', vib: 'vib', level: 'stock' };
+
 export function Inspector() {
-  const { sim } = usePlant();
+  const { sim, layout } = usePlant();
   const id = useUI((s) => s.selected);
   const follow = useUI((s) => s.follow);
   const tick = useTick();
   const a = id ? sim.assets.get(id) : null;
   const [metric, setMetric] = useState<Metric>('temp');
   const [peek, setPeek] = useState(false);
+  const [range, setRange] = useState<Range>('live');
+  const [summary, setSummary] = useState<Summary | null>(null);
   useEffect(() => {
     if (!a) return;
     setMetric(a.measure ? 'meas' : isMachine(a) ? 'temp' : 'level');
     setPeek(false);
+    setRange('live');
   }, [a]);
   if (!a) return null;
 
@@ -190,6 +197,17 @@ export function Inspector() {
   const spc = a.measure && metric === 'meas' ? spcStats(a) : null;
   const last = (a.hist[metric] ?? []).at(-1);
   const unit = { temp: '°C', power: 'kW', vib: 'mm/s', level: a.type === 'agv' ? '%' : '', meas: a.measure?.unit ?? '' }[metric];
+  // a machine that has sent readings has them stored: its history can be looked at
+  const measured = !!a.live;
+  const past = measured && range !== 'live';
+  const field = metric === 'level' && a.type === 'agv' ? 'battery' : FIELD[metric];
+  const refs: [number, string][] = [];
+  if (metric === 'temp' && a.spec?.warn) refs.push([a.spec.warn, '#f2a516'], [a.spec.trip!, '#e5383b']);
+  if (metric === 'meas' && a.measure) {
+    refs.push([a.measure.target, '#9fb2f0']);
+    if (a.measure.lo !== undefined) refs.push([a.measure.lo, '#e5383b']);
+    if (a.measure.hi !== undefined) refs.push([a.measure.hi, '#e5383b']);
+  }
 
   return (
     <aside
@@ -261,13 +279,25 @@ export function Inspector() {
               <b className="text-[13px] text-foreground">{a.type === 'agv' ? '电量趋势' : '库存趋势'}</b>
             )}
             <span className="ml-auto tabular-nums">
-              {spc ? (
+              {past ? (summary ? <>{summary.n} 个读数{summary.flagged > 0 && <b className="text-destructive">，{summary.flagged} 个可疑</b>}</> : '') : spc ? (
                 <>近 {spc.n} 台  均值 {spc.mean.toFixed(a.measure!.digits)}{'  '}
                   <b className={spc.cpk < 1.33 ? 'text-destructive' : 'text-success'}>Cpk {spc.cpk.toFixed(2)}</b></>
               ) : last !== undefined ? `近 4 分钟  ${last.toFixed(metric === 'vib' ? 2 : 0)} ${unit}` : ''}
             </span>
           </div>
-          <TrendChart asset={a} metric={metric} tick={tick} />
+          {past
+            ? <HistoryChart company={runtime().bundle.company.id} plant={layout.id} asset={a.id} field={field} range={range} lines={refs} onSummary={setSummary} />
+            : <TrendChart asset={a} metric={metric} tick={tick} />}
+          {measured && (
+            <div className="mt-1 flex gap-1" role="group" aria-label="时间范围">
+              {RANGES.map((x) => (
+                <button key={x.id} type="button" onClick={() => setRange(x.id)} aria-pressed={range === x.id}
+                  className={cn('h-6 rounded-md px-2 text-[11.5px] font-bold', range === x.id ? 'bg-brand-soft text-primary' : 'text-muted-foreground hover:bg-surface')}>
+                  {x.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-3.5 border-t pt-3.5"><Controls a={a} /></div>

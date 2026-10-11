@@ -174,10 +174,20 @@
 | `GET /api/health` | `Health` | 版本、单步耗时 `stepMs`、上次存盘时间 `savedAt`；公司列表和采集源只列令牌管的公司（访客为空） |
 | `GET /api/config/directory` | `Directory` | 运行时创建的公司中令牌管的那些：`[{id, name, short}]`（访客为空） |
 | `GET /api/config/company/{id}` | `RuntimeCompany` | 运行时创建的公司配置及其行业包，格式见 `web/src/config/schema/*.json`；不存在时 404 |
-| `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t}]`；不带 `company` 时只有令牌管的公司 |
+| `GET /api/tags?company=&plant=&asset=` | `Tags` | 设备最新实测值：`[{c, p, a, f, v, src, t, q?}]`；不带 `company` 时只有令牌管的公司。打了 1、2 标记的读数和超过 1 分钟前的读数不会成为最新值 |
+| `GET /api/series/{company}/{plant}/{asset}?field=&from=&to=&step=` | `SeriesAnswer` | 设备发来的读数，见下面「设备数据」；该公司成员以上 |
 | `GET /api/advisors?company=` | `Advisors` | 这家公司的顾问控制台地址；不带 `company` 时是令牌管的公司的 |
 | `GET /api/devices/{company}/{plant}` | `DeviceMap` | 这个厂在设备约定下的地址表（MQTT topic、Modbus 寄存器、OPC UA 节点），见 devices.md 第 6 节 |
 | `GET /api/audit/{company}?before=&limit=` | `AuditLog` | 这家公司的改动，新的在前：谁（`who`、`role`、`key`）、从哪来（`via`：`page` 页面、`live` 实时通道、`assistant` 助手、`mcp`）、做了什么（`action`、`target`、`detail`）、成没成（`ok`、`error`）。`limit` 默认 100、最多 500，`before` 是上一页最后一条的 `id`。需要该公司操作员以上。访客的试操作不记 |
+
+### 设备数据 `/api/series/{company}/{plant}/{asset}`
+
+服务器有数据目录时，设备发来的每个读数都存进 `{data}/series.db`，不需要另外的数据库。读数带设备的采集时间（devices.md 的「采集时间」），网关补发的读数也按原来的时间入库。
+
+- **存多久**：原始读数 `series.raw`（默认 14d），按分钟聚合 `series.minute`（默认 90d），按小时聚合 `series.hour`（默认 5y）。每过完一小时，这一小时的读数压成一块（平均每个读数 2 字节左右），同时写出分钟和小时的最小值、最大值、平均值、读数个数、最后一个值和被标记的个数。整个库的大小受 `series.maxMB`（默认 4096）限制，超出时先删最旧的原始读数，再删最旧的分钟。
+- **标记**：1 超出合理范围，2 变化比设备可能的还快，4 采集时间不可用、改用收到时间。标记 1、2 的读数照样入库，但不算进聚合的平均、最小、最大，不进孪生，并计入采集源的 `flagged` 和 `lastFlag`（`GET /api/health`）。
+- **查询**：`field` 逗号分隔，不带时返回这台设备存过的全部字段。`from`、`to` 是 Unix 毫秒或 RFC 3339，默认最近一小时。`step` 可以是 `raw`、`minute`、`hour`；不带时按范围自动选：6 小时以内、并且仍在原始读数保留期内的用 `raw`，8 天以内用 `minute`，更长用 `hour`。`raw` 每个字段最多返回 20000 个读数，超了会自动改用 `minute`；手动指定 `raw` 的只返回最新的那些，并带上 `truncated`。
+- **点的格式**：`raw` 是 `[t, 值, 标记]`；`minute`、`hour` 是 `[t, 平均, 最小, 最大, 读数个数, 被标记个数]`，一个区间里全是被标记的读数时，平均、最小、最大为 `null`。状态词、故障文字这类字符串只在变化时存，放在 `events` 里。
 
 ## 4. 顾问接口 `/api/advisor/{company}/…`
 
