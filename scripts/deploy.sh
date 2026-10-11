@@ -33,5 +33,10 @@ ssh "$host" "set -e
   sudo systemctl restart \$units && sleep 2 && systemctl is-active \$units | tr '\\n' ' '"
 
 if [ "$target" = server ]; then
-  curl -fsS -H "Host: huaduan.factory.superleo.cn" http://192.168.123.65:44719/api/site | tr -d ' \n'; echo
+  # the instances take a few seconds to restore their state before they answer
+  for _ in $(seq 30); do
+    curl -fsS -H "Host: huaduan.factory.superleo.cn" http://192.168.123.65:44719/api/site 2>/dev/null | tr -d ' \n' && echo && exit 0
+    sleep 2
+  done
+  echo "huaduan did not answer" >&2; exit 1
 fi
