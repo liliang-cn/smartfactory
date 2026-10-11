@@ -11,6 +11,7 @@ import (
 
 	"smartfactory/internal/agents"
 	"smartfactory/internal/auth"
+	"smartfactory/internal/erp"
 	"smartfactory/internal/mcptools"
 )
 
@@ -24,8 +25,9 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 你能做的事都通过工具：
 - 看：list_customers、get_customer（配置和知识库概况）、list_industries、get_industry、list_tokens、activity（操作记录）。
 - 知识库：knowledge_search（文档和工艺）、knowledge_entity（工艺图里一样东西的上下游和关系）。
+- 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
 - 写配置：check_company 检查一份公司配置（不创建），用来验证你写的配置。
-- 改动：propose_create_company、propose_delete_company、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
+- 改动：propose_create_company、propose_delete_company、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
 规则：
 - 用中文，简洁。数字、编号、名称以工具返回为准，不要编。
@@ -117,6 +119,24 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			}},
 		{"knowledge_entity", "工艺图里一样东西（工位编号、设备名、产线、产品、供应商、客户）和它的关系。", obj(map[string]any{"company": str("公司 id"), "name": str("名字")}, "company", "name"),
 			func(m map[string]any) (any, error) { return o.KnowledgeEntity(ctx, who, s(m, "company"), s(m, "name")) }},
+		{"list_orders", "一家公司的生产工单（来自 ERP）：在做的、排队的（按将要生产的顺序）、完成的和撤回的，含产线、完成数、交期、客户。", obj(map[string]any{
+			"company": str("公司 id"), "status": str("queued、running、done、cancelled，逗号分隔，可省"), "q": str("按工单号、料号、客户、产线找，可省"),
+		}, "company"),
+			func(m map[string]any) (any, error) {
+				var st []string
+				for _, x := range strings.Split(s(m, "status"), ",") {
+					if x = strings.TrimSpace(x); x != "" {
+						st = append(st, x)
+					}
+				}
+				return o.Orders(who, s(m, "company"), erp.Filter{Status: st, Q: s(m, "q"), Limit: 50})
+			}},
+		{"erp_status", "一家公司的 ERP 对接：开没开、没工单时停线还是仿真、拉取地址和上次结果、回调成功失败数、各状态工单数。", obj(map[string]any{"company": str("公司 id")}, "company"),
+			func(m map[string]any) (any, error) { return o.ERP(who, s(m, "company")) }},
+		{"propose_cancel_order", "提出撤回一张工单（在做的产线会停下它转做下一张），交管理员确认。", obj(map[string]any{"company": str("公司 id"), "no": str("工单号")}, "company", "no"),
+			func(m map[string]any) (any, error) {
+				return propose(Action{Kind: "cancel_order", Args: map[string]any{"company": s(m, "company"), "no": s(m, "no")}, Detail: "在做的产线停下它，转做下一张；ERP 再发一次同号工单会重新排队"})
+			}},
 		{"propose_create_company", "提出新建（或同 id 替换）一家公司的工厂，交管理员确认。先 check_company 通过。", obj(map[string]any{"config": map[string]any{"type": "object"}}, "config"),
 			func(m map[string]any) (any, error) {
 				cfg, ok := m["config"].(map[string]any)

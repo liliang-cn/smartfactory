@@ -3,7 +3,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  BookOpenTextIcon, BotIcon, BoxIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, KeyRoundIcon, NotebookPenIcon,
+  BookOpenTextIcon, BotIcon, BoxIcon, ClipboardListIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, KeyRoundIcon, NotebookPenIcon,
   PencilIcon, PlugZapIcon, ScrollTextIcon, Trash2Icon, TrendingUpIcon,
 } from 'lucide-react';
 import {
@@ -19,6 +19,8 @@ import { AccountList } from './Accounts';
 import { ActivityList } from './Activity';
 import { Blueprint, BlueprintLegend } from './Blueprint';
 import { PageHead, useConsole } from './Console';
+import { OrderBoard, ERPPanel } from './Orders';
+import { Panel } from './Panel';
 import { Badge, totals } from './Customers';
 import { forget, useCompany } from './layouts';
 import { go, query, usePath } from './router';
@@ -27,6 +29,7 @@ const KnowledgeBase = lazy(() => import('./Knowledge'));
 
 const TABS = [
   { id: 'scene', label: '场景', icon: BoxIcon },
+  { id: 'orders', label: '工单', icon: ClipboardListIcon },
   { id: 'ai', label: '助手', icon: BotIcon },
   { id: 'knowledge', label: '知识', icon: BookOpenTextIcon },
   { id: 'connect', label: '接入', icon: PlugZapIcon },
@@ -39,20 +42,6 @@ const fmtDay = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
 };
-
-function Panel({ title, aside, children, className }: { title?: React.ReactNode; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  return (
-    <section className={cn('rounded-[18px] bg-card p-5 shadow-float max-sm:p-4', className)}>
-      {(title || aside) && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {title && <h2 className="text-[15px] font-extrabold">{title}</h2>}
-          {aside && <div className="ml-auto flex items-center gap-2">{aside}</div>}
-        </div>
-      )}
-      {children}
-    </section>
-  );
-}
 
 function PlantPanel({ plant, info }: { plant: PlantLayout; info?: api.Company['plants'][number] }) {
   return (
@@ -287,7 +276,8 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
           <Suspense fallback={null}><KnowledgeBase company={c.id} admin={ov.me.role === 'admin'} /></Suspense>
           <Library c={c} />
         </TabsContent>
-        <TabsContent value="connect"><Connect c={c} /></TabsContent>
+        <TabsContent value="orders"><OrderBoard c={c} /></TabsContent>
+        <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><Connect c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
         <TabsContent value="activity"><ActivityList company={c.id} /></TabsContent>
       </Tabs>

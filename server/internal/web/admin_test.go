@@ -35,7 +35,8 @@ func TestAdminConsole(t *testing.T) {
 	}
 	eng.Dir = t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	// the engine saves its state on the way out: wait for it before the directory goes
+	t.Cleanup(func() { cancel(); <-eng.Done })
 	go eng.Run(ctx)
 	trail, err := audit.Open(t.TempDir(), log)
 	if err != nil {

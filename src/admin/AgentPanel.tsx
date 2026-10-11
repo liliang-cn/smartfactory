@@ -66,14 +66,15 @@ export const useAgent = create<AgentState>()((set, get) => ({
 }));
 
 const STEP: Record<string, string> = {
-  list_customers: '看客户', get_customer: '读客户配置', list_industries: '看行业包', get_industry: '读行业包', check_company: '检查配置',
+  list_customers: '看公司', get_customer: '读公司配置', list_industries: '看行业包', get_industry: '读行业包', check_company: '检查配置',
   list_tokens: '看令牌', activity: '看操作记录', knowledge_search: '搜知识库', knowledge_entity: '查工艺图',
   propose_create_company: '提出建公司', propose_delete_company: '提出删公司', propose_issue_token: '提出发令牌',
   propose_revoke_token: '提出撤销令牌', propose_rebuild_knowledge: '提出重建知识库',
+  list_orders: '看工单', erp_status: '看 ERP 对接', propose_cancel_order: '提出撤回工单',
 };
 const stepText = (s: Step) => [STEP[s.tool] ?? s.tool, ...['id', 'company', 'name', 'query'].map((k) => s.args?.[k]).filter((v): v is string => typeof v === 'string' && !!v)].join(' ');
 
-const SUGGEST = ['哪些设备接了真实数据？', '华锻 IH-101 的上下游是什么，作业要求在哪份资料里？', '给张工发一个操作员令牌', '最近一周谁改过什么？'];
+const SUGGEST = ['现在在做哪些工单，哪张会延期？', '哪些设备接了真实数据？', '给 ERP 发一个接口令牌', '最近一周谁改过什么？'];
 
 function ActionCard({ card, onChange }: { card: Card; onChange(c: Card): void }) {
   const { reload } = useConsole();

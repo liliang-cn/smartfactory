@@ -7,7 +7,7 @@ import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type { PlantState, ProductTuple } from '@/protocol/sfp';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec,
+  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, ExtOrder, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec, OrderFeed,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -74,7 +74,7 @@ export interface SavedPlant {
   /** shipments on their way, complaints still to come */
   later?: Later[];
   /** each line's steel heat, work order and planning state, in layout order */
-  lines?: { lot?: Lot; job?: Job; pmWeek?: number; planEff?: number }[];
+  lines?: { lot?: Lot; job?: Job; last?: Job; pmWeek?: number; planEff?: number }[];
   /** the last purchase / shipment / complaint number */
   seq?: number;
 }
@@ -127,6 +127,8 @@ export class PlantSim {
   synced = true;
   /** hour-by-hour record for the history database (server only) */
   history?: History;
+  /** the company's ERP orders, when it sends any */
+  orders?: OrderFeed;
   /** nobody will look at sparklines (history backfill, what-if runs): skip keeping them */
   headless = false;
   /** `${asset} ${code}` of every active alarm, so clearing a condition that is not raised is cheap */
@@ -290,8 +292,17 @@ export class PlantSim {
    * that is running; a different one means changing over to that part's own tools first.
    */
   private newJob(line: Line) {
+    // what-if runs and backfills make up their own orders and leave the ERP's queue alone
+    const ext = this.headless ? undefined : this.orders?.take(line);
+    if (ext === null) {
+      // the ERP has nothing for this line: it waits, and remembers the part it last ran
+      if (line.job) line.last = line.job;
+      line.job = undefined;
+      return;
+    }
+    if (ext) return this.extJob(line, ext);
     const vs = this.variants(line);
-    const prev = line.job;
+    const prev = line.job ?? line.last;
     let v = prev ? prev.variant : 0;
     if (!prev || (vs.length > 1 && Math.random() > 0.35)) {
       let r = Math.random() * vs.reduce((s, x) => s + (x.share ?? 1), 0);
@@ -321,6 +332,42 @@ export class PlantSim {
     // the delivery date the customer is promised: done by the due date, on the road, a day's margin
     line.job.promise = line.job.due + (line.job.transit + 24) * 3600_000;
     if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
+  }
+
+  /** Starts an ERP order: its part number, quantity, customer and due date as the ERP gave them. */
+  private extJob(line: Line, o: ExtOrder) {
+    const vs = this.variants(line);
+    const prev = line.job ?? line.last;
+    let v = vs.findIndex((x) => x.partNo === o.partNo);
+    if (v < 0) v = prev?.variant ?? 0;
+    const L = line.layout;
+    const pr = L.product;
+    const neck = Math.max(...line.stations.map((a) => a.cycle));
+    const now = this.wall();
+    const cust = (pr.customers ?? []).find((c) => c.name === o.customer);
+    const transit = cust?.transit ?? 24;
+    const due = o.due ?? now + ((o.qty * neck) / (line.planEff ?? 0.75)) * 1000 + 3 * 3600_000;
+    line.job = {
+      no: o.no, seq: (prev?.seq ?? 0) + 1, variant: v, partNo: o.partNo || vs[v].partNo, name: o.name || vs[v].name,
+      weight: vs[v].weight ?? pr.weight ?? 0, input: vs[v].input ?? pr.input ?? 0, qty: o.qty, good: 0, scrap: 0, issued: now, due,
+      heat: line.lot?.no ?? '', supplier: line.lot?.supplier ?? '',
+      customer: o.customer ?? cust?.name ?? pr.customer ?? '', transit, price: o.price ?? vs[v].price ?? pr.price ?? 0,
+      promise: due + (transit + 24) * 3600_000, ext: true,
+    };
+    line.last = undefined;
+    if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
+    this.orders?.event({ kind: 'start', no: o.no, plant: this.layout.id, line: line.id, good: 0, scrap: 0, plantName: this.layout.name, lineName: line.name });
+  }
+
+  /** Stops an ERP order the ERP took back; the line goes on with its next one. */
+  dropOrder(no: string) {
+    for (const line of this.lines) {
+      if (line.job?.ext && line.job.no === no) {
+        line.last = line.job;
+        line.job = undefined;
+        this.note(line.stations[0], `${line.name}工单 ${no} 已撤回`, 'op');
+      }
+    }
   }
 
   /** Changes a line over to another part number: every tooled machine mounts that part's tools. */
@@ -355,6 +402,7 @@ export class PlantSim {
       const ran = Math.min(1, Math.max(0.2, (j.qty * neck) / Math.max(1, (j.done - j.issued) / 1000)));
       line.planEff = 0.7 * (line.planEff ?? 0.75) + 0.3 * ran;
       this.history?.jobDone(line, j);
+      if (j.ext && !this.headless) this.orders?.event({ kind: 'done', no: j.no, plant: this.layout.id, line: line.id, good: j.good, scrap: j.scrap, plantName: this.layout.name, lineName: line.name });
       // packed and staged, it leaves with the next scheduled pickup
       this.schedule({ at: j.done + rand(2, 16) * 3600_000, kind: 'ship', data: { line: line.id, job: { ...j, escapes: { ...(j.escapes ?? {}) } } } });
       this.newJob(line);
@@ -604,7 +652,7 @@ export class PlantSim {
     // Release raw parts from the infeed buffer onto the belt.
     line.spawnT -= dt;
     const last = P[P.length - 1];
-    if (v > 0 && line.infeed.stock > 0 && line.spawnT <= 0 && (!last || last.s > line.gap + 0.05)) {
+    if (v > 0 && line.infeed.stock > 0 && line.spawnT <= 0 && (line.job || this.follower) && (!last || last.s > line.gap + 0.05)) {
       if (!this.follower && (!line.lot || line.lot.left <= 0)) this.newLot(line);
       const lot = line.lot;
       if (lot) lot.left--;
@@ -1614,7 +1662,7 @@ export class PlantSim {
       repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
       recond: this.repairs,
       later: this.later,
-      lines: this.lines.map((l) => ({ lot: l.lot, job: l.job, pmWeek: l.pmWeek, planEff: l.planEff })),
+      lines: this.lines.map((l) => ({ lot: l.lot, job: l.job, last: l.last, pmWeek: l.pmWeek, planEff: l.planEff })),
       seq: this.seq,
     };
   }
@@ -1641,7 +1689,7 @@ export class PlantSim {
     this.later = saved.later ?? [];
     this.lines.forEach((l, i) => {
       const x = saved.lines?.[i];
-      if (x) Object.assign(l, { lot: x.lot, job: x.job, pmWeek: x.pmWeek, planEff: x.planEff });
+      if (x) Object.assign(l, { lot: x.lot, job: x.job, last: x.last, pmWeek: x.pmWeek, planEff: x.planEff });
     });
     this.seq = saved.seq ?? this.seq;
     // carry on in the present: the plant's wall clock is now

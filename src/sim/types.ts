@@ -185,7 +185,21 @@ export interface Job {
   customer: string; transit: number; price: number; promise: number;
   /** flawed units that got past final inspection, by flaw */
   escapes?: Record<string, number>;
+  /** a production order from the company's ERP, not one the simulation made up */
+  ext?: boolean;
 }
+
+/** A production order from the company's ERP, queued for a line. */
+export interface ExtOrder { no: string; partNo?: string; name?: string; qty: number; due?: number; customer?: string; price?: number }
+
+/** A line started or finished an ERP order. */
+export interface OrderEvent { kind: 'start' | 'done'; no: string; plant: string; line: string; good: number; scrap: number; plantName: string; lineName: string }
+
+/**
+ * Where a plant's lines get ERP orders: `take` gives a line its next order, null when it should
+ * wait for one, undefined when it makes up its own; `event` hears what became of them.
+ */
+export interface OrderFeed { take(line: Line): ExtOrder | null | undefined; event(e: OrderEvent): void }
 
 /** Something that happens later on its own: goods leave, arrive, a customer complains. */
 export interface Later { at: number; kind: 'ship' | 'deliver' | 'complain' | 'close'; data: Record<string, unknown> }
@@ -203,6 +217,8 @@ export interface Line {
   pmWeek?: number;
   /** the work order being run */
   job?: Job;
+  /** the order it finished last, while it waits for the ERP's next one */
+  last?: Job;
   /** the efficiency the planner promises due dates by: what the line's recent orders actually ran at */
   planEff?: number;
   layout: LineLayout;

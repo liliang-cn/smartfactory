@@ -25,6 +25,12 @@ export type EntityKind = z.infer<typeof P.EntityKind>;
 export type TemplateSummary = z.infer<typeof P.TemplateSummary>;
 export type Template = z.infer<typeof P.Template>;
 export type SaveTemplate = z.infer<typeof P.SaveTemplate>;
+export type Order = z.infer<typeof P.Order>;
+export type OrderInput = z.infer<typeof P.OrderInput>;
+export type OrderResults = z.infer<typeof P.OrderResults>;
+export type ERPConfig = z.infer<typeof P.ERPConfig>;
+export type ERPOverview = z.infer<typeof P.ERPOverview>;
+export type PullResult = z.infer<typeof P.PullResult>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -57,7 +63,7 @@ async function call<T>(method: string, path: string, json?: unknown): Promise<T>
   const t = token();
   const res = await fetch(path, {
     method,
-    headers: { ...(json !== undefined && { 'Content-Type': 'application/json' }), ...(t && { Authorization: `Bearer ${t}` }) },
+    headers: { 'X-SF-Via': 'page', ...(json !== undefined && { 'Content-Type': 'application/json' }), ...(t && { Authorization: `Bearer ${t}` }) },
     body: json !== undefined ? JSON.stringify(json) : undefined,
   });
   const text = await res.text();
@@ -142,6 +148,17 @@ async function stream<E>(path: string, body: unknown, signal: AbortSignal, on: (
 }
 
 /** A company's assistants and documents (the twin's own API), for the customer page. */
+const erpPath = (c: string) => `/api/admin/erp/${encodeURIComponent(c)}`;
+const ordersPath = (c: string) => `/api/erp/${encodeURIComponent(c)}/orders`;
+export const erp = (c: string) => call<ERPOverview>('GET', erpPath(c));
+export const setERP = (c: string, cfg: ERPConfig) => call<{ ok: true; secret?: string }>('PUT', erpPath(c), cfg);
+export const pullERP = (c: string, dry: boolean) => call<PullResult>('POST', `${erpPath(c)}/pull${dry ? '?dry=1' : ''}`);
+export const rotateERPSecret = (c: string) => call<{ secret: string }>('POST', `${erpPath(c)}/secret`);
+export const orders = (c: string, status: string[] = [], q = '') =>
+  call<Order[]>('GET', `${ordersPath(c)}?status=${status.join(',')}&q=${encodeURIComponent(q)}`);
+export const sendOrders = (c: string, list: OrderInput[]) => call<OrderResults>('POST', ordersPath(c), list);
+export const cancelOrder = (c: string, no: string) => call<Order>('DELETE', `${ordersPath(c)}/${encodeURIComponent(no)}`);
+
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export const docs = (c: string) => call<z.infer<typeof P.Docs>>('GET', `/api/library/${encodeURIComponent(c)}/docs`);
 export const health = () => call<z.infer<typeof P.Health>>('GET', '/api/health');

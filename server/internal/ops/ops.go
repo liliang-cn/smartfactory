@@ -17,6 +17,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/tags"
@@ -35,6 +36,8 @@ type Ops struct {
 	Version  string
 	// Saved are the templates saved on this instance.
 	Saved *templates.Store
+	// Production is the companies' ERP connections and production orders.
+	Production *erp.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

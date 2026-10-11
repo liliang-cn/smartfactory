@@ -38,6 +38,7 @@ import (
 	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/erp"
 	"smartfactory/internal/history"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
@@ -266,9 +267,29 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			return err
 		}
 	}
+	// production orders from each company's ERP, run by its lines
+	var production *erp.Service
+	if cfg.Data != "" {
+		orders, err := erp.Open(cfg.Data)
+		if err != nil {
+			return fmt.Errorf("erp: %w", err)
+		}
+		defer orders.Close()
+		production = erp.New(orders, eng, log)
+		go production.Run(ctx)
+		synced := eng.OnChange
+		eng.OnChange = func(company string, deleted bool) {
+			if synced != nil {
+				synced(company, deleted)
+			}
+			if !deleted {
+				production.Reroute(company)
+			}
+		}
+	}
 	ms := mcptools.New(hub, eng, version, trail)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

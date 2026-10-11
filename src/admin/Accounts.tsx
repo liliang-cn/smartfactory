@@ -43,7 +43,13 @@ function Status({ a }: { a: api.Account }) {
 
 const FROM: Record<api.Account['from'], string> = { legacy: '最初的共用令牌', config: '服务器配置文件', issued: '后台签发' };
 
-function Issue({ open, onOpenChange, company, onIssued }: { open: boolean; onOpenChange(o: boolean): void; company?: string; onIssued(): void }) {
+export function Issue({ open, onOpenChange, company, onIssued, holder = '', note }: {
+  open: boolean; onOpenChange(o: boolean): void; company?: string; onIssued(): void;
+  /** who it is for, filled in (an operator's token for a system) */
+  holder?: string;
+  /** what to do with it, under the token once issued */
+  note?: React.ReactNode;
+}) {
   const { ov } = useConsole();
   const [name, setName] = useState('');
   const [role, setRole] = useState<'member' | 'operator' | 'admin'>('operator');
@@ -54,8 +60,8 @@ function Issue({ open, onOpenChange, company, onIssued }: { open: boolean; onOpe
   const [error, setError] = useState<string>();
   const [done, setDone] = useState<api.IssuedToken | null>(null);
   useEffect(() => {
-    if (open) { setName(''); setRole('operator'); setAll(false); setPicked(company ? [company] : []); setExpires(''); setError(undefined); setDone(null); }
-  }, [open, company]);
+    if (open) { setName(holder); setRole('operator'); setAll(false); setPicked(company ? [company] : []); setExpires(''); setError(undefined); setDone(null); }
+  }, [open, company, holder]);
   const ready = name.trim() && (all || picked.length);
   const submit = async () => {
     setBusy(true);
@@ -139,7 +145,8 @@ function Issue({ open, onOpenChange, company, onIssued }: { open: boolean; onOpe
                 <code className="min-w-0 flex-1 font-mono text-[13px] break-all">{done.token}</code>
                 <CopyIcon className="size-4 shrink-0 text-muted-foreground" />
               </button>
-              <div className="grid gap-1.5 text-[12.5px]">
+              {note}
+              <div className={cn('grid gap-1.5 text-[12.5px]', note && 'hidden')}>
                 <button type="button" onClick={() => copy(twin, '孪生链接')} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left font-bold hover:bg-surface">
                   <CopyIcon className="size-3.5 text-muted-foreground" />复制带令牌的孪生链接<span className="ml-auto font-normal text-muted-foreground">打开就是{api.ROLE_LABEL[done.account.role]}</span>
                 </button>

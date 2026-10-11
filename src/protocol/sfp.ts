@@ -492,10 +492,11 @@ export const AuditEntry = z.object({
   id: num, at: time, who: str, role: Role,
   /** which token: the start of its hash ("token" for the original single token) */
   key: str,
-  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli']),
+  /** api: another system (the ERP) calling the order API with its own token */
+  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
 });
@@ -652,11 +653,93 @@ export const KnowledgeGraph = z.object({
   edges: z.array(z.object({ from: str, to: str, type: RelationType })),
 }).meta({ description: 'GET /api/knowledge/{company}/graph — the process graph whole, for drawing' });
 
+// ---------- production orders from the ERP (/api/erp/{company}/orders, /api/admin/erp/{company}) ----------
+
+/** queued: waiting for its line · running · done · cancelled: withdrawn */
+export const OrderStatus = z.enum(['queued', 'running', 'done', 'cancelled']);
+
+/** A production order as the twin keeps it. */
+export const Order = z.object({
+  no: str, partNo: str.optional(), product: str.optional(), name: str.optional(), qty: num,
+  due: time.optional(), customer: str.optional(), price: num.optional(),
+  /** where it runs: plant and line ids, and their names */
+  plant: str, plantName: str, line: str, lineName: str,
+  /** why it cannot run (no line makes its part any more) */
+  problem: str.optional(),
+  status: OrderStatus, good: num, scrap: num,
+  /** push: the ERP sent it · pull: read from the ERP · console: entered by hand */
+  source: z.enum(['push', 'pull', 'console']),
+  created: time, started: time.optional(), finished: time.optional(), updated: time,
+});
+export const Orders = z.array(Order).meta({ description: 'GET /api/erp/{company}/orders?status=&q=&limit= — running, then queued in the order they will run, then the rest; members and above' });
+
+/**
+ * An order as an ERP sends it (POST /api/erp/{company}/orders: one, a list, or {orders: [...]};
+ * operators and above). Numbers may be strings; due is RFC 3339, "2026-10-20 17:00", "2026-10-20"
+ * (Beijing time) or epoch seconds or milliseconds. Without plant/line it goes to a line that makes
+ * its part number (or product). Sending a number again changes a queued order, a running one's
+ * qty, due, customer and price, and queues a withdrawn one again.
+ */
+export const OrderInput = z.object({
+  no: str, partNo: str.optional(), product: str.optional(), name: str.optional(), qty: z.union([num, str]),
+  due: z.union([str, num]).optional(), customer: str.optional(), price: z.union([num, str]).optional(),
+  plant: str.optional(), line: str.optional(),
+});
+export const OrderResults = z.array(z.object({
+  no: str, ok: z.boolean(),
+  outcome: z.enum(['created', 'updated', 'unchanged', 'requeued']).optional(),
+  plant: str.optional(), line: str.optional(), lineName: str.optional(), error: str.optional(),
+})).meta({ description: 'POST /api/erp/{company}/orders — each order answered on its own, in the order sent' });
+
+/**
+ * What the ERP's callback receives when a line starts or finishes an order: POST with
+ * X-SF-Event and X-SF-Signature: sha256=hex(HMAC-SHA256(secret, body)).
+ */
+export const OrderCallback = z.object({
+  event: z.enum(['order.started', 'order.done']), company: str, at: time, order: Order,
+});
+
+const ERPConfigBody = {
+  enabled: z.boolean(),
+  /** a line with no order from the ERP: idle (waits) or simulate (makes up its own) */
+  whenEmpty: z.enum(['idle', 'simulate']),
+  pull: z.object({
+    url: str, method: z.enum(['GET', 'POST']).optional(), body: str.optional(),
+    /** the console sees the names only; a value left empty keeps what it was */
+    headers: z.record(str, str).optional(),
+    /** where the list is in the answer, a dotted path ("data.rows"); empty for the answer itself */
+    items: str.optional(),
+    /** order field (no, partNo, product, name, qty, due, customer, price, plant, line) → dotted path in an item; a number indexes an array */
+    fields: z.record(str, str),
+    /** minutes between pulls; 0 or absent pulls only when asked */
+    every: num.optional(),
+  }).optional(),
+  notify: z.object({ url: str }).optional(),
+};
+export const ERPConfig = z.object(ERPConfigBody).meta({ description: 'PUT /api/admin/erp/{company}; answers {ok, secret?} — the callback signing secret, shown once, when a callback is first set' });
+
+export const ERPOverview = z.object({
+  config: z.object({ ...ERPConfigBody, whenEmpty: z.enum(['idle', 'simulate']), secretSet: z.boolean() }),
+  status: z.object({
+    lastPull: time.optional(), pullError: str.optional(), pullFetched: num, pullProblems: z.array(str).optional(),
+    lastNotify: time.optional(), notifyError: str.optional(), delivered: num, failed: num,
+  }),
+  counts: z.record(OrderStatus, num),
+  /** the order fields a pull can map */
+  fields: z.array(str),
+}).meta({ description: 'GET /api/admin/erp/{company} — the connection, how it last went, orders by status' });
+
+export const PullResult = z.object({
+  fetched: num,
+  items: z.array(z.object({ order: z.record(str, z.unknown()), lineName: str.optional(), outcome: str.optional(), error: str.optional() })),
+  created: num, updated: num, failed: num,
+}).meta({ description: 'POST /api/admin/erp/{company}/pull?dry=1 — what a pull reads and where each order would run (dry: nothing stored)' });
+
 // ---------- the console agent (/api/admin/agent) ----------
 
 /** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
 export const ConsoleAction = z.object({
-  kind: z.enum(['create_company', 'delete_company', 'issue_token', 'revoke_token', 'rebuild_knowledge']),
+  kind: z.enum(['create_company', 'delete_company', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [
@@ -683,6 +766,7 @@ export const DEFS = {
   AdminOverview, CompanyCreated, ConfigProblem, Accounts, Account, IssueToken, IssuedToken, ComposeRequest, ComposeEvent,
   KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, ConsoleAction, ConsoleEvent,
   Templates, TemplateSummary, Template, SaveTemplate,
+  Order, Orders, OrderInput, OrderResults, OrderCallback, ERPConfig, ERPOverview, PullResult,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

@@ -2892,7 +2892,8 @@
               "live",
               "assistant",
               "mcp",
-              "cli"
+              "cli",
+              "api"
             ]
           },
           "company": {
@@ -3799,7 +3800,8 @@
             "delete_company",
             "issue_token",
             "revoke_token",
-            "rebuild_knowledge"
+            "rebuild_knowledge",
+            "cancel_order"
           ]
         },
         "title": {
@@ -4150,6 +4152,520 @@
         "name"
       ],
       "additionalProperties": false
+    },
+    "Order": {
+      "type": "object",
+      "properties": {
+        "no": {
+          "type": "string"
+        },
+        "partNo": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "qty": {
+          "type": "number"
+        },
+        "due": {
+          "type": "string"
+        },
+        "customer": {
+          "type": "string"
+        },
+        "price": {
+          "type": "number"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "plantName": {
+          "type": "string"
+        },
+        "line": {
+          "type": "string"
+        },
+        "lineName": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "done",
+            "cancelled"
+          ]
+        },
+        "good": {
+          "type": "number"
+        },
+        "scrap": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "push",
+            "pull",
+            "console"
+          ]
+        },
+        "created": {
+          "type": "string"
+        },
+        "started": {
+          "type": "string"
+        },
+        "finished": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "no",
+        "qty",
+        "plant",
+        "plantName",
+        "line",
+        "lineName",
+        "status",
+        "good",
+        "scrap",
+        "source",
+        "created",
+        "updated"
+      ],
+      "additionalProperties": false
+    },
+    "Orders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Order"
+      },
+      "description": "GET /api/erp/{company}/orders?status=&q=&limit= — running, then queued in the order they will run, then the rest; members and above"
+    },
+    "OrderInput": {
+      "type": "object",
+      "properties": {
+        "no": {
+          "type": "string"
+        },
+        "partNo": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "qty": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "due": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "customer": {
+          "type": "string"
+        },
+        "price": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "plant": {
+          "type": "string"
+        },
+        "line": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "no",
+        "qty"
+      ],
+      "additionalProperties": false
+    },
+    "OrderResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "no": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "unchanged",
+              "requeued"
+            ]
+          },
+          "plant": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "lineName": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "no",
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "description": "POST /api/erp/{company}/orders — each order answered on its own, in the order sent"
+    },
+    "OrderCallback": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": [
+            "order.started",
+            "order.done"
+          ]
+        },
+        "company": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        }
+      },
+      "required": [
+        "event",
+        "company",
+        "at",
+        "order"
+      ],
+      "additionalProperties": false
+    },
+    "ERPConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "whenEmpty": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "simulate"
+          ]
+        },
+        "pull": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST"
+              ]
+            },
+            "body": {
+              "type": "string"
+            },
+            "headers": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "items": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "every": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "url",
+            "fields"
+          ],
+          "additionalProperties": false
+        },
+        "notify": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "enabled",
+        "whenEmpty"
+      ],
+      "additionalProperties": false,
+      "description": "PUT /api/admin/erp/{company}; answers {ok, secret?} — the callback signing secret, shown once, when a callback is first set"
+    },
+    "ERPOverview": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "whenEmpty": {
+              "type": "string",
+              "enum": [
+                "idle",
+                "simulate"
+              ]
+            },
+            "pull": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "GET",
+                    "POST"
+                  ]
+                },
+                "body": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "items": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "every": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "url",
+                "fields"
+              ],
+              "additionalProperties": false
+            },
+            "notify": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            "secretSet": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "whenEmpty",
+            "secretSet"
+          ],
+          "additionalProperties": false
+        },
+        "status": {
+          "type": "object",
+          "properties": {
+            "lastPull": {
+              "type": "string"
+            },
+            "pullError": {
+              "type": "string"
+            },
+            "pullFetched": {
+              "type": "number"
+            },
+            "pullProblems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "lastNotify": {
+              "type": "string"
+            },
+            "notifyError": {
+              "type": "string"
+            },
+            "delivered": {
+              "type": "number"
+            },
+            "failed": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "pullFetched",
+            "delivered",
+            "failed"
+          ],
+          "additionalProperties": false
+        },
+        "counts": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "cancelled"
+            ]
+          },
+          "additionalProperties": {
+            "type": "number"
+          },
+          "required": [
+            "queued",
+            "running",
+            "done",
+            "cancelled"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "config",
+        "status",
+        "counts",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/admin/erp/{company} — the connection, how it last went, orders by status"
+    },
+    "PullResult": {
+      "type": "object",
+      "properties": {
+        "fetched": {
+          "type": "number"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "order": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "lineName": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "order"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "created": {
+          "type": "number"
+        },
+        "updated": {
+          "type": "number"
+        },
+        "failed": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fetched",
+        "items",
+        "created",
+        "updated",
+        "failed"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/admin/erp/{company}/pull?dry=1 — what a pull reads and where each order would run (dry: nothing stored)"
     },
     "Source": {
       "type": "object",

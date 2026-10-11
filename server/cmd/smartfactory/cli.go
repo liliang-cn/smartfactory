@@ -7,6 +7,7 @@ package main
 //	smartfactory industries | industries show <id>
 //	smartfactory tokens | tokens issue -name 张工 -role operator -company huaduan | tokens revoke <key>
 //	smartfactory kb <company> | kb <company> search "问题" | kb <company> entity <名字> | kb <company> rebuild
+//	smartfactory orders <company> | orders <company> show <工单号> | send -f orders.json | cancel <工单号> | pull [-dry] | erp
 //	smartfactory activity [-company id] [-n 30]
 //	smartfactory agent ["一句话"]
 //
@@ -34,7 +35,7 @@ import (
 var cliCommands = map[string]func(ctx context.Context, args []string) error{
 	"login": cliLogin, "logout": cliLogout, "whoami": cliWhoami,
 	"company": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
-	"kb": cliKB, "activity": cliActivity, "agent": cliAgent,
+	"kb": cliKB, "orders": cliOrders, "activity": cliActivity, "agent": cliAgent,
 }
 
 // ---- output ----

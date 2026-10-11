@@ -7,7 +7,7 @@ import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry,
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
 import { History } from '@/sim/history';
 import { PlantSim, type SavedPlant } from '@/sim/plant';
-import type { Command } from '@/sim/types';
+import type { Command, ExtOrder, OrderEvent } from '@/sim/types';
 import type { PlantLayout } from '@/core/layout';
 
 declare const host: { log(msg: string): void };
@@ -28,6 +28,7 @@ const builtinCompanies = new Set<string>();
 
 function register(bundle: CompanyBundle) {
   const plants = bundle.plants.map((l) => new PlantSim(l));
+  attachFeed(bundle.company.id, plants);
   companies.set(bundle.company.id, { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])), timeScale: 1 });
   pending.delete(bundle.company.id);
   if (recording.has(bundle.company.id)) attach(bundle.company.id, Date.now());
@@ -222,6 +223,104 @@ function industry(id: string): string {
 
 function schema(kind: string): string {
   return JSON.stringify(z.toJSONSchema(kind === 'company' ? CompanySchema : IndustrySchema, { io: 'input', unrepresentable: 'any' }));
+}
+
+// ---------- ERP orders ----------
+//
+// A company whose ERP sends production orders: the server keeps them, routes each to a line here,
+// and every couple of seconds hands over each line's queue and collects what started and finished.
+
+interface Feed { mode: 'simulate' | 'idle'; queue: Map<string, ExtOrder[]>; events: OrderEvent[] }
+const feeds = new Map<string, Feed>();
+
+function attachFeed(id: string, plants: PlantSim[]) {
+  for (const p of plants) {
+    p.orders = {
+      take: (line) => {
+        const f = feeds.get(id);
+        if (!f) return undefined;
+        const o = f.queue.get(`${p.layout.id}/${line.id}`)?.shift();
+        return o ?? (f.mode === 'idle' ? null : undefined);
+      },
+      event: (e) => feeds.get(id)?.events.push(e),
+    };
+  }
+}
+
+/**
+ * The line an order goes to: the one it names, else among those that make its part number (or
+ * product), the one with the least work ahead of it.
+ */
+function routeOrder(c: string, json: string): string {
+  return result(() => {
+    const co = get(c);
+    if (!co) throw new Error(`没有公司 ${c}`);
+    // ahead: units the server has queued for each line ("plant/line"), when it knows better than the feed
+    const o = JSON.parse(json) as { plant?: string; line?: string; partNo?: string; product?: string; ahead?: Record<string, number> };
+    let cands = co.plants.flatMap((p) => p.lines.map((l) => ({ p, l })));
+    if (o.plant) {
+      cands = cands.filter(({ p }) => p.layout.id === o.plant || p.layout.name === o.plant);
+      if (!cands.length) throw new Error(`没有工厂「${o.plant}」`);
+    }
+    if (o.line) {
+      cands = cands.filter(({ p, l }) => l.id === o.line || `${p.layout.id}/${l.id}` === o.line || l.name === o.line);
+      if (!cands.length) throw new Error(`没有产线「${o.line}」`);
+    } else if (o.partNo || o.product) {
+      cands = cands.filter(({ p, l }) => {
+        const pr = l.layout.product;
+        return o.partNo ? pr.partNo === o.partNo || p.variants(l).some((v) => v.partNo === o.partNo) : pr.key === o.product || pr.name === o.product;
+      });
+      if (!cands.length) throw new Error(`没有产线做${o.partNo ? `料号 ${o.partNo}` : `「${o.product}」`}`);
+    } else {
+      throw new Error('工单要写明做什么（partNo 或 product）或在哪条线做（line）');
+    }
+    const f = feeds.get(c);
+    const ahead = ({ p, l }: (typeof cands)[number]) => {
+      const k = `${p.layout.id}/${l.id}`;
+      const queued = o.ahead ? (o.ahead[k] ?? 0) : (f?.queue.get(k) ?? []).reduce((n, x) => n + x.qty, 0);
+      const units = queued + (l.job ? Math.max(0, l.job.qty - l.job.good) : 0);
+      return units * Math.max(...l.stations.map((a) => a.cycle));
+    };
+    const best = cands.reduce((a, b) => (ahead(b) < ahead(a) ? b : a));
+    return { plant: best.p.layout.id, plantName: best.p.layout.name, line: best.l.id, lineName: best.l.name };
+  });
+}
+
+/**
+ * Hands over the ERP's queue ({mode, queue: {"plant/line": orders}, active: order numbers not
+ * finished or withdrawn}; empty to leave it) and returns what started and finished since the last
+ * call and how far the running orders are. Lines drop orders no longer active, and an order
+ * the simulation made up gives way to the ERP's.
+ */
+function syncOrders(c: string, json: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  let f = feeds.get(c);
+  if (!f) feeds.set(c, (f = { mode: 'simulate', queue: new Map(), events: [] }));
+  const events = f.events.splice(0);
+  if (json) {
+    const s = JSON.parse(json) as { mode: Feed['mode']; queue: Record<string, ExtOrder[]>; active: string[] };
+    const busy = new Set([...events.map((e) => e.no), ...co.plants.flatMap((p) => p.lines.flatMap((l) => (l.job?.ext ? [l.job.no] : [])))]);
+    f.mode = s.mode;
+    f.queue = new Map(Object.entries(s.queue).map(([k, os]) => [k, os.filter((o) => !busy.has(o.no))]));
+    const active = new Set(s.active);
+    for (const p of co.plants) {
+      for (const l of p.lines) {
+        if (l.job?.ext && !active.has(l.job.no)) p.dropOrder(l.job.no);
+        else if (l.job && !l.job.ext && (f.mode === 'idle' || f.queue.get(`${p.layout.id}/${l.id}`)?.length)) {
+          l.last = l.job;
+          l.job = undefined;
+        }
+      }
+    }
+  }
+  const running = co.plants.flatMap((p) => p.lines.flatMap((l) => (l.job?.ext ? [{ no: l.job.no, plant: p.layout.id, line: l.id, good: l.job.good, scrap: l.job.scrap, plantName: p.layout.name, lineName: l.name }] : [])));
+  return JSON.stringify({ events, running });
+}
+
+/** Stops taking ERP orders: lines make up their own again. */
+function stopOrders(c: string) {
+  feeds.delete(c);
 }
 
 /** Sim time not yet stepped, for companies advanced in coarse steps. */
@@ -432,6 +531,15 @@ function advance(c: string, seconds: number, dt: number): boolean {
   return true;
 }
 
+/** Runs a company ahead by seconds as if they had passed, events and orders included (tests). */
+function fastForward(c: string, seconds: number): boolean {
+  const co = get(c);
+  if (!co) return false;
+  for (let t = 0; t < seconds - 1e-9; t += 0.5) for (const p of co.plants) p.step(0.5);
+  for (const p of co.plants) if (p.events.length > MAX_EVENTS) p.events.splice(0, p.events.length - MAX_EVENTS);
+  return true;
+}
+
 // ---------- what-if (the advisor tries a plan on a copy of the plant) ----------
 
 interface Change { match: string; command: Command; arg?: number }
@@ -600,5 +708,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
-  historyOn, history, historyDims, advance, whatIf, setClock,
+  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward,
 };

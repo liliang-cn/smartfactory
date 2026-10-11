@@ -310,6 +310,31 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 助手的 `search_docs` 在有知识库时搜的就是它（文档和工艺一起），另有 `process_graph` 查工艺图。
 
+### 生产工单（ERP）`/api/erp/{company}/orders`、`/api/admin/erp/{company}`
+
+公司的 ERP（或 MES、中间件）下达生产工单，孪生把每张排到一条产线上做，开工、完工回传给 ERP。没接 ERP 时产线自己排工单（仿真）。
+
+- **进来**：ERP 带这家公司的操作员令牌推送（`POST`），或者孪生按设置去 ERP 的接口拉（GET/POST，返回 JSON 里列表的路径和每个字段的路径可配，下标取数组，适合按行返回数组的 ERP）。拉取用的请求头值存在服务器上，读设置时只给名字。
+- **排线**：工单写了 `line`（产线 id 或名字，可加 `plant`）就在那条线；否则在做这个料号（`partNo`，产品的料号或它的变型）或产品（`product`）的产线里，挑手上活最少的。哪条线都做不了的单独拒收。
+- **排序**：每条线按交期先后做，没写交期的排在后面、按收到的先后。线上在做的是 ERP 的工单时，孪生里的工单号、料号、客户、交期就是 ERP 的。
+- **没工单的产线**：`idle` 停线等单（和真实工厂一样），`simulate` 自己排一张（演示）。
+- **改和撤**：同一个工单号再发一次：排队的全部更新、重新排线；在做的只改数量、交期、客户、单价；完成的不变；撤回的重新排队。`DELETE` 撤回，在做的产线停下它、转做下一张。
+- **回传**：设了回调地址，产线开工、完工时 `POST` `OrderCallback`，请求头 `X-SF-Event`，`X-SF-Signature: sha256=<hex(HMAC-SHA256(密钥, 请求体))>`。密钥第一次设回调时生成，只显示这一次；失败重试三次。ERP 也可以随时 `GET` 工单查进度。
+- 服务器重启后，孪生的产线接着做停机前在做的工单；状态丢了的，工单回到队列。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/erp/{company}/orders?status=&q=&limit=` | `Orders` | 在做的、排队的（按要做的顺序）、其余新的在前；成员以上 |
+| `GET /api/erp/{company}/orders/{no}` | `Order` | 一张工单 |
+| `POST /api/erp/{company}/orders` | `OrderInput`、它的数组或 `{orders: [...]}` → `OrderResults` | 收下工单，每张单独回答；操作员以上 |
+| `DELETE /api/erp/{company}/orders/{no}` | → `Order` | 撤回；完成的不能撤（409）；操作员以上 |
+| `GET /api/admin/erp/{company}` | `ERPOverview` | 对接设置（不含密钥）、上次拉取和回调怎么样、各状态工单数；管理员 |
+| `PUT /api/admin/erp/{company}` | `ERPConfig` → `{ok, secret?}` | 设置；请求头值留空表示不改 |
+| `POST /api/admin/erp/{company}/pull?dry=1` | → `PullResult` | 现在拉一次；`dry` 只看读到什么、会排到哪条线，不存 |
+| `POST /api/admin/erp/{company}/secret` | → `{secret}` | 换回调签名密钥 |
+
+命令行：`smartfactory orders <company>`（`show`、`send -f`、`cancel`、`pull [-dry]`、`erp`）。工作台助手有 `list_orders`、`erp_status`，撤回工单要管理员确认。
+
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。

@@ -12,7 +12,7 @@ import (
 // An Action is a change the console agent proposes and a person carries out: the page shows it
 // with a button, the command line asks y/N, and either runs it here as the person who confirmed.
 type Action struct {
-	// Kind: create_company | delete_company | issue_token | revoke_token | rebuild_knowledge
+	// Kind: create_company | delete_company | issue_token | revoke_token | rebuild_knowledge | cancel_order
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
 	Title  string         `json:"title"`
@@ -43,6 +43,8 @@ func (o *Ops) Do(ctx context.Context, who auth.Who, via string, a Action) (any, 
 		return map[string]bool{"ok": true}, o.Revoke(who, via, str("key"))
 	case "rebuild_knowledge":
 		return o.KnowledgeRebuild(ctx, who, via, str("company"))
+	case "cancel_order":
+		return o.CancelOrder(who, via, str("company"), str("no"))
 	}
 	return nil, fail(400, "没有这种操作：%s", a.Kind)
 }
@@ -86,6 +88,8 @@ func (o *Ops) describe(a *Action) error {
 		a.Title = "撤销令牌 " + str("key")
 	case "rebuild_knowledge":
 		a.Title = "重建" + named(str("company")) + "的知识库"
+	case "cancel_order":
+		a.Title = "撤回工单 " + str("no")
 	default:
 		return fail(400, "没有这种操作：%s", a.Kind)
 	}
