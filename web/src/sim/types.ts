@@ -167,6 +167,32 @@ export interface Asset {
   repairAt?: number;
   /** values read from equipment (MQTT / Modbus TCP / OPC UA); while fresh they replace the simulated ones */
   live?: LiveValues;
+  /** what the model alone says while measured values replace it (its own temperature, run on) */
+  shadow?: { temp: number };
+  /** model − measured since the last collection, per field: seconds, sum of errors, of absolute errors, seconds within tolerance */
+  resid?: Record<string, Residual>;
+  /** parameters fitted from this machine's measurements, in place of its template's */
+  calib?: Calibration;
+  /** the template's own values, kept while a calibration replaces them */
+  template?: Calibration;
+}
+
+export interface Residual { s: number; sum: number; abs: number; ok: number }
+
+/** A machine's parameters, as a calibration overrides its template's (any subset). */
+export interface Calibration {
+  idleRise?: number;
+  runRise?: number;
+  tau?: number;
+  pIdle?: number;
+  pRun?: number;
+  vib?: number;
+  /** seconds per unit at 100 % speed */
+  cycle?: number;
+  /** running hours between breakdowns at full health */
+  mtbf?: number;
+  /** minutes a repair takes, [min, max] */
+  repair?: [number, number];
 }
 
 export interface LiveValues {

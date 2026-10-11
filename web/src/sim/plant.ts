@@ -7,7 +7,7 @@ import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type { PlantState, ProductTuple } from '@/protocol/sfp';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Command, CommandResult, ExtOrder, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec, OrderFeed,
+  AgvState, Alarm, Asset, AssetState, AssetType, Calibration, Command, CommandResult, ExtOrder, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec, OrderFeed,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -357,6 +357,40 @@ export class PlantSim {
     line.last = undefined;
     if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
     this.orders?.event({ kind: 'start', no: o.no, plant: this.layout.id, line: line.id, good: 0, scrap: 0, plantName: this.layout.name, lineName: line.name });
+  }
+
+  /**
+   * Applies fitted parameters to a machine in place of its template's (an empty calibration puts
+   * the template's back). Says whether the plant has the machine.
+   */
+  calibrate(id: string, c: Calibration): boolean {
+    const a = this.assets.get(id);
+    const s = a?.spec;
+    if (!a || !isMachineSpec(s)) return false;
+    // the template's values, taken once, so a calibration can always be undone
+    a.template ??= {
+      idleRise: s.idleRise, runRise: s.runRise, tau: s.tau ?? 40, pIdle: s.pIdle, pRun: s.pRun, vib: s.vib, cycle: a.cycle,
+      mtbf: a.machine?.upkeep.mtbf ?? 3.33, repair: a.machine?.upkeep.repair ?? [1, 3],
+    };
+    const t = a.template;
+    const v = { ...t, ...c };
+    a.spec = { ...s, idleRise: v.idleRise!, runRise: v.runRise!, tau: v.tau, pIdle: v.pIdle!, pRun: v.pRun!, vib: v.vib! };
+    a.cycle = v.cycle!;
+    a.calib = Object.keys(c).length ? { ...c } : undefined;
+    return true;
+  }
+
+  /** What each reporting machine's model got wrong since the last call (and starts over). */
+  takeResiduals() {
+    const out: { asset: string; field: string; seconds: number; mean: number; mae: number; within: number }[] = [];
+    for (const a of this.assets.values()) {
+      if (!a.resid) continue;
+      for (const [f, r] of Object.entries(a.resid)) {
+        if (r.s > 0) out.push({ asset: a.id, field: f, seconds: r.s, mean: r.sum / r.s, mae: r.abs / r.s, within: r.ok / r.s });
+      }
+      a.resid = undefined;
+    }
+    return out;
   }
 
   /** Stops an ERP order the ERP took back; the line goes on with its next one. */
@@ -1087,17 +1121,41 @@ export class PlantSim {
     const on = this.ready(a);
     let target = AMBIENT;
     if (on) target += (running ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * 18;
-    a.temp += (target - a.temp) * ema(dt, s.tau ?? 40);
-    a.vib = running
-      ? s.vib * (0.7 + 0.3 * a.speed) * (1 + (1 - a.health) * 2.5) * rand(0.9, 1.1)
-      : on ? s.vib * 0.06 * rand(0.8, 1.2) : 0;
-    a.power = on ? (s.pIdle + (running ? s.pRun * a.speed : 0)) * rand(0.96, 1.04) : a.maint > 0 ? 0 : 0.1;
+    const k = ema(dt, s.tau ?? 40);
+    a.temp += (target - a.temp) * k;
+    // the model without its noise: what it predicts, to hold against what was measured
+    const vibModel = running ? s.vib * (0.7 + 0.3 * a.speed) * (1 + (1 - a.health) * 2.5) : on ? s.vib * 0.06 : 0;
+    const powerModel = on ? s.pIdle + (running ? s.pRun * a.speed : 0) : a.maint > 0 ? 0 : 0.1;
+    // the same draws as always, so a seeded run (what-if) plays out as before
+    a.vib = running ? vibModel * rand(0.9, 1.1) : on ? vibModel * rand(0.8, 1.2) : 0;
+    a.power = on ? powerModel * rand(0.96, 1.04) : powerModel;
     // Measured values win over the model; alarms and wear below then run on the real numbers.
     const lv = liveFields(a);
     if (lv) {
+      // the model keeps its own temperature alongside, from where the machine first reported
+      const measured = typeof lv.temp === 'number' ? lv.temp : undefined;
+      a.shadow ??= { temp: measured ?? a.temp };
+      a.shadow.temp += (target - a.shadow.temp) * k;
+      if (!this.headless) {
+        const tol = { temp: Math.max(2, 0.05 * (s.runRise || 10)), power: Math.max(0.5, 0.1 * (s.pIdle + s.pRun)), vib: Math.max(0.3, 0.15 * s.vib) };
+        const add = (f: 'temp' | 'power' | 'vib', model: number, v: unknown) => {
+          if (typeof v !== 'number' || !Number.isFinite(v)) return;
+          const e = model - v;
+          const r = ((a.resid ??= {})[f] ??= { s: 0, sum: 0, abs: 0, ok: 0 });
+          r.s += dt;
+          r.sum += e * dt;
+          r.abs += Math.abs(e) * dt;
+          if (Math.abs(e) <= tol[f]) r.ok += dt;
+        };
+        add('temp', a.shadow.temp, lv.temp);
+        add('power', powerModel, lv.power);
+        add('vib', vibModel, lv.vib);
+      }
       if (typeof lv.temp === 'number') a.temp = lv.temp;
       if (typeof lv.power === 'number') a.power = lv.power;
       if (typeof lv.vib === 'number') a.vib = lv.vib;
+    } else {
+      a.shadow = undefined;
     }
     a.util += ((running ? 1 : 0) - a.util) * ema(dt, 300);
     a.avail += ((on ? 1 : 0) - a.avail) * ema(dt, 600);
@@ -1118,7 +1176,7 @@ export class PlantSim {
     else if (a.health > 0.4) this.clear(a, 'health');
 
     if (running && !a.fault && !lv) {
-      const rate = (1 / ((up?.mtbf ?? 3.33) * 3600)) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
+      const rate = (1 / ((a.calib?.mtbf ?? up?.mtbf ?? 3.33) * 3600)) * (1 + (1 - a.health) * 6) * a.speed * a.speed;
       if (Math.random() < rate * dt) this.trip(a, pick(s.faults));
       else if (up?.stops && Math.random() < (up.stops.perHour / 3600) * dt * (this.night ? this.layout.calendar?.night?.stops ?? 1 : 1)) {
         // a short stop: the operator clears it, no crew needed
@@ -1275,7 +1333,7 @@ export class PlantSim {
     // equipment that reports its own state has its own crew
     if (this.follower || !a.spec?.faults || liveFields(a)) return;
     if (a.fault) {
-      const rt = a.machine?.upkeep.repair ?? [1, 3];
+      const rt = a.calib?.repair ?? a.machine?.upkeep.repair ?? [1, 3];
       a.repairAt ??= this.elapsed + rand(rt[0] * 60, rt[1] * 60);
       const hot = a.spec.trip !== undefined && a.temp > a.spec.trip - 4;
       if (this.elapsed >= a.repairAt && !hot) {
@@ -1493,6 +1551,9 @@ export class PlantSim {
         break;
       case 'count':
         if (Number.isFinite(num)) a.count = num;
+        break;
+      case 'cycles':
+        // a machine's own part counter: kept for calibration, the twin counts its own units
         break;
       case 'battery':
         if (Number.isFinite(num)) a.battery = num;

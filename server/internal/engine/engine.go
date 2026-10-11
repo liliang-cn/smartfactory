@@ -122,7 +122,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
