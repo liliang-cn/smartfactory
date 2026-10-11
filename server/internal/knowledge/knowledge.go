@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -131,6 +130,8 @@ type Product struct {
 	Weight    float64  `json:"weight"`
 	Customers []string `json:"customers"`
 	Suppliers []string `json:"suppliers"`
+	// Variants are the part numbers of the family a line can run.
+	Variants []string `json:"variants"`
 }
 
 type Station struct {
@@ -329,6 +330,9 @@ func processItems(m *Model) []item {
 		if pr.PartNo != "" {
 			fmt.Fprintf(&b, "（零件号 %s）", pr.PartNo)
 		}
+		if vs := uniq(pr.Variants); len(vs) > 1 || len(vs) == 1 && vs[0] != pr.PartNo {
+			fmt.Fprintf(&b, "，可做料号 %s", strings.Join(vs, "、"))
+		}
 		if pr.Material != "" {
 			fmt.Fprintf(&b, "，材料 %s", pr.Material)
 		}
@@ -388,7 +392,7 @@ func uniq(s []string) []string {
 }
 
 // processFormat changes whenever processItems writes differently, so every base is written again.
-const processFormat = "2"
+const processFormat = "3"
 
 // processState is what was last written for a company's process, so an unchanged process is not
 // written again.
@@ -460,51 +464,15 @@ type Part struct {
 	Text    string
 }
 
-// vocabulary is every name in the company's process graph, longest first, with its kind: the
-// words a document is linked to the process by.
-func (b *Base) vocabulary(id string) [][2]string {
+// vocabulary is every way a document can name something in the company's process graph: names,
+// station numbers and machine codes, line names, part numbers — the terms a document is linked
+// to the process by.
+func (b *Base) vocabulary(id string) []term {
 	m, err := b.model(id)
 	if err != nil {
 		return nil
 	}
-	n := nameModel(m)
-	seen := map[string]string{}
-	add := func(name, typ string) {
-		if len([]rune(name)) >= 2 {
-			if _, ok := seen[name]; !ok {
-				seen[name] = typ
-			}
-		}
-	}
-	for _, p := range m.Plants {
-		add(p.Name, TPlant)
-		for _, l := range p.Lines {
-			add(n.line[p.ID+"/"+l.ID], TLine)
-			add(l.Product.Name, TProduct)
-			for _, s := range uniq(l.Product.Suppliers) {
-				add(s, TSupplier)
-			}
-			for _, c := range uniq(l.Product.Customers) {
-				add(c, TCustomer)
-			}
-			for _, s := range l.Stations {
-				add(n.station[p.ID+"/"+s.ID], TStation)
-				add(s.Label, TMachine)
-			}
-		}
-	}
-	add(m.Name, TCompany)
-	out := make([][2]string, 0, len(seen))
-	for k, v := range seen {
-		out = append(out, [2]string{k, v})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if a, b := len([]rune(out[i][0])), len([]rune(out[j][0])); a != b {
-			return a > b
-		}
-		return out[i][0] < out[j][0]
-	})
-	return out
+	return terms(m)
 }
 
 func docID(doc string, seq int) string { return fmt.Sprintf("doc:%s:%03d", doc, seq) }
@@ -527,10 +495,8 @@ func (b *Base) AddDoc(ctx context.Context, company, doc, title string, parts []P
 			t += " › " + heading
 		}
 		it := item{id: docID(doc, p.Seq), title: t, text: p.Text, meta: map[string]string{"kind": "doc", "doc": doc, "doc_title": title, "heading": heading, "part": fmt.Sprint(p.Seq)}}
-		for _, v := range vocab {
-			if strings.Contains(p.Text, v[0]) || strings.Contains(heading, v[0]) {
-				it.ent(v[0], v[1], "")
-			}
+		for _, e := range link(vocab, heading+"\n"+p.Text) {
+			it.ent(e.name, e.typ, "")
 		}
 		if err := save(ctx, c.db, it); err != nil {
 			return err

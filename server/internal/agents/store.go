@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -32,12 +33,24 @@ type Agent struct {
 }
 
 type Doc struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Size    int       `json:"size"`
-	Parts   int       `json:"parts"`
-	By      string    `json:"by"`
-	Created time.Time `json:"created"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Size is the text's length in characters, Parts the passages it was cut into.
+	Size  int    `json:"size"`
+	Parts int    `json:"parts"`
+	By    string `json:"by"`
+	// Kind is what it came from: markdown | text | pdf | docx | xlsx | csv
+	Kind string `json:"kind"`
+	// File is the name of the file it was uploaded as ("" for text typed in), Bytes its size.
+	File  string `json:"file,omitempty"`
+	Bytes int64  `json:"bytes,omitempty"`
+	Pages int    `json:"pages,omitempty"`
+	// Version counts the uploads under this title; the knowledge base has the latest.
+	Version int `json:"version"`
+	// Problems are what could not be read (a scan without text, pages that are pictures).
+	Problems []string  `json:"problems,omitempty"`
+	Created  time.Time `json:"created"`
+	Updated  time.Time `json:"updated"`
 }
 
 type Note struct {
@@ -101,7 +114,11 @@ type Message struct {
 	At     time.Time `json:"at"`
 }
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+	// files keeps the documents' original files: files/{company}/{doc}/v{n}{ext}
+	files string
+}
 
 // Open opens (creating) the store in dir.
 func Open(dir string) (*Store, error) {
@@ -136,7 +153,11 @@ CREATE INDEX IF NOT EXISTS conv_owner ON conversations(company, agent, owner, up
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	if err := migrateLibrary(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, files: filepath.Join(dir, "files")}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -234,50 +255,80 @@ func (s *Store) AddDoc(company, title, body, by string) (Doc, error) {
 		return d, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO docs VALUES (?,?,?,?,?,?)`, d.ID, company, title, body, by, ts(d.Created)); err != nil {
+	d.Kind, d.Version, d.Updated = "markdown", 1, d.Created
+	if _, err := tx.Exec(`INSERT INTO docs (id, company, title, body, by, created, kind, version, updated) VALUES (?,?,?,?,?,?,?,?,?)`,
+		d.ID, company, title, body, by, ts(d.Created), d.Kind, 1, ts(d.Created)); err != nil {
 		return d, err
 	}
-	for i, p := range parts {
-		if _, err := tx.Exec(`INSERT INTO chunks VALUES (?,?,?,?)`, d.ID, i, p.heading, p.text); err != nil {
-			return d, err
-		}
+	if err := putChunks(tx, d.ID, parts); err != nil {
+		return d, err
+	}
+	if err := addVersion(tx, d, ""); err != nil {
+		return d, err
 	}
 	return d, tx.Commit()
 }
 
+const docCols = `d.id, d.title, length(d.body), (SELECT count(*) FROM chunks c WHERE c.doc=d.id), d.by, d.created,
+	d.kind, d.file, d.bytes, d.pages, d.version, d.problems, d.updated`
+
+func scanDoc(sc interface{ Scan(...any) error }) (Doc, error) {
+	var d Doc
+	var c, u, problems string
+	err := sc.Scan(&d.ID, &d.Title, &d.Size, &d.Parts, &d.By, &c, &d.Kind, &d.File, &d.Bytes, &d.Pages, &d.Version, &problems, &u)
+	d.Created, d.Updated = parseTS(c), parseTS(u)
+	if d.Updated.IsZero() {
+		d.Updated = d.Created
+	}
+	json.Unmarshal([]byte(problems), &d.Problems)
+	return d, err
+}
+
 func (s *Store) Docs(company string) ([]Doc, error) {
-	rows, err := s.db.Query(`SELECT d.id, d.title, length(d.body), (SELECT count(*) FROM chunks c WHERE c.doc=d.id), d.by, d.created
-		FROM docs d WHERE d.company=? ORDER BY d.created DESC`, company)
+	rows, err := s.db.Query(`SELECT `+docCols+` FROM docs d WHERE d.company=? ORDER BY d.updated DESC, d.created DESC`, company)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []Doc{}
 	for rows.Next() {
-		var d Doc
-		var c string
-		if err := rows.Scan(&d.ID, &d.Title, &d.Size, &d.Parts, &d.By, &c); err != nil {
+		d, err := scanDoc(rows)
+		if err != nil {
 			return nil, err
 		}
-		d.Created = parseTS(c)
 		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) DocBody(company, id string) (Doc, string, error) {
-	var d Doc
-	var body, c string
-	err := s.db.QueryRow(`SELECT id, title, body, by, created FROM docs WHERE company=? AND id=?`, company, id).Scan(&d.ID, &d.Title, &body, &d.By, &c)
+// Doc is one document as the library lists it.
+func (s *Store) Doc(company, id string) (Doc, error) {
+	d, err := scanDoc(s.db.QueryRow(`SELECT `+docCols+` FROM docs d WHERE d.company=? AND d.id=?`, company, id))
 	if errors.Is(err, sql.ErrNoRows) {
-		return d, "", ErrNotFound
+		return d, ErrNotFound
 	}
-	d.Created, d.Size = parseTS(c), len([]rune(body))
+	return d, err
+}
+
+func (s *Store) DocBody(company, id string) (Doc, string, error) {
+	d, err := s.Doc(company, id)
+	if err != nil {
+		return d, "", err
+	}
+	var body string
+	err = s.db.QueryRow(`SELECT body FROM docs WHERE company=? AND id=?`, company, id).Scan(&body)
 	return d, body, err
 }
 
+// DeleteDoc removes a document, its versions and its files.
 func (s *Store) DeleteDoc(company, id string) error {
-	return affected(s.db.Exec(`DELETE FROM docs WHERE company=? AND id=?`, company, id))
+	if err := affected(s.db.Exec(`DELETE FROM docs WHERE company=? AND id=?`, company, id)); err != nil {
+		return err
+	}
+	if s.files != "" && id != "" && !strings.ContainsAny(id, `/\.`) {
+		os.RemoveAll(filepath.Join(s.files, company, id))
+	}
+	return nil
 }
 
 // Part is one searchable piece of a document.

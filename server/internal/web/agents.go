@@ -329,6 +329,7 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 			writeJSON(w, map[string]bool{"ok": true})
 		}
 	})
+	s.libraryRoutes(mux, company, need, found)
 	mux.HandleFunc("GET /api/library/{company}/notes", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := company(w, r)
 		if !ok {

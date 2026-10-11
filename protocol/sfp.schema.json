@@ -2653,7 +2653,39 @@
         "by": {
           "type": "string"
         },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "markdown",
+            "text",
+            "pdf",
+            "docx",
+            "xlsx",
+            "csv"
+          ]
+        },
+        "file": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "number"
+        },
+        "pages": {
+          "type": "number"
+        },
+        "version": {
+          "type": "number"
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "created": {
+          "type": "string"
+        },
+        "updated": {
           "type": "string"
         }
       },
@@ -2663,7 +2695,10 @@
         "size",
         "parts",
         "by",
-        "created"
+        "kind",
+        "version",
+        "created",
+        "updated"
       ],
       "additionalProperties": false
     },
@@ -2698,6 +2733,103 @@
         "body"
       ],
       "additionalProperties": false
+    },
+    "DocVersions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number"
+          },
+          "file": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "text",
+              "pdf",
+              "docx",
+              "xlsx",
+              "csv"
+            ]
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "pages": {
+            "type": "number"
+          },
+          "parts": {
+            "type": "number"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "by": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "download": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "version",
+          "kind",
+          "bytes",
+          "parts",
+          "by",
+          "created",
+          "current",
+          "download"
+        ],
+        "additionalProperties": false
+      },
+      "description": "GET /api/library/{company}/docs/{doc}/versions — newest first"
+    },
+    "UploadResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated"
+            ]
+          },
+          "doc": {
+            "$ref": "#/$defs/Doc"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "description": "POST /api/library/{company}/files — each file answered on its own"
     },
     "Notes": {
       "type": "array",
