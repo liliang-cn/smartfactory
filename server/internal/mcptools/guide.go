@@ -11,7 +11,7 @@ const guide = `# 用配置搭一个新的数字孪生场景
 1. **行业包（industry）**：这一行有什么——产品（单元）长什么样、设备（工位）是什么、常用工艺路线。
 2. **公司（company）**：在哪里、有多少——公司下的工厂（场地）、每个工厂的线（流程）。
 
-流程：scene_guide → list_industries / get_industry（看现成例子，抄结构最快）→ create_industry → create_company → 打开 https://factory.superleo.cn/?company=<公司id>。改了就再 create 一次（同 id 覆盖，用这个行业包的场景会重建）。
+流程：scene_guide → list_industries / get_industry（看现成例子，抄结构最快）→ create_industry → create_company → 在这台服务器上打开 /?company=<公司id>。改了就再 create 一次（同 id 覆盖，用这个行业包的场景会重建）。
 
 ## 模型（所有场景都一样）
 - 一条 **线（line）** 是一个流程：**单元（product）** 从入口出发，按顺序经过各 **工位（machine）**，每个工位一次处理一个单元，用 cycle 秒；makes 把单元变成下一个**阶段**（换外观）。

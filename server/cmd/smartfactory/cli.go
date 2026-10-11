@@ -2,7 +2,7 @@ package main
 
 // The command line for administrators: everything the console does, against a running server.
 //
-//	smartfactory login -server https://factory.superleo.cn
+//	smartfactory login -server http://localhost:4720
 //	smartfactory company | company show <id> | company new -f cfg.json | company new -ai "描述" | company rm <id>
 //	smartfactory industries | industries show <id> | industries new -ai "描述" | industries new -f pack.json
 //	smartfactory tokens | tokens issue -name 张工 -role operator -company huaduan | tokens revoke <key>
@@ -147,7 +147,7 @@ func connect() (*client.Client, error) {
 
 func cliLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
-	server := fs.String("server", "https://factory.superleo.cn", "server address")
+	server := fs.String("server", "http://localhost:4720", "server address")
 	flags(fs, args)
 	fmt.Print("管理员令牌：")
 	var token string
@@ -953,10 +953,10 @@ func cliActivity(ctx context.Context, args []string) error {
 		return printJSON(raw)
 	}
 	var list []struct {
-		At                                         time.Time
+		At                                        time.Time
 		Who, Via, Company, Action, Target, Detail string
-		OK                                         bool
-		Error                                      string
+		OK                                        bool
+		Error                                     string
 	}
 	json.Unmarshal(raw, &list)
 	var rows [][]string

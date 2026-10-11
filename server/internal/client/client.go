@@ -46,7 +46,7 @@ func Saved() (Login, error) {
 		l.Token = t
 	}
 	if l.Server == "" || l.Token == "" {
-		return l, fmt.Errorf("还没登录：smartfactory login -server https://factory.superleo.cn（或设置 SF_SERVER、SF_TOKEN）")
+		return l, fmt.Errorf("还没登录：smartfactory login -server 服务器地址（或设置 SF_SERVER、SF_TOKEN）")
 	}
 	l.Server = strings.TrimRight(l.Server, "/")
 	return l, nil

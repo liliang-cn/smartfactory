@@ -35,7 +35,7 @@ type Config struct {
 	// What the server runs:
 	//   - by default, one company: a self-hosted instance starts empty, its administrator builds
 	//     the factory from a template, a description or a config, and that company is all it runs;
-	//   - Demo: every built-in template, as a company each (development, the public demo);
+	//   - Demo (or -demo): every built-in template, as a company each (development, the public demo);
 	//   - Companies: just these.
 	Demo      bool     `json:"demo,omitempty"`
 	Companies []string `json:"companies,omitempty"`
@@ -76,7 +76,7 @@ type Broker struct {
 	Listen string `json:"listen"`
 	// Prefix of the topic convention.
 	Prefix string `json:"prefix"`
-	// Users with passwords; empty allows anonymous clients.
+	// Users with passwords. Without any, the broker takes connections from this machine only.
 	Users map[string]string `json:"users"`
 	// Public: devices on this broker are emulated, so visitors' commands are published too.
 	Public bool `json:"public"`
@@ -189,7 +189,7 @@ func (d Duration) Or(def time.Duration) time.Duration {
 
 // Default is a server started without a config file: the demo, so trying it shows something.
 func Default() Config {
-	return Config{HTTP: ":4720", Data: "data", MQTT: Broker{Listen: ":41883", Prefix: "sf"}, Demo: true}
+	return Config{HTTP: ":4720", Data: "data", MQTT: Broker{Listen: ":41883", Prefix: "sf"}}
 }
 
 // Load reads path (if any) over the defaults.
@@ -200,7 +200,6 @@ func Load(path string) (Config, error) {
 		if err != nil {
 			return c, err
 		}
-		c.Demo = false // a config file says what it runs
 		if err := json.Unmarshal(b, &c); err != nil {
 			return c, fmt.Errorf("%s: %w", path, err)
 		}

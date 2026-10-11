@@ -1,14 +1,15 @@
 // smartfactory serves the digital twin, its protocol adapters and its MCP endpoint, or with
 // `edge` runs a protocol gateway in front of real measurements.
 //
-//	smartfactory [-config smartfactory.json] [-http :4719]
+//	smartfactory [-config smartfactory.json] [-http :4719] [-demo]
+//	sudo smartfactory install       a systemd service of its own (sudo smartfactory uninstall)
 //	smartfactory edge -config edge.json
 //	smartfactory devices -config devices.json
 //	smartfactory token -name 张工 -role operator -company huaduan
 //	smartfactory version
 //
 // and, against a running server, the console's commands (cli.go): login, company, industries,
-// tokens, kb, activity, agent.
+// tokens, kb, orders, activity, agent.
 package main
 
 import (
@@ -20,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -68,7 +70,7 @@ func main() {
 		}
 	}
 	cmd := "serve"
-	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "token" || args[0] == "instance" || args[0] == "version") {
+	if len(args) > 0 && (args[0] == "serve" || args[0] == "edge" || args[0] == "devices" || args[0] == "history" || args[0] == "token" || args[0] == "instance" || args[0] == "install" || args[0] == "uninstall" || args[0] == "version") {
 		cmd, args = args[0], args[1:]
 	}
 	var err error
@@ -85,6 +87,10 @@ func main() {
 		err = runToken(args)
 	case "instance":
 		err = runInstance(args)
+	case "install":
+		err = runInstall(args)
+	case "uninstall":
+		err = runUninstall(args)
 	default:
 		err = serve(ctx, args, log)
 	}
@@ -94,10 +100,19 @@ func main() {
 	}
 }
 
+func loopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	path := fs.String("config", "", "config file (JSON); optional")
 	addr := fs.String("http", "", "HTTP listen address, overrides the config")
+	demo := fs.Bool("demo", false, "run every built-in template as a company of its own (development, a showcase)")
 	fs.Parse(args)
 
 	cfg, err := config.Load(*path)
@@ -106,6 +121,16 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	if *addr != "" {
 		cfg.HTTP = *addr
+	}
+	if *demo {
+		cfg.Demo, cfg.Companies = true, nil
+	}
+	// a broker anyone on the network could publish to: only this machine, until devices have passwords
+	if l := cfg.MQTT.Listen; l != "" && len(cfg.MQTT.Users) == 0 {
+		if host, port, err := net.SplitHostPort(l); err == nil && !loopback(host) {
+			cfg.MQTT.Listen = net.JoinHostPort("127.0.0.1", port)
+			log.Warn("the MQTT broker takes connections from this machine only: give devices passwords (mqtt.users) to let them connect over the network", "listen", cfg.MQTT.Listen)
+		}
 	}
 
 	hub := tags.NewHub()

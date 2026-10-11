@@ -392,7 +392,7 @@ func addSceneTools(s *mcp.Server, eng *engine.Engine, log *audit.Log) {
 	configID := func(in configIn) string { id, _ := in.Config["id"].(string); return id }
 	mcp.AddTool(s, &mcp.Tool{Name: "create_industry", Description: "Create or replace an industry pack (products, machines, routes). Validated; errors say exactly what to fix. Companies using it are rebuilt."},
 		everywhere(auth.Admin, create("industry.create", eng.CreateIndustry)))
-	mcp.AddTool(s, &mcp.Tool{Name: "create_company", Description: "Create or replace a company (its plants and lines). It is simulated immediately and viewable at https://factory.superleo.cn/?company=<id>."},
+	mcp.AddTool(s, &mcp.Tool{Name: "create_company", Description: "Create or replace a company (its plants and lines). It is simulated immediately and viewable at /?company=<id> on this server."},
 		guard(auth.Admin, configID, create("company.create", eng.CreateCompany)))
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_company", Description: "Remove a company that was created with create_company."},
 		guard(auth.Admin, func(in idIn) string { return in.ID }, func(_ context.Context, req *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, map[string]any, error) {
