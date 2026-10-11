@@ -47,6 +47,9 @@ export const Source = z.object({
   targets: z.array(str),
   /** the same, named for people */
   labels: z.array(str).optional(),
+  /** readings kept but not given to the twin (out of range, or a jump no machine can make), and why the last one was */
+  flagged: num.optional(),
+  lastFlag: str.optional(),
 }).meta({ description: 'A protocol adapter reading equipment values' });
 
 export const LiveValues = z.object({
@@ -252,7 +255,30 @@ export const RuntimeCompany = z.object({
   /** industry packs it brings, by id; see src/config/schema/industry.json */
   industries: z.record(str, z.record(str, z.unknown())),
 });
-export const Tag = z.object({ c: str, p: str, a: str, f: str, v: z.union([num, str, z.boolean()]), src: str, t: num });
+/** q: quality flags — 1 out of range, 2 a jump no machine can make, 4 the device's time was unusable (arrival time instead) */
+export const Tag = z.object({ c: str, p: str, a: str, f: str, v: z.union([num, str, z.boolean()]), src: str, t: num, q: num.optional() });
+
+// ---------- HTTP: stored readings (/api/series/{company}/{plant}/{asset}) ----------
+
+/** raw: [t, value, flags]; minute and hour: [t, avg, min, max, readings, flagged] (avg, min, max null when every reading was flagged). t in unix ms. */
+export const SeriesPoint = z.union([
+  z.tuple([num, num, num]),
+  z.tuple([num, num.nullable(), num.nullable(), num.nullable(), num, num]),
+]);
+export const SeriesAnswer = z.object({
+  company: str, plant: str, asset: str,
+  /** the range, unix ms */
+  from: num, to: num,
+  /** raw for up to 6 hours within the raw retention, minute up to 8 days, hour beyond (or as step asked) */
+  resolution: z.enum(['raw', 'minute', 'hour']),
+  series: z.array(z.object({ field: str, points: z.array(SeriesPoint) })),
+  /** state words and texts the device sent, when they changed */
+  events: z.array(z.object({ field: str, t: num, v: str, src: str, q: num.optional() })),
+  /** a forced raw answer cut to its latest readings */
+  truncated: z.boolean().optional(),
+  /** every field stored for the asset */
+  fields: z.array(str),
+}).meta({ description: 'GET /api/series/{company}/{plant}/{asset}?field=temp,power&from=&to=&step= — members and above' });
 export const Tags = z.array(Tag);
 export const Advisors = z.record(str, str).meta({ description: "Each company's advisor console URL" });
 
@@ -793,7 +819,7 @@ export const ConsoleEvent = z.discriminatedUnion('kind', [
 
 export const DEFS = {
   ClientMessage, ServerMessage, PlantState,
-  ErrorBody, Health, Site, Directory, RuntimeCompany, Tags, Advisors, DeviceMap,
+  ErrorBody, Health, Site, Directory, RuntimeCompany, Tags, Advisors, DeviceMap, SeriesAnswer,
   Metrics, Dimensions, Query, Answer, Board, DecideRequest, AskRequest, AskEvent, Reviews, ReviewRun,
   DeviceFields, DeviceCommand,
   Assistants, Assistant, AssistantRequest, Conversations, ConversationView, AssistantAsk, AssistantEvent,

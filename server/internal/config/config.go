@@ -1,8 +1,11 @@
 // Package config is the server's JSON configuration. Everything is optional: with no file the
 // server serves the twin, runs an embedded MQTT broker and accepts the topic convention
 //
-//	{prefix}/{company}/{plant}/{asset}/{field}     payload: a number, a string, or {"v": ...}
-//	{prefix}/{company}/{plant}/{asset}             payload: {"temp": 61.5, "power": 230, ...}
+//	{prefix}/{company}/{plant}/{asset}/{field}     payload: a number, a string, or {"v": ..., "t": ...}
+//	{prefix}/{company}/{plant}/{asset}             payload: {"temp": 61.5, "power": 230, ..., "t": ...}
+//
+// where "t", when given, is when the device took the reading (epoch milliseconds or seconds, or
+// RFC 3339).
 //
 // so a device that follows the convention needs no configuration at all. Sources describe
 // everything else: external brokers with their own topic layout, Modbus TCP registers and
@@ -32,6 +35,8 @@ type Config struct {
 	Sources []Source `json:"sources"`
 	// History keeps companies' production history in Postgres, for the advisor.
 	History []History `json:"history"`
+	// Series is how long measured readings are kept and what counts as a plausible one.
+	Series Series `json:"series"`
 	// What the server runs:
 	//   - by default, one company: a self-hosted instance starts empty, its administrator builds
 	//     the factory from a template, a description or a config, and that company is all it runs;
@@ -39,6 +44,32 @@ type Config struct {
 	//   - Companies: just these.
 	Demo      bool     `json:"demo,omitempty"`
 	Companies []string `json:"companies,omitempty"`
+}
+
+// Series keeps every reading equipment sends, in the data directory: raw for Raw, then as
+// one-minute aggregates for Minute and one-hour aggregates for Hour. MaxMB bounds the store on
+// disk; past it the oldest raw readings go first, then the oldest minutes.
+type Series struct {
+	Raw    Duration `json:"raw"`
+	Minute Duration `json:"minute"`
+	Hour   Duration `json:"hour"`
+	MaxMB  int      `json:"maxMB"`
+	// Limits override the plausible range and the fastest change of a field; a reading outside
+	// them is kept, flagged, and not given to the twin.
+	Limits []Limit `json:"limits"`
+}
+
+// Limit applies to the fields of the assets it matches ("" or "*" matches any; a trailing *
+// matches a prefix, e.g. "HP-*").
+type Limit struct {
+	Company string   `json:"company"`
+	Plant   string   `json:"plant"`
+	Asset   string   `json:"asset"`
+	Field   string   `json:"field"`
+	Min     *float64 `json:"min"`
+	Max     *float64 `json:"max"`
+	// Rate is the most the value can change per second.
+	Rate *float64 `json:"rate"`
 }
 
 // Key is one person's or client's token.
@@ -113,6 +144,9 @@ type Point struct {
 	Topic string `json:"topic"`
 	// mqtt: dotted path into a JSON payload, e.g. "data.temperature"; empty = whole payload
 	JSON string `json:"json"`
+	// mqtt: dotted path to when the reading was taken, e.g. "data.ts" (epoch ms or s, or RFC 3339);
+	// empty: "t" next to "v"/"value" when the payload is such an object, else when it arrived
+	Time string `json:"time"`
 	// modbus: holding | input | coil | discrete
 	Register string `json:"register"`
 	Address  uint16 `json:"address"`
@@ -167,15 +201,34 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 		d.Duration = 0
 		return nil
 	}
-	v, err := time.ParseDuration(s)
+	v, err := ParseDuration(s)
 	d.Duration = v
 	return err
 }
 
-// MarshalJSON writes it the way it is read ("1s"), so a config written out reads back.
+// ParseDuration reads Go durations ("90s", "2h") and days and years ("14d", "5y").
+func ParseDuration(s string) (time.Duration, error) {
+	if n := len(s); n > 1 && (s[n-1] == 'd' || s[n-1] == 'y') {
+		var f float64
+		if _, err := fmt.Sscanf(s[:n-1], "%g", &f); err != nil {
+			return 0, fmt.Errorf("duration %q: %w", s, err)
+		}
+		day := 24 * time.Hour
+		if s[n-1] == 'y' {
+			day *= 365
+		}
+		return time.Duration(f * float64(day)), nil
+	}
+	return time.ParseDuration(s)
+}
+
+// MarshalJSON writes it the way it is read ("1s", "14d"), so a config written out reads back.
 func (d Duration) MarshalJSON() ([]byte, error) {
 	if d.Duration == 0 {
 		return []byte(`""`), nil
+	}
+	if day := 24 * time.Hour; d.Duration%day == 0 {
+		return json.Marshal(fmt.Sprintf("%dd", d.Duration/day))
 	}
 	return json.Marshal(d.Duration.String())
 }

@@ -1257,6 +1257,9 @@
           },
           "t": {
             "type": "number"
+          },
+          "q": {
+            "type": "number"
           }
         },
         "required": [
@@ -1484,6 +1487,161 @@
         "opcua"
       ],
       "additionalProperties": false
+    },
+    "SeriesAnswer": {
+      "type": "object",
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "from": {
+          "type": "number"
+        },
+        "to": {
+          "type": "number"
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "raw",
+            "minute",
+            "hour"
+          ]
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 3,
+                      "maxItems": 3
+                    },
+                    {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 6,
+                      "maxItems": 6
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "field",
+              "points"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "t": {
+                "type": "number"
+              },
+              "v": {
+                "type": "string"
+              },
+              "src": {
+                "type": "string"
+              },
+              "q": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "field",
+              "t",
+              "v",
+              "src"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "company",
+        "plant",
+        "asset",
+        "from",
+        "to",
+        "resolution",
+        "series",
+        "events",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/series/{company}/{plant}/{asset}?field=temp,power&from=&to=&step= — members and above"
     },
     "Metrics": {
       "type": "object",
@@ -4881,6 +5039,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "flagged": {
+          "type": "number"
+        },
+        "lastFlag": {
+          "type": "string"
         }
       },
       "required": [

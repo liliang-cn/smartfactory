@@ -442,7 +442,12 @@ function restore(c: string, json: string): string {
 function machines(c: string, plant: string): string {
   const p = get(c)?.byId[plant];
   if (!p) return 'null';
-  return JSON.stringify(p.machines().map((a) => ({ id: a.id, name: a.name, faults: a.spec?.faults ?? [], measured: !!a.measure, tooling: !!a.tool })));
+  return JSON.stringify(p.machines().map((a) => ({
+    id: a.id, name: a.name, faults: a.spec?.faults ?? [], measured: !!a.measure, tooling: !!a.tool,
+    // what a plausible reading of it is: trip temperature, running power, vibration, the measure's spec
+    trip: a.spec?.trip, power: a.spec?.pRun, vib: a.spec?.vib,
+    measure: a.measure ? { target: a.measure.target, lo: a.measure.lo, hi: a.measure.hi, sigma: a.measure.sigma } : undefined,
+  })));
 }
 
 /** A plant's vehicles and inventory items, in protocol order. */

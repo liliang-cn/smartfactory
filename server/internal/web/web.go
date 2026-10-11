@@ -26,6 +26,7 @@ import (
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
+	"smartfactory/internal/series"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/ops"
 	"smartfactory/internal/sfconv"
@@ -64,6 +65,8 @@ type Server struct {
 	Saved *templates.Store
 	// Production is the companies' ERP connections and production orders (nil without data).
 	Production *erp.Service
+	// Series is the readings equipment sent (nil without data).
+	Series *series.Store
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -131,6 +134,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /api/audit/{company}", s.auditLog)
 	s.adminRoutes(mux)
+	s.seriesRoutes(mux)
 	s.erpRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)

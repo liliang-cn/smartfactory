@@ -10,7 +10,9 @@
     "url": "tcp://192.168.1.10:41883",
     "username": "edge",
     "password": "change-me",
-    "publish": [{ "metric": "cpu0", "topic": "sf/huaduan/p1/HP-101/temp" }]
+    "publish": [{ "metric": "cpu0", "topic": "sf/huaduan/p1/HP-101/temp" }],
+    "buffer": "/var/lib/smartfactory-edge/buffer.jsonl",
+    "bufferMax": 100000
   },
   "modbus": { "listen": "0.0.0.0:41502", "holding": [{ "metric": "cpu1", "address": 0, "scale": 10 }] },
   "opcua": { "host": "192.168.1.20", "port": 41840, "nodes": [{ "metric": "nvme", "node": "dell.nvme.temp" }] }

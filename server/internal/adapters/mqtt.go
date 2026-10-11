@@ -34,16 +34,18 @@ func RunMQTT(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.Lo
 			if !ok {
 				continue
 			}
-			v, err := mapping.Extract(payload, p.JSON)
+			v, ts, err := mapping.ExtractTimed(payload, p.JSON, p.Time)
 			if err != nil {
 				log.Debug("extract", "topic", topic, "err", err)
 				continue
 			}
-			hub.Publish(tags.Tag{
+			t := tags.Tag{
 				Company: mapping.Expand(p.Company, caps), Plant: mapping.Expand(p.Plant, caps),
 				Asset: mapping.Expand(p.Asset, caps), Field: mapping.Expand(p.Field, caps),
 				Value: mapping.Convert(v, p), Source: src.Name,
-			})
+			}
+			mapping.Stamp(&t, ts, time.Now())
+			hub.Publish(t)
 		}
 	}
 
