@@ -78,7 +78,8 @@ func (b *Base) open(id string) (*company, error) {
 	if c, ok := b.dbs[id]; ok {
 		return c, nil
 	}
-	db, err := cortexdb.Open(cortexdb.DefaultConfig(filepath.Join(b.dir, id+".db")))
+	// no inference rules are declared: the maintainer would only poll the change feed
+	db, err := cortexdb.Open(cortexdb.DefaultConfig(filepath.Join(b.dir, id+".db")), cortexdb.WithAutoInference(false))
 	if err != nil {
 		return nil, err
 	}

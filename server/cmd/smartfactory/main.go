@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -109,6 +110,25 @@ func loopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// servePprof serves Go's profiles on addr when SF_PPROF names one on this machine (127.0.0.1:port),
+// to find what a server spends its time on.
+func servePprof(log *slog.Logger) {
+	addr := os.Getenv("SF_PPROF")
+	if addr == "" {
+		return
+	}
+	if host, _, err := net.SplitHostPort(addr); err != nil || !loopback(host) {
+		log.Warn("SF_PPROF must be a loopback address, e.g. 127.0.0.1:46060", "addr", addr)
+		return
+	}
+	// a mux of its own: the profiles are never on the server's public one
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	go func() { log.Warn("profiling", "addr", addr, "err", http.ListenAndServe(addr, mux)) }()
+}
+
 func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	path := fs.String("config", "", "config file (JSON); optional")
@@ -123,6 +143,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if *addr != "" {
 		cfg.HTTP = *addr
 	}
+	servePprof(log)
 	if *demo {
 		cfg.Demo, cfg.Companies = true, nil
 	}

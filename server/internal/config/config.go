@@ -54,6 +54,11 @@ type Series struct {
 	Minute Duration `json:"minute"`
 	Hour   Duration `json:"hour"`
 	MaxMB  int      `json:"maxMB"`
+	// Every keeps at most one reading of a field per this interval, unless it moved by more
+	// than Deadband (a share of its value) since the last one kept; flagged readings are always
+	// kept. Zero keeps every reading.
+	Every    Duration `json:"every"`
+	Deadband float64  `json:"deadband"`
 	// Limits override the plausible range and the fastest change of a field; a reading outside
 	// them is kept, flagged, and not given to the twin.
 	Limits []Limit `json:"limits"`

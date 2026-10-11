@@ -1,6 +1,7 @@
 package series
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -253,3 +254,42 @@ func TestValidator(t *testing.T) {
 }
 
 func ptr(x float64) *float64 { return &x }
+
+// With Every and a deadband, a steady reading is kept once per interval, a move past the
+// deadband at once, and a flagged reading always.
+func TestThinning(t *testing.T) {
+	s := &Store{ret: Retention{Every: 5 * time.Second, Deadband: 0.02}}
+	var kept []int64
+	v := 100.0
+	for i := int64(0); i < 20; i++ {
+		at := i * 1000
+		x := v + float64(i%3)*0.1 // steady, within 2 %
+		if i == 7 {
+			x = 110 // a real move
+		}
+		var q uint8
+		if i == 12 {
+			q = 1
+		}
+		if s.keep(1, at, x, q) {
+			kept = append(kept, i)
+		}
+		if i == 7 {
+			v = 110
+		}
+	}
+	want := []int64{0, 5, 7, 12, 17}
+	if fmt.Sprint(kept) != fmt.Sprint(want) {
+		t.Fatalf("kept %v, want %v", kept, want)
+	}
+	all := &Store{}
+	n := 0
+	for i := int64(0); i < 10; i++ {
+		if all.keep(1, i*1000, 100, 0) {
+			n++
+		}
+	}
+	if n != 10 {
+		t.Errorf("without Every, %d of 10 kept", n)
+	}
+}

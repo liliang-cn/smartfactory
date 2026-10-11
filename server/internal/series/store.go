@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -42,6 +43,9 @@ const (
 type Retention struct {
 	Raw, Minute, Hour time.Duration
 	MaxBytes          int64
+	// Every and Deadband thin readings out as they arrive (config.Series).
+	Every    time.Duration
+	Deadband float64
 }
 
 // RetentionFrom fills a config's gaps with the defaults: 14 days raw, 90 days of minutes,
@@ -51,6 +55,7 @@ func RetentionFrom(c config.Series) Retention {
 	if c.MaxMB > 0 {
 		r.MaxBytes = int64(c.MaxMB) << 20
 	}
+	r.Every, r.Deadband = c.Every.Or(0), max(0, c.Deadband)
 	return r
 }
 
@@ -71,6 +76,7 @@ type Store struct {
 	srcs    map[string]uint32 // source name → id
 	srcName map[uint32]string
 	states  map[int64]string // last state stored per series, to keep changes only
+	kept    map[int64]point  // last number stored per series, to thin them out
 
 	// Now is the clock (tests set it).
 	Now func() time.Time
@@ -315,6 +321,9 @@ func (s *Store) write(batch []tags.Tag) error {
 			at = s.Now().UnixMilli()
 		}
 		if v, ok := number(t.Value); ok {
+			if !s.keep(sid, at, v, t.Q) {
+				continue
+			}
 			if _, err := ins.Exec(sid, at, v, t.Q, src); err != nil {
 				return err
 			}
@@ -340,6 +349,29 @@ func (s *Store) write(batch []tags.Tag) error {
 	}
 	s.stored.Add(uint64(n))
 	return nil
+}
+
+type point struct {
+	t int64
+	v float64
+}
+
+// keep says whether a number is stored: always without Every, and with it when Every has
+// passed since the last one kept, when it moved past the deadband, or when it is flagged.
+func (s *Store) keep(sid, at int64, v float64, q uint8) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ret.Every > 0 && q == 0 {
+		if k, ok := s.kept[sid]; ok && at >= k.t && at-k.t < s.ret.Every.Milliseconds() &&
+			(s.ret.Deadband == 0 || math.Abs(v-k.v) <= s.ret.Deadband*math.Max(math.Abs(k.v), 1)) {
+			return false
+		}
+	}
+	if s.kept == nil {
+		s.kept = map[int64]point{}
+	}
+	s.kept[sid] = point{at, v}
+	return true
 }
 
 func (s *Store) seriesID(tx *sql.Tx, c, p, a, f string) (int64, error) {
