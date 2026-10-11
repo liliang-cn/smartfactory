@@ -112,7 +112,9 @@ func ordersIn(b []byte) ([]map[string]any, error) {
 
 type notOrders struct{}
 
-func (notOrders) Error() string { return "要一张工单（对象）、工单列表，或 {\"orders\": [...]}" }
+func (notOrders) Error() string {
+	return "要一张工单（对象）、工单列表，或 {\"orders\": [...]}"
+}
 
 var errNotOrders = notOrders{}
 

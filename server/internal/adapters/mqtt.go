@@ -79,7 +79,8 @@ func RunMQTT(ctx context.Context, src config.Source, hub *tags.Hub, log *slog.Lo
 	client.Connect()
 
 	hub.OnCommand(func(c tags.Command) {
-		if !client.IsConnected() || !Forward(src.Public, c) {
+		// not while paho reconnects: a command queued then would reach the equipment late
+		if !client.IsConnectionOpen() || !Forward(src.Public, c) {
 			return
 		}
 		if src.Convention != "" {

@@ -249,13 +249,13 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
         <button type="button" aria-label="缩小" className="grid size-8 place-items-center border-t hover:bg-surface" onClick={() => zoom(1.4)}><MinusIcon className="size-4" /></button>
         <button type="button" aria-label="全图" className="grid size-8 place-items-center border-t hover:bg-surface" onClick={() => setView(fit)}><ScanIcon className="size-4" /></button>
       </div>
-      <ul className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.5rem)] flex-wrap gap-1 rounded-xl bg-card/85 p-1 text-[11.5px] backdrop-blur" aria-label="显示哪些">
+      <ul className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.5rem)] flex-wrap gap-1 rounded-xl bg-card/85 p-1 text-[11.5px] backdrop-blur max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none]" aria-label="显示哪些">
         {(Object.keys(KIND) as api.EntityKind[]).filter((k) => counts.has(k)).map((k) => {
           const off = hidden.has(k);
           return (
             <li key={k}>
               <button type="button" aria-pressed={!off} onClick={() => toggle(k)}
-                className={cn('flex h-6 items-center gap-1.5 rounded-lg px-2 font-bold transition-colors', off ? 'text-muted-foreground/60 hover:bg-surface' : 'text-foreground hover:bg-surface')}>
+                className={cn('flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 font-bold transition-colors', off ? 'text-muted-foreground/60 hover:bg-surface' : 'text-foreground hover:bg-surface')}>
                 <span className={cn('size-2.5 rounded-full', off && 'opacity-30')} style={{ background: KIND[k].color }} />
                 {KIND[k].label}<span className="font-normal tabular-nums text-muted-foreground max-sm:hidden">{counts.get(k)}</span>
               </button>

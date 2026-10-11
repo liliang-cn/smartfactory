@@ -262,7 +262,8 @@ func newMQTT(p Plant, warehouse string, command func(string, string, *float64), 
 }
 
 func (e *mqttEP) update(t engine.Telemetry) {
-	if !e.client.IsConnected() {
+	// IsConnected is also true while paho reconnects; readings then would only pile up
+	if !e.client.IsConnectionOpen() {
 		return
 	}
 	base := fmt.Sprintf("%s/%s/%s/", e.p.Prefix, e.p.Company, e.p.Plant)

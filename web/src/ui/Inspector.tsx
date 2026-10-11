@@ -186,6 +186,14 @@ export function Inspector() {
     setPeek(false);
     setRange('live');
   }, [a]);
+  // looking back: a field the device never reported has no history, show one it did
+  useEffect(() => {
+    const f = a?.live?.f;
+    if (range === 'live' || !f || !isMachine(a) || FIELD[metric] in f) return;
+    const m = (['meas', 'temp', 'power', 'vib'] as Metric[]).find((x) => FIELD[x] in f && (x !== 'meas' || a.measure));
+    if (m) setMetric(m);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, a]);
   if (!a) return null;
 
   const where = a.line ? `${a.line.name} ${a.line.note}` : a.group === 'LOG' ? '物流' : '仓储';

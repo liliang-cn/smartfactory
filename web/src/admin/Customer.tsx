@@ -144,6 +144,11 @@ function Connect({ c }: { c: api.Company }) {
                 </div>
                 <p className="mt-1 truncate font-mono text-[12px] text-muted-foreground">{s.url}</p>
                 <p className="mt-1 text-[12.5px]">{here.length} 台设备：{here.slice(0, 6).map((t) => t.split('/')[2]).join('、')}{here.length > 6 ? ' 等' : ''}</p>
+                {!!s.flagged && (
+                  <p className="mt-1.5 rounded-lg bg-warning-soft px-2 py-1 text-[12px] text-warning">
+                    {s.flagged} 条读数可疑，存了但没用在孪生里{s.lastFlag ? `，最近一条：${s.lastFlag}` : ''}
+                  </p>
+                )}
               </li>
             );
           })}
