@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartFactory: a smart factory on your own server</title>
+  <meta name="description" content="An admin console, a live 3D twin and AI assistants in one program. Install it on a Linux server and build your factory from a template, a description or your own config.">
+  <meta name="theme-color" content="#eef1f8">
+  <link rel="alternate" hreflang="en" href="https://liliang-cn.github.io/smartfactory/">
+  <link rel="alternate" hreflang="zh" href="https://liliang-cn.github.io/smartfactory/zh/">
+  <meta property="og:title" content="SmartFactory">
+  <meta property="og:description" content="A smart factory on your own server: admin console, live 3D twin, AI assistants.">
+  <meta property="og:image" content="https://liliang-cn.github.io/smartfactory/screenshots/twin.png">
+  <link rel="icon" href="assets/icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@500&display=swap">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f55e8"/><path d="M16 16 28 9.5v13L16 29z" fill="#1f3bb3"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8cf4"/></svg>SmartFactory</a>
+    <nav>
+      <a class="hide-sm" href="#install">Install</a>
+      <a class="hide-sm" href="https://github.com/liliang-cn/smartfactory">GitHub</a>
+      <span class="lang"><a href="./" hreflang="en" aria-current="true">EN</a><a href="zh/" hreflang="zh" lang="zh">中文</a></span>
+    </nav>
+  </header>
+
+  <main>
+    <section class="wrap hero">
+      <h1>Your factory, live, on your own server.</h1>
+      <p class="lede">A console to build it, a 3D twin to watch it run, and AI assistants that know it, in one program. Install it on a Linux server and start from a template, a few sentences, or your own config.</p>
+      <div class="install">
+        <button class="cmd" type="button" data-copy="sudo ./smartfactory install" data-done="Copied" aria-label="Copy the install command"><span><span class="prompt">$</span> sudo ./smartfactory install</span><span class="copy">Copy</span></button>
+        <a class="btn primary" href="https://github.com/liliang-cn/smartfactory/releases/latest">Download</a>
+        <a class="btn" href="https://github.com/liliang-cn/smartfactory">Source</a>
+      </div>
+      <div class="stage">
+        <picture>
+          <source media="(max-width: 560px)" srcset="screenshots/twin-phone.png">
+          <img src="screenshots/twin.png" alt="The 3D twin of a forging plant: presses, furnaces and conveyors on six lines, with OEE, output, yield and power above and the running work order below" width="1440" height="900">
+        </picture>
+        <a class="play" href="https://huaduan.factory.superleo.cn/?company=huaduan&amp;plant=p1" target="_blank" rel="noopener" data-title="SmartFactory live demo"><span class="dot"></span>Open the live demo</a>
+      </div>
+      <p class="stage-note">The demo is a forging company with three plants. Its machines report over MQTT, Modbus and OPC UA from emulated equipment.</p>
+    </section>
+
+    <div class="wrap">
+      <div class="line">
+        <section class="station">
+          <h2>Build it in the console</h2>
+          <p>Start from a built-in template, describe your site and let the AI write it, or paste a config. Plants, lines, machines and routes lay themselves out on the floor plan as you go.</p>
+          <figure class="shot"><img src="screenshots/builder.png" alt="The console's scene editor: a box to describe changes for the AI, the plants and lines as a form, and each plant's floor plan" loading="lazy" width="1440" height="900"></figure>
+          <ul class="facts">
+            <li><b>Six industries built in</b><span>Forging, machining, automotive, food and drink, batteries, air conditioners.</span></li>
+            <li><b>The AI fills the gaps</b><span>No industry pack for ceramics or pharma? It writes one, products, machines and routes, and the engine checks it before you build.</span></li>
+            <li><b>Templates travel</b><span>Save your factory as a template, export it as a file, import it on another server.</span></li>
+          </ul>
+        </section>
+
+        <section class="station">
+          <h2>Run it on your ERP's orders</h2>
+          <p>Production orders come in from your ERP. Each goes to a line that makes its part, the lines work through them by due date, and your ERP hears when an order starts and when it is done.</p>
+          <figure class="shot"><img src="screenshots/orders.png" alt="Production orders: each line's running order with its progress and due date, and the queue behind them" loading="lazy" width="1440" height="900"></figure>
+          <ul class="facts">
+            <li><b>Push or pull</b><span>The ERP posts orders with its own token, or the server fetches them and maps the fields, rows as arrays included.</span></li>
+            <li><b>Signed callbacks</b><span>Started and finished orders, with good and scrapped counts, posted back with an HMAC-SHA256 signature.</span></li>
+            <li><b>Like the real plant</b><span>A line with no order waits for one. Or keeps simulating, for a demo.</span></li>
+          </ul>
+        </section>
+
+        <section class="station">
+          <h2>Ask it what is going on</h2>
+          <p>Assistants answer from the twin, the orders and your documents: which machine is down, which order will be late, what the work instruction says. In the console, the assistant proposes changes and waits for you to confirm.</p>
+          <figure class="shot"><img src="screenshots/agent.png" alt="The console assistant listing the orders in production and pointing out the one past its due date" loading="lazy" width="1440" height="900"></figure>
+        </section>
+
+        <section class="station">
+          <h2>It knows your process</h2>
+          <p>Every plant, line, station, machine, product, supplier and customer is a node in a knowledge graph, rebuilt when the factory changes. Documents link to what they mention, so a question about IH-101 finds the induction furnace's process card.</p>
+          <figure class="shot"><img src="screenshots/knowledge.png" alt="The knowledge graph of a forging company: plants, lines, machines, products, suppliers and customers" loading="lazy" width="1440" height="900"></figure>
+        </section>
+
+        <section class="station">
+          <h2>Connect what you already have</h2>
+          <p>Machines that report over MQTT need no setup. PLCs, gateways and brokers you already run are read where they are.</p>
+          <div class="flow">
+            <div class="side">
+              <div class="port"><b>Equipment</b><span>MQTT, one topic per reading</span><code>sf/{company}/{plant}/{machine}/{field}</code></div>
+              <div class="port"><b>PLCs and gateways</b><span>Modbus TCP, OPC UA, your own MQTT broker</span></div>
+              <div class="port"><b>ERP</b><span>Production orders, pushed or pulled</span></div>
+            </div>
+            <div class="core">SmartFactory<small>one program on your server</small></div>
+            <div class="side">
+              <div class="port"><b>Browsers</b><span>The twin and the console, on a desk or a phone</span></div>
+              <div class="port"><b>AI agents</b><span>MCP at <code>/mcp</code>, a command line with <code>-json</code></span></div>
+              <div class="port"><b>ERP</b><span>Orders started and finished, signed</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="station" id="install">
+          <h2>Install on a Linux server</h2>
+          <ol class="steps">
+            <li><b>Download the package for your server</b><pre>tar xzf smartfactory-v0.1.2-linux-amd64.tar.gz
+cd smartfactory-v0.1.2-linux-amd64</pre></li>
+            <li><b>Install it as a service</b><pre>sudo ./smartfactory install</pre><p>A systemd service with its own user, started now and on every boot. Run it again with a newer package to upgrade.</p></li>
+            <li><b>Sign in and build your factory</b><pre>sudo cat /var/lib/smartfactory/initial-admin-token</pre><p>Open <code>http://your-server:4720/admin</code> with this token.</p></li>
+          </ol>
+          <p>On macOS or Windows, run <code>smartfactory -config smartfactory.json</code>. For the assistants, add an OpenAI-compatible model in <code>/etc/smartfactory/env</code>.</p>
+        </section>
+
+        <section class="station">
+          <h2>Your factory stays on your server</h2>
+          <div class="ownership">
+            <div><b>One folder</b><span>Scenes, simulation state, accounts, knowledge and orders live in <code>/var/lib/smartfactory</code>. Back it up and you have backed up the factory.</span></div>
+            <div><b>Nothing calls home</b><span>The server talks to what you connect: your machines, your ERP, your model provider.</span></div>
+            <div><b>AGPL-3.0</b><span>Free to run and change. Offer it as a service to others and you share your changes.</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="end">
+    <div class="wrap">
+      <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f55e8"/><path d="M16 16 28 9.5v13L16 29z" fill="#1f3bb3"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8cf4"/></svg>SmartFactory</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/liliang-cn/smartfactory/releases">Releases</a>
+      <a href="https://github.com/liliang-cn/smartfactory/blob/main/protocol/README.md">Protocol</a>
+      <a href="https://github.com/liliang-cn/smartfactory/blob/main/LICENSE">AGPL-3.0</a>
+    </div>
+  </footer>
+  <script src="assets/site.js"></script>
+</body>
+</html>

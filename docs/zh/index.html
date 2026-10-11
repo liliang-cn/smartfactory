@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SmartFactory：跑在你自己服务器上的智能工厂</title>
+  <meta name="description" content="后台、实时 3D 孪生和 AI 助手，一个程序。装在一台 Linux 服务器上，从模板、一段描述或你自己的配置搭出工厂。">
+  <meta name="theme-color" content="#eef1f8">
+  <link rel="alternate" hreflang="en" href="https://liliang-cn.github.io/smartfactory/">
+  <link rel="alternate" hreflang="zh" href="https://liliang-cn.github.io/smartfactory/zh/">
+  <meta property="og:title" content="SmartFactory">
+  <meta property="og:description" content="跑在你自己服务器上的智能工厂：后台、实时 3D 孪生、AI 助手。">
+  <meta property="og:image" content="https://liliang-cn.github.io/smartfactory/screenshots/twin.png">
+  <link rel="icon" href="../assets/icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@500&display=swap">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f55e8"/><path d="M16 16 28 9.5v13L16 29z" fill="#1f3bb3"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8cf4"/></svg>SmartFactory</a>
+    <nav>
+      <a class="hide-sm" href="#install">安装</a>
+      <a class="hide-sm" href="https://github.com/liliang-cn/smartfactory">GitHub</a>
+      <span class="lang"><a href="../" hreflang="en" lang="en">EN</a><a href="./" hreflang="zh" aria-current="true">中文</a></span>
+    </nav>
+  </header>
+
+  <main>
+    <section class="wrap hero">
+      <h1>你的工厂，实时跑在你自己的服务器上。</h1>
+      <p class="lede">在后台把工厂搭出来，在 3D 孪生里看它运转，AI 助手熟悉它的工艺和工单。都在一个程序里。装在一台 Linux 服务器上，从模板、几句描述或你自己的配置开始。</p>
+      <div class="install">
+        <button class="cmd" type="button" data-copy="sudo ./smartfactory install" data-done="已复制" aria-label="复制安装命令"><span><span class="prompt">$</span> sudo ./smartfactory install</span><span class="copy">复制</span></button>
+        <a class="btn primary" href="https://github.com/liliang-cn/smartfactory/releases/latest">下载</a>
+        <a class="btn" href="https://github.com/liliang-cn/smartfactory">源码</a>
+      </div>
+      <div class="stage">
+        <picture>
+          <source media="(max-width: 560px)" srcset="../screenshots/twin-phone.png">
+          <img src="../screenshots/twin.png" alt="锻造厂的 3D 孪生：六条线上的压力机、加热炉和输送线，上方是综合效率、产量、合格率和功率，下方是在做的工单" width="1440" height="900">
+        </picture>
+        <a class="play" href="https://huaduan.factory.superleo.cn/?company=huaduan&amp;plant=p1" target="_blank" rel="noopener" data-title="SmartFactory 在线演示"><span class="dot"></span>打开在线演示</a>
+      </div>
+      <p class="stage-note">演示是一家有三个工厂的锻造公司，设备数据由模拟设备经 MQTT、Modbus、OPC UA 发来。</p>
+    </section>
+
+    <div class="wrap">
+      <div class="line">
+        <section class="station">
+          <h2>在后台把工厂搭出来</h2>
+          <p>选一个内置模板，或者用几句话描述你的工厂让 AI 来写，或者直接粘贴配置。工厂、产线、设备和工艺路线边改边排进平面图。</p>
+          <figure class="shot"><img src="../screenshots/builder.png" alt="后台的改场景页：给 AI 描述要改什么的输入框、按表单列出的工厂和产线、每个工厂的平面图" loading="lazy" width="1440" height="900"></figure>
+          <ul class="facts">
+            <li><b>内置六个行业</b><span>锻造、机加工、汽车、食品饮料、电池、空调。</span></li>
+            <li><b>缺的 AI 来补</b><span>没有陶瓷、制药的行业包？AI 写一个：产品、设备、工艺路线，引擎检查通过才让你建。</span></li>
+            <li><b>模板带得走</b><span>把你的工厂存成模板，导出成文件，在另一台服务器上导入。</span></li>
+          </ul>
+        </section>
+
+        <section class="station">
+          <h2>按 ERP 的工单生产</h2>
+          <p>ERP 下达生产工单，每张排到做这个料号的产线上，产线按交期先后生产。开工、完工都回传给 ERP。</p>
+          <figure class="shot"><img src="../screenshots/orders.png" alt="生产工单：每条线在做的工单、进度和交期，以及后面排队的工单" loading="lazy" width="1440" height="900"></figure>
+          <ul class="facts">
+            <li><b>推或者拉</b><span>ERP 用自己的令牌把工单推过来，或者由服务器去 ERP 取，字段对应可配，按行返回数组的也能读。</span></li>
+            <li><b>回调带签名</b><span>开工、完工的工单连同合格数、报废数一起回传，带 HMAC-SHA256 签名。</span></li>
+            <li><b>和真实工厂一样</b><span>没有工单的产线停下等单。演示时也可以让它照常仿真。</span></li>
+          </ul>
+        </section>
+
+        <section class="station">
+          <h2>问它现在怎么样了</h2>
+          <p>助手根据孪生、工单和你的资料回答：哪台设备停了，哪张工单会延期，作业指导书怎么写的。在后台里，助手提出的改动要你确认才执行。</p>
+          <figure class="shot"><img src="../screenshots/agent.png" alt="工作台助手列出在做的工单，并指出已经过了交期的那一张" loading="lazy" width="1440" height="900"></figure>
+        </section>
+
+        <section class="station">
+          <h2>它懂你的工艺</h2>
+          <p>每个工厂、产线、工位、设备、产品、供应商和客户都是知识图谱里的一个节点，工厂一改就重建。上传的资料和其中提到的设备、产品连在一起，所以问 IH-101 能找到中频感应加热炉的工艺卡。</p>
+          <figure class="shot"><img src="../screenshots/knowledge.png" alt="一家锻造公司的知识图谱：工厂、产线、设备、产品、供应商和客户" loading="lazy" width="1440" height="900"></figure>
+        </section>
+
+        <section class="station">
+          <h2>接上你已有的系统</h2>
+          <p>用 MQTT 上报的设备按约定的主题发数据，不用配置。已有的 PLC、网关和 broker，服务器直接去读。</p>
+          <div class="flow">
+            <div class="side">
+              <div class="port"><b>设备</b><span>MQTT，一个读数一个主题</span><code>sf/{公司}/{工厂}/{设备}/{字段}</code></div>
+              <div class="port"><b>PLC 和网关</b><span>Modbus TCP、OPC UA、你自己的 MQTT broker</span></div>
+              <div class="port"><b>ERP</b><span>生产工单，推送或拉取</span></div>
+            </div>
+            <div class="core">SmartFactory<small>你服务器上的一个程序</small></div>
+            <div class="side">
+              <div class="port"><b>浏览器</b><span>孪生和后台，电脑和手机都能用</span></div>
+              <div class="port"><b>AI agent</b><span>MCP 在 <code>/mcp</code>，命令行加 <code>-json</code></span></div>
+              <div class="port"><b>ERP</b><span>工单开工、完工，带签名回传</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="station" id="install">
+          <h2>装在一台 Linux 服务器上</h2>
+          <ol class="steps">
+            <li><b>下载对应架构的安装包</b><pre>tar xzf smartfactory-v0.1.2-linux-amd64.tar.gz
+cd smartfactory-v0.1.2-linux-amd64</pre></li>
+            <li><b>装成系统服务</b><pre>sudo ./smartfactory install</pre><p>systemd 服务，独立的系统用户，立即启动，开机自启。以后用新版本再执行一次就是升级。</p></li>
+            <li><b>登录，搭你的工厂</b><pre>sudo cat /var/lib/smartfactory/initial-admin-token</pre><p>用这个令牌打开 <code>http://你的服务器:4720/admin</code>。</p></li>
+          </ol>
+          <p>macOS、Windows 上直接运行 <code>smartfactory -config smartfactory.json</code>。要用 AI 助手，在 <code>/etc/smartfactory/env</code> 里配一个兼容 OpenAI 接口的大模型。</p>
+        </section>
+
+        <section class="station">
+          <h2>工厂的数据留在你自己的服务器上</h2>
+          <div class="ownership">
+            <div><b>一个目录</b><span>场景、仿真状态、账号、知识库和工单都在 <code>/var/lib/smartfactory</code>，备份它就是备份整个工厂。</span></div>
+            <div><b>不往外报数据</b><span>服务器只连你接上的东西：你的设备、你的 ERP、你的大模型。</span></div>
+            <div><b>AGPL-3.0</b><span>免费使用和修改。拿它给别人提供服务，就要公开你的修改。</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="end">
+    <div class="wrap">
+      <a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z" fill="#2f55e8"/><path d="M16 16 28 9.5v13L16 29z" fill="#1f3bb3"/><path d="M16 3 28 9.5 16 16 4 9.5z" fill="#6f8cf4"/></svg>SmartFactory</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/liliang-cn/smartfactory/releases">下载</a>
+      <a href="https://github.com/liliang-cn/smartfactory/blob/main/protocol/README.md">协议</a>
+      <a href="https://github.com/liliang-cn/smartfactory/blob/main/LICENSE">AGPL-3.0</a>
+    </div>
+  </footer>
+  <script src="../assets/site.js"></script>
+</body>
+</html>
