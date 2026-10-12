@@ -139,6 +139,37 @@ func (l *Log) List(ctx context.Context, company string, before int64, limit int)
 	return out, rows.Err()
 }
 
+// Find is company's entries at or after from that came via via and whose action is one of
+// actions, newest first, up to limit.
+func (l *Log) Find(ctx context.Context, company string, from time.Time, via string, actions []string, limit int) ([]Entry, error) {
+	out := []Entry{}
+	if l == nil || len(actions) == 0 {
+		return out, nil
+	}
+	args := []any{company, from.UnixMilli(), via}
+	for _, a := range actions {
+		args = append(args, a)
+	}
+	rows, err := l.db.QueryContext(ctx, `SELECT id, at, who, role, key, via, company, action, target, detail, ok, error, context FROM audit
+		WHERE company = ? AND at >= ? AND via = ? AND action IN (?`+strings.Repeat(",?", len(actions)-1)+`) ORDER BY id DESC LIMIT ?`, append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e Entry
+		var at int64
+		var role string
+		if err := rows.Scan(&e.ID, &at, &e.Who, &role, &e.Key, &e.Via, &e.Company, &e.Action, &e.Target, &e.Detail, &e.OK, &e.Error, &e.Context); err != nil {
+			return nil, err
+		}
+		e.At = time.UnixMilli(at)
+		e.Role, _ = auth.ParseRole(role)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // Count is how many entries one action had from one place, by whether it worked.
 type Count struct {
 	Action string `json:"action"`

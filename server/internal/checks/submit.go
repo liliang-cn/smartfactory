@@ -272,6 +272,9 @@ func (s *Service) Submit(company string, in Input, by Author) (*Submission, erro
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	if s.Changed != nil {
+		s.Changed(company)
+	}
 
 	// the machine's quality alarms follow the latest time this form was filled in on it
 	var newer int

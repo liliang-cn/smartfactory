@@ -126,6 +126,8 @@ type Service struct {
 	// Now is the clock and Loc where rounds are timed (tests set them).
 	Now func() time.Time
 	Loc *time.Location
+	// Changed is told the company whose machine a form was just filled in on (nil: no one).
+	Changed func(company string)
 
 	db *sql.DB
 	// mu keeps two copies of one submission (a phone resending) from both going in.
