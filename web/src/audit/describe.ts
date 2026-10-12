@@ -88,6 +88,9 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     case 'erp.pull': return { text: `从 ERP 拉取工单：${e.detail}` };
     case 'erp.orders': return { text: `收到工单 ${e.target}（${e.detail}）` };
     case 'erp.cancel': return { text: `撤回工单 ${e.target}` };
+    case 'device.add': return { text: `登记设备 ${e.target}${e.detail ? `（${e.detail}）` : ''}` };
+    case 'device.renew': return { text: `给设备 ${e.target} 换新${e.detail || '凭据'}` };
+    case 'device.revoke': return { text: `撤销设备 ${e.target}${e.detail ? `（${e.detail}）` : ''}` };
   }
   if (e.action.startsWith('advisor.')) {
     const verb = e.action.slice('advisor.'.length);
