@@ -237,7 +237,8 @@ func number(v any) (float64, bool) {
 // Add learns and judges one reading. It is the hub's Tap: it must not block, and does no more
 // than a few map lookups and sums (no allocation once a field is known).
 func (d *Detector) Add(t tags.Tag) {
-	if t.Q&tags.Doubtful != 0 || (!t.At.IsZero() && d.Now().Sub(t.At) > tags.Late) {
+	// what people write down at the machine (checks.Source) is not the machine's own reading
+	if t.Source == "manual" || t.Q&tags.Doubtful != 0 || (!t.At.IsZero() && d.Now().Sub(t.At) > tags.Late) {
 		return
 	}
 	at := t.At

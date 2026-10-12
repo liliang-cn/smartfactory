@@ -267,6 +267,8 @@ func TestIgnored(t *testing.T) {
 	r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "temp", Value: 900.0, At: r.now.Add(-time.Hour)})
 	r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "temp", Value: "hot", At: r.now})
 	r.read("mcount", 7)
+	// a gauge a person read off at the machine
+	r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "gauge_temp", Value: 62.0, Source: "manual", At: r.now})
 	m, _ := r.d.Machine("c", "p", "M1")
 	if len(m.Fields) != 1 || m.Fields[0].Now.N != 1 || m.Fields[0].Now.Mean != 50 {
 		t.Fatalf("learned %+v", m.Fields)
