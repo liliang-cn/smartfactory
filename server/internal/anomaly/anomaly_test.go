@@ -221,6 +221,24 @@ func TestStateChangeInOneMessage(t *testing.T) {
 	}
 }
 
+// A running hint is not moved by the power read in the report that says the machine went idle.
+func TestHintKeepsToItsState(t *testing.T) {
+	r := newRig(t, nil)
+	r.state("running")
+	r.run("power", time.Hour, 0.5, flat(26))
+	r.run("power", 2*time.Minute, 0.5, flat(30))
+	h := r.hints()
+	if len(h) != 1 || h[0].Peak < 5 {
+		t.Fatalf("hints %+v", h)
+	}
+	peak := h[0].Peak
+	r.read("power", 4)
+	r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "state", Value: "idle", At: r.now.Add(30 * time.Microsecond)})
+	if h := r.hints(); len(h) != 1 || h[0].Peak != peak || h[0].Z < 5 {
+		t.Errorf("hint after going idle: %+v, peak was %.1f", h, peak)
+	}
+}
+
 // Nothing is judged while a field is still being learned.
 func TestWarmup(t *testing.T) {
 	r := newRig(t, nil)

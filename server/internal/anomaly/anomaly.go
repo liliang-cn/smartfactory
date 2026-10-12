@@ -134,15 +134,21 @@ type machine struct {
 type field struct {
 	states map[string]*Stat
 	cur    *Stat
-	// the last reading and how far it was, and its normal before it was learned
-	value, z float64
-	at       time.Time
-	before   Stat
-	// since when (and for how many readings in a row) it has been beyond K σ, its average
-	// beyond K of its own spread, and back within both
+	at     time.Time
+	track
+	hint *Anomaly
+	// as they were before the last reading, to take it back
+	before      Stat
+	beforeTrack track
+	beforeHint  Anomaly
+}
+
+// track is how a field is judged: the last reading and how far it was; since when (and for how
+// many readings in a row) it has been beyond K σ, its average beyond its line, and back within.
+type track struct {
+	value, z                      float64
 	outSince, driftSince, inSince time.Time
 	outN, driftN                  int
-	hint                          *Anomaly
 }
 
 type event struct {
@@ -281,8 +287,9 @@ const settle = 5 * time.Second
 const sameReport = 250 * time.Millisecond
 
 // switchState puts the machine in state s. Equipment sends a machine's fields together, in name
-// order: the power read with the new state came just before it, and went into the old state's
-// normal. A field read in the same report as the change is taken back out of it.
+// order: the power read with the new state came just before it, and was held against the old
+// state's normal. A field read in the same report as the change is taken back: out of that
+// normal, and out of the field's hint (an idle machine's power is not a running one's 39 σ low).
 func (d *Detector) switchState(m *machine, s string, at time.Time) {
 	old := m.state
 	m.state, m.since = s, at
@@ -292,6 +299,10 @@ func (d *Detector) switchState(m *machine, s string, at time.Time) {
 		}
 		*f.cur = f.before
 		f.cur.dirty = true
+		f.track = f.beforeTrack
+		if h := f.hint; h != nil && h.ID == f.beforeHint.ID {
+			h.Kind, h.Value, h.Z, h.Peak, h.Text = f.beforeHint.Kind, f.beforeHint.Value, f.beforeHint.Z, f.beforeHint.Peak, f.beforeHint.Text
+		}
 		if f.cur.N == 0 {
 			// a reading before the machine first said its state: no state of its own
 			delete(f.states, old)
@@ -318,7 +329,10 @@ func (d *Detector) switchState(m *machine, s string, at time.Time) {
 // it leaves behind would be one), and both have to be back within for Sustain to end it.
 func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, at time.Time) {
 	set := d.Set
-	f.before = *s
+	f.before, f.beforeTrack = *s, f.track
+	if f.hint != nil {
+		f.beforeHint = *f.hint
+	}
 	if f.cur != s {
 		// another state: its own normal, and the evidence so far was against the other one
 		s.Short, f.cur = x, s

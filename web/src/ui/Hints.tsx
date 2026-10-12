@@ -44,7 +44,7 @@ export function HintChip() {
           <span className="tabular-nums">{hints.length}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[340px] rounded-2xl p-2 shadow-float">
+      <DropdownMenuContent align="end" className="max-h-[min(70vh,560px)] w-[340px] overflow-y-auto rounded-2xl p-2 shadow-float">
         <DropdownMenuLabel className="grid gap-0.5 leading-snug">
           <span className="text-[13px] font-extrabold">读数异常提示</span>
           <span className="text-xs font-normal text-muted-foreground">和设备自己同一状态下的平常读数比。只是提示，设备照常运行。</span>
