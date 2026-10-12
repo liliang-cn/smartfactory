@@ -270,7 +270,7 @@ export function ValuePanel({ c }: { c: api.Company }) {
           <PeriodPicker period={period} onChange={setPeriod} />
           {v && (
             <p className="text-[13px] leading-relaxed">
-              <b>{v.name}</b>，{v.period.label}（{date(v.period.from)} 至 {date(last)}）。
+              <b>{v.name}</b>，{v.period.label}{v.period.label.startsWith('近') && `（${date(v.period.from)} 至 ${date(last)}）`}。
               <span className="text-muted-foreground">每个数下面的 n 是它从多少条记录算出来的，后面是依据；没有可算的记录就写「没有数据」，不估。生成于 {new Date(v.at).toLocaleString('zh-CN')}。</span>
               {loading && <LoaderCircleIcon className="ml-1.5 inline size-3.5 animate-spin text-muted-foreground" />}
             </p>
