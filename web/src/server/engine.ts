@@ -663,11 +663,12 @@ function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt
   return result(() => {
     const p = get(c)?.byId[plantId];
     if (!p) throw new Error(`找不到 ${c}/${plantId}`);
-    const names = JSON.parse(linesJson || '[]') as string[];
+    // Go sends null for a list it was not given: all lines, no change
+    const names = (JSON.parse(linesJson || '[]') ?? []) as string[];
     const lines = names.length ? p.lines.filter((l) => names.includes(l.name) || names.includes(l.id)) : p.lines;
     if (!lines.length) throw new Error(`${plantId} 没有这些产线：${names.join('、')}；有 ${p.lines.map((l) => l.name).join('、')}`);
     const ids = new Set(lines.map((l) => l.id));
-    const changes = JSON.parse(changesJson || '[]') as Change[];
+    const changes = (JSON.parse(changesJson || '[]') ?? []) as Change[];
     const saved = p.saveState();
     const random = Math.random;
     // the plant goes on as it was once the trial runs are done: recording, reporting, taking orders
