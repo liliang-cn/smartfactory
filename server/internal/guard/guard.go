@@ -392,6 +392,26 @@ func (g *Guard) List(company, status string, limit int) ([]Request, error) {
 	return out, rows.Err()
 }
 
+// Between is every request of a company made at or after from and before to, oldest first.
+func (g *Guard) Between(company string, from, to time.Time) ([]Request, error) {
+	g.lapse()
+	rows, err := g.db.Query(`SELECT `+reqCols+` FROM requests WHERE company=? AND created>=? AND created<? ORDER BY created`,
+		company, from.UnixMilli(), to.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Request{}
+	for rows.Next() {
+		r, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // ErrDecided is a request that is no longer waiting.
 var ErrDecided = errors.New("这条指令已经处理过了")
 

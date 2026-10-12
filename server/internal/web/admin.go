@@ -178,6 +178,14 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 		v, err := o.Do(r.Context(), s.caller(r), via(r), a)
 		answer(w, v, err)
 	})
+	// a proposal the person turned down: nothing runs, the value report counts it
+	mux.HandleFunc("POST /api/admin/actions/dismiss", func(w http.ResponseWriter, r *http.Request) {
+		var a ops.Action
+		if !read(w, r, &a) {
+			return
+		}
+		answer(w, done, o.Dismiss(s.caller(r), via(r), a))
+	})
 
 	// templates: built in, and saved or imported here
 	mux.HandleFunc("GET /api/admin/templates", func(w http.ResponseWriter, r *http.Request) {
@@ -260,10 +268,13 @@ func writeOpError(w http.ResponseWriter, err error) {
 }
 
 // ops is the operations behind the console, built from the server's parts unless given.
+// Operations is what the console does, for callers outside the HTTP API (the MCP tools).
+func (s *Server) Operations() *ops.Ops { return s.ops() }
+
 func (s *Server) ops() *ops.Ops {
 	if s.Ops == nil {
 		s.Ops = &ops.Ops{Engine: s.Engine, Keys: s.Keys, Audit: s.Audit, Agents: s.Agents, KB: s.Knowledge, Hub: s.Hub, Advisors: s.Advisors, Version: s.Version,
-			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard, Devices: s.Devices, MQTT: s.MQTT, Checks: s.Checks}
+			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard, Devices: s.Devices, MQTT: s.MQTT, Checks: s.Checks, Consult: s.consult, History: s.History}
 	}
 	return s.Ops
 }

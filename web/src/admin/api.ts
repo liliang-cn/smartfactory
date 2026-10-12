@@ -116,6 +116,8 @@ export const agent = (conversation: string | null, text: string, signal: AbortSi
 
 /** Carry out an action (one the console agent proposed), as the signed-in person. */
 export const doAction = (a: ConsoleAction) => call<unknown>('POST', '/api/admin/actions', a);
+/** Turn a proposal down: nothing runs; the value report counts it. */
+export const dismissAction = (a: ConsoleAction) => call<{ ok: true }>('POST', '/api/admin/actions/dismiss', a);
 
 export const templates = () => call<TemplateSummary[]>('GET', '/api/admin/templates');
 export const template = (source: TemplateSummary['source'], id: string) => call<Template>('GET', `/api/admin/templates/${source}/${encodeURIComponent(id)}`);
@@ -224,6 +226,35 @@ export async function downloadChecks(c: string, q: URLSearchParams, name: string
 }
 /** A photo taken with a submission, as a URL an <img> can show. */
 export const checkPhoto = async (c: string, id: string) => URL.createObjectURL(await fetchBlob(`${checksPath(c)}/photos/${encodeURIComponent(id)}`));
+
+export type ValueReport = z.infer<typeof P.ValueReport>;
+export type ValueFigure = z.infer<typeof P.ValueFigure>;
+export type ValueSection = z.infer<typeof P.ValueSection>;
+export type ValueWeek = z.infer<typeof P.ValueWeek>;
+export type PlanResult = z.infer<typeof P.PlanResult>;
+/** A report's span: days back from now, or a first and last day (both included). */
+export type ValuePeriod = { days: number } | { from: string; to: string };
+const valueQuery = (p: ValuePeriod) => new URLSearchParams('days' in p ? { days: String(p.days) } : p);
+export const value = (c: string, p: ValuePeriod) => call<ValueReport>('GET', `/api/value/${encodeURIComponent(c)}?${valueQuery(p)}`);
+
+/** Saves the report as CSV, for a spreadsheet. */
+export async function downloadValue(c: string, p: ValuePeriod) {
+  const t = token();
+  const q = valueQuery(p);
+  q.set('format', 'csv');
+  const res = await fetch(`/api/value/${encodeURIComponent(c)}?${q}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+  if (!res.ok) {
+    const b = await res.json().catch(() => null) as { error?: string } | null;
+    throw new ApiError(res.status, b?.error ?? `导出失败（${res.status}）`);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? `value-${c}.csv`;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;

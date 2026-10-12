@@ -11,6 +11,7 @@ package main
 //	smartfactory calib <company> | calib <company> show <设备> | fit [-hours 24] [设备…] | apply [设备…] | revert [设备…]
 //	smartfactory guard <company> | guard <company> set -level guarded -approve start,speed | pending | approve <编号> | deny <编号>
 //	smartfactory checks <company> | checks <company> rounds | results [-asset HP-101] [-bad] | export -o file.csv | template 点检 | save -f form.json | submit -f values.json
+//	smartfactory value <company> [-days 30 | -from 2026-09-01 -to 2026-09-30] [-csv 成效.csv]
 //	smartfactory activity [-company id] [-n 30]
 //	smartfactory agent ["一句话"]
 //
@@ -38,7 +39,7 @@ import (
 var cliCommands = map[string]func(ctx context.Context, args []string) error{
 	"login": cliLogin, "logout": cliLogout, "whoami": cliWhoami,
 	"company": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
-	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "device": cliDevice, "checks": cliChecks, "activity": cliActivity, "agent": cliAgent,
+	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "device": cliDevice, "checks": cliChecks, "value": cliValue, "activity": cliActivity, "agent": cliAgent,
 }
 
 // ---- output ----
@@ -534,6 +535,7 @@ var toolNames = map[string]string{
 	"check_industry": "检查行业包", "propose_create_industry": "提出保存行业包",
 	"guard_status": "看指令把关", "propose_approve_command": "提出批准指令", "propose_deny_command": "提出拒绝指令",
 	"check_forms": "看点检表", "check_rounds": "看点检轮次", "check_results": "看人工记录",
+	"calibration": "看仿真校准", "propose_apply_calibration": "提出应用校准", "value_report": "看成效",
 }
 
 func toolLabel(tool string, args map[string]any) string {
@@ -1085,6 +1087,9 @@ func cliAgent(ctx context.Context, args []string) error {
 			}
 			if !confirm("执行？") {
 				fmt.Println(dim("  没执行"))
+				if err := c.Do(ctx, "POST", "/api/admin/actions/dismiss", a, nil); err != nil {
+					fmt.Println(dim("  （没记下：" + err.Error() + "）"))
+				}
 				continue
 			}
 			var res json.RawMessage

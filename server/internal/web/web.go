@@ -81,6 +81,8 @@ type Server struct {
 	MQTT    *ops.MQTT
 	// Checks are the forms people fill in by hand at the machines (nil without data).
 	Checks *checks.Service
+	// History is each company's history database, for those that keep one (the value report).
+	History map[string]ops.PlantHistory
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -154,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	s.guardRoutes(mux)
 	s.deviceRoutes(mux)
 	s.checkRoutes(mux)
+	s.valueRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())

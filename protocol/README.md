@@ -288,9 +288,10 @@
 | `GET /api/admin/companies/{id}` | — | 公司配置 | 内置的和运行时建的都有 |
 | `POST /api/admin/companies?check=1` | 公司配置 | `CompanyCreated` | 只检查（校验、排布），不创建 |
 | `POST /api/admin/agent` | `{conversation?, text}` | SSE，`ConsoleEvent` 流 | 工作台助手：用后台自己的操作回答；它提出的改动作为 `action` 事件发出，**不会自己执行**。第一个事件 `conversation` 给出对话 id，带上它继续说。同一个令牌同一时间只能跑一个 |
-| `POST /api/admin/actions` | `ConsoleAction {kind, args}` | 视 `kind` 而定 | 执行一个改动（通常是助手提出、人确认的那个），以确认的人的身份，检查和审计与对应的接口相同。`kind`：`create_company {config}`、`delete_company {id}`、`create_industry {config}`、`issue_token {name, role, companies, expires?}`、`revoke_token {key}`、`rebuild_knowledge {company}`、`cancel_order {company, no}` |
+| `POST /api/admin/actions` | `ConsoleAction {id?, kind, args}` | 视 `kind` 而定 | 执行一个改动（通常是助手提出、人确认的那个），以确认的人的身份，检查和审计与对应的接口相同。`kind`：`create_company {config}`、`delete_company {id}`、`create_industry {config}`、`issue_token {name, role, companies, expires?}`、`revoke_token {key}`、`rebuild_knowledge {company}`、`cancel_order {company, no}`、`apply_calibration {company, machines?}`、`approve_command {company, id}`、`deny_command {company, id, reason?}`。带助手给的 `id` 的另记一条 `agent.confirm` |
+| `POST /api/admin/actions/dismiss` | `ConsoleAction {id, kind, args}` | `Done` | 不执行助手提出的改动，记一条 `agent.dismiss`；管理员 |
 
-`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`（一份通过检查的公司配置）和 `industry`（一个通过检查的行业包），都在 `result` 里。`ConsoleEvent` 另加 `action`：一个待确认的改动，在 `result` 里，带 `title`、`detail`。审计日志新增 `token.issue`、`token.revoke`、`knowledge.rebuild`；请求头带 `X-SF-Via: cli` 的（命令行）记为 `via: cli`，其余后台请求记为 `page`。
+`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`（一份通过检查的公司配置）和 `industry`（一个通过检查的行业包），都在 `result` 里。`ConsoleEvent` 另加 `action`：一个待确认的改动，在 `result` 里，带 `id`（`AP-…`）、`title`、`detail`；提出时记一条 `agent.propose`。审计日志新增 `token.issue`、`token.revoke`、`knowledge.rebuild`；请求头带 `X-SF-Via: cli` 的（命令行）记为 `via: cli`，其余后台请求记为 `page`。
 
 **操作只有一份**：后台页面、命令行（`smartfactory company|industries|tokens|kb|orders|activity|agent`）和工作台助手调用的是服务器上同一组操作（`server/internal/ops`），权限检查和审计记录完全相同。
 
@@ -445,6 +446,22 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 手机页面：`/check?company=…&plant=…&asset=…` 直接打开一台设备（设备上贴的二维码就是这个链接），令牌可以带一次 `&token=`，之后存在手机上。
 
 命令行：`smartfactory checks <company>`（表单和逾期数）、`rounds [-status overdue,due]`、`results [-asset HP-101] [-bad] [-hours 24]`、`export -from 2026-10-01 -to 2026-10-12 -o 记录.csv`、`template 点检`、`save -f form.json`、`rm <编号>`、`submit -f values.json`。工作台助手有 `check_forms`、`check_rounds`、`check_results`；孪生里的研发笔记助手和售后服务助手用 `manual_records` 查人工记录。
+### 成效 `/api/value/{company}`
+
+一段时间里孪生和它的 AI 给这家公司做了什么，每个数（`ValueFigure`）带 `n`（从多少条记录算的：计数就是它自己，比例是分母，工厂的数是产线小时）和 `basis`（依据）；没有可算的记录时 `value` 是 `null`，页面写「没有数据」，不估。
+
+- **建议**（`suggestions`）：顾问服务的咨询档案（`GET /v1/consult`，用 `advisorToken`）。提出的按提出时间、采纳和否决按决定时间落在这段时间里算；采纳率是这段时间的决定里采纳的比例；决定用时取中位数。`plans` 是这段时间采纳或量过的计划，各自和自己的基线比（`change`、`better`），指标不同不加总。
+- **AI**（`ai`）：工作台助手提出的改动卡片（`agent.propose`）有多少确认（`agent.confirm`）、点了不要（`agent.dismiss`）、没回应；AI（经 MCP、助手）的设备指令直接执行的、等人批准的（指令把关的请求）、批准、拒绝、被规则拒绝、过期、还在等。
+- **校准**（`calibration`）：在用校准的设备、这段时间应用和拟合的，`fields` 是在用校准的设备拟合期的回放误差（模板 → 拟合），没有在用的就是这段时间拟合过的，并在 `note` 里说明。
+- **工单**（`orders`）：ERP 下达的工单，收到、完工、按期、延期、按期完工率（只算有交期的）、现在已过交期的。
+- **工厂**（`plant`）：历史库（`history` 里配的 Postgres）逐小时的记录。有设备实测的小时就只算实测的（`source: measured`），没有就用仿真（或部分实测）的并标 `simulated`，说明不代表真实工厂。`weeks` 从周一起，截到这段时间；`compare` 是第一条采纳的计划前后各 N 整天（N 不超过这段时间的天数和采纳以来的天数，采纳当天不算），只说明同时发生，不证明是计划带来的。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/value/{company}?days=30` | `ValueReport` | 往前 `days` 天（默认 30，1～366）；或 `from=YYYY-MM-DD&to=YYYY-MM-DD`（两天都含）；成员以上 |
+| `GET /api/value/{company}?…&format=csv` | CSV | 同一份报告的表格（UTF-8 带 BOM，表格软件直接打开） |
+
+命令行：`smartfactory value <company>`（`-days 7`、`-from 2026-09-01 -to 2026-09-30`、`-csv 成效.csv`）。工作台助手有 `value_report`，MCP 也有 `value_report`（成员以上）。
 
 ## 6. MCP `POST /mcp`
 
@@ -467,6 +484,7 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `check_rounds` | 各设备的轮次：逾期（默认）、待做、已做，上次谁什么时候填的 | 成员 |
 | `check_results` | 最近填的记录，每项的值、是否超差或异常、谁记的、什么时候记的 | 成员 |
 | `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
+| `value_report` | 一段时间里这套系统带来了什么（`days`，或 `from`、`to`），同 `GET /api/value/{company}` | 成员 |
 | `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
 | `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |
 | `create_industry` | 新建或替换行业包，带校验；行业包是所有公司共用的 | 管理所有公司的管理员 |

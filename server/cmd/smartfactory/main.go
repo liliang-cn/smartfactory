@@ -241,7 +241,12 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 
 	advisors := map[string]string{}
 	advisorAPI := map[string]sfweb.Advisor{}
+	// each company's history, read for the value report (recording keeps its own connection)
+	plants := map[string]ops.PlantHistory{}
 	for _, h := range cfg.History {
+		r := &history.Reader{DSN: h.DSN}
+		defer r.Close()
+		plants[h.Company] = r
 		if h.Advisor != "" {
 			advisors[h.Company] = h.Advisor
 		}
@@ -430,12 +435,14 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	ws := &sfweb.Server{
 		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Devices: devs, MQTT: mq, Checks: manual, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		History: plants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
 			Stateless: true, JSONResponse: true, DisableLocalhostProtection: true,
 		}),
 	}
+	mcptools.AddValueTool(ms, ws.Operations().ValueTool)
 	srv := &http.Server{Addr: cfg.HTTP, Handler: ws.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()

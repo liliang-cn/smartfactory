@@ -23,6 +23,7 @@ import { Calibration } from './Calib';
 import { DevicePanel } from './Devices';
 import { ChecksPanel } from './Checks';
 import { GuardPanel } from './Guard';
+import { ValuePanel } from './Value';
 import { OrderBoard, ERPPanel } from './Orders';
 import { Panel } from './Panel';
 import { Badge, totals } from './Customers';
@@ -40,6 +41,7 @@ const TABS = [
   { id: 'calib', label: '校准', icon: SlidersHorizontalIcon },
   { id: 'guard', label: '指令', icon: ShieldCheckIcon },
   { id: 'checks', label: '点检', icon: ClipboardCheckIcon },
+  { id: 'value', label: '成效', icon: TrendingUpIcon },
   { id: 'accounts', label: '账号', icon: KeyRoundIcon },
   { id: 'activity', label: '记录', icon: ScrollTextIcon },
 ] as const;
@@ -264,6 +266,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
         <TabsContent value="checks"><ChecksPanel c={c} /></TabsContent>
+        <TabsContent value="value"><ValuePanel c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
         <TabsContent value="activity"><ActivityList company={c.id} /></TabsContent>
       </Tabs>

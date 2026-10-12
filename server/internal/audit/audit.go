@@ -138,3 +138,41 @@ func (l *Log) List(ctx context.Context, company string, before int64, limit int)
 	}
 	return out, rows.Err()
 }
+
+// Count is how many entries one action had from one place, by whether it worked.
+type Count struct {
+	Action string `json:"action"`
+	Via    string `json:"via"`
+	OK     bool   `json:"ok"`
+	N      int    `json:"n"`
+}
+
+// Counts are company's entries at or after from and before to whose action is one of prefixes
+// or under it ("command" takes command.refused too), by action, where they came from and
+// whether they worked. Counting in the database keeps a busy plant's commands off the heap.
+func (l *Log) Counts(ctx context.Context, company string, from, to time.Time, prefixes ...string) ([]Count, error) {
+	out := []Count{}
+	if l == nil || len(prefixes) == 0 {
+		return out, nil
+	}
+	var match []string
+	args := []any{company, from.UnixMilli(), to.UnixMilli()}
+	for _, p := range prefixes {
+		match = append(match, `action = ? OR action LIKE ?`)
+		args = append(args, p, p+".%")
+	}
+	rows, err := l.db.QueryContext(ctx, `SELECT action, via, ok, count(*) FROM audit WHERE company = ? AND at >= ? AND at < ? AND (`+
+		strings.Join(match, " OR ")+`) GROUP BY action, via, ok ORDER BY action, via, ok`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c Count
+		if err := rows.Scan(&c.Action, &c.Via, &c.OK, &c.N); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}

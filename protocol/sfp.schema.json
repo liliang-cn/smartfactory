@@ -4131,6 +4131,9 @@
     "ConsoleAction": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string"
+        },
         "kind": {
           "type": "string",
           "enum": [
@@ -4141,7 +4144,9 @@
             "revoke_token",
             "rebuild_knowledge",
             "cancel_order",
-            "apply_calibration"
+            "apply_calibration",
+            "approve_command",
+            "deny_command"
           ]
         },
         "title": {
@@ -6497,6 +6502,663 @@
       ],
       "additionalProperties": false,
       "description": "GET /api/checks/{company}/machines/{plant}/{asset} — members and above; 404 when no form is for it"
+    },
+    "ValueReport": {
+      "type": "object",
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "period": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            },
+            "days": {
+              "type": "number"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "to",
+            "days",
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        "at": {
+          "type": "string"
+        },
+        "suggestions": {
+          "type": "object",
+          "properties": {
+            "figures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "measured",
+                      "simulated"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "value",
+                  "n",
+                  "basis"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "missing": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "plans": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "does": {
+                    "type": "string"
+                  },
+                  "metric": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "want": {
+                    "type": "string"
+                  },
+                  "adopted": {
+                    "type": "string"
+                  },
+                  "baseline": {
+                    "type": "number"
+                  },
+                  "measured": {
+                    "type": "number"
+                  },
+                  "target": {
+                    "type": "number"
+                  },
+                  "change": {
+                    "type": "number"
+                  },
+                  "better": {
+                    "type": "boolean"
+                  },
+                  "dataDays": {
+                    "type": "number"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "achieved",
+                      "missed",
+                      "guard_broken",
+                      "no_data"
+                    ]
+                  },
+                  "accepted": {
+                    "type": "boolean"
+                  },
+                  "unit": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "does",
+                  "metric",
+                  "label",
+                  "want",
+                  "adopted",
+                  "dataDays",
+                  "accepted"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "figures",
+            "plans"
+          ],
+          "additionalProperties": false
+        },
+        "ai": {
+          "type": "object",
+          "properties": {
+            "figures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "measured",
+                      "simulated"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "value",
+                  "n",
+                  "basis"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "missing": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "figures"
+          ],
+          "additionalProperties": false
+        },
+        "calibration": {
+          "type": "object",
+          "properties": {
+            "figures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "measured",
+                      "simulated"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "value",
+                  "n",
+                  "basis"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "missing": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "before": {
+                    "type": "number"
+                  },
+                  "after": {
+                    "type": "number"
+                  },
+                  "machines": {
+                    "type": "number"
+                  },
+                  "n": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "field",
+                  "label",
+                  "unit",
+                  "before",
+                  "after",
+                  "machines",
+                  "n"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "figures",
+            "fields"
+          ],
+          "additionalProperties": false
+        },
+        "orders": {
+          "type": "object",
+          "properties": {
+            "figures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "measured",
+                      "simulated"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "value",
+                  "n",
+                  "basis"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "missing": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "figures"
+          ],
+          "additionalProperties": false
+        },
+        "plant": {
+          "type": "object",
+          "properties": {
+            "figures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "measured",
+                      "simulated"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "value",
+                  "n",
+                  "basis"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "missing": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "simulated"
+              ]
+            },
+            "weeks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string"
+                  },
+                  "days": {
+                    "type": "number"
+                  },
+                  "oee": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "output": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "downtime": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "outputPerDay": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "downtimePerDay": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "lineHours": {
+                    "type": "number"
+                  },
+                  "measured": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "start",
+                  "days",
+                  "oee",
+                  "output",
+                  "downtime",
+                  "outputPerDay",
+                  "downtimePerDay",
+                  "lineHours",
+                  "measured"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "compare": {
+              "type": "object",
+              "properties": {
+                "plan": {
+                  "type": "string"
+                },
+                "does": {
+                  "type": "string"
+                },
+                "adopted": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "number"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "measured",
+                    "simulated"
+                  ]
+                },
+                "before": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "oee": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "outputPerDay": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "downtimePerDay": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "days": {
+                      "type": "number"
+                    },
+                    "lineHours": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "oee",
+                    "outputPerDay",
+                    "downtimePerDay",
+                    "days",
+                    "lineHours"
+                  ],
+                  "additionalProperties": false
+                },
+                "after": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "oee": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "outputPerDay": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "downtimePerDay": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "days": {
+                      "type": "number"
+                    },
+                    "lineHours": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "oee",
+                    "outputPerDay",
+                    "downtimePerDay",
+                    "days",
+                    "lineHours"
+                  ],
+                  "additionalProperties": false
+                },
+                "note": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "plan",
+                "does",
+                "adopted",
+                "days",
+                "before",
+                "after",
+                "note"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "figures",
+            "weeks"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "company",
+        "name",
+        "period",
+        "at",
+        "suggestions",
+        "ai",
+        "calibration",
+        "orders",
+        "plant"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/value/{company}?days=30 | ?from=YYYY-MM-DD&to=YYYY-MM-DD (&format=csv for the export) — members and above; MCP value_report"
     },
     "Source": {
       "type": "object",

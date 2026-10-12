@@ -1027,12 +1027,76 @@ export const MachineChecks = z.object({
   last: z.array(CheckSubmission),
   operator: z.boolean(),
 }).meta({ description: 'GET /api/checks/{company}/machines/{plant}/{asset} — members and above; 404 when no form is for it' });
+// ---------- the value report (/api/value/{company}) ----------
+
+const DataSource = z.enum(['measured', 'simulated']);
+/** One number of the report. value null: there was nothing to count it from (the page says 没有数据). */
+export const ValueFigure = z.object({
+  key: str, label: str, value: num.nullable(),
+  /** % (value is a fraction), h, min, or what is counted (条, 次, 台, 张, 件) */
+  unit: str.optional(),
+  /** how many records it was counted from: the count itself, a rate's denominator, a plant figure's line-hours */
+  n: num,
+  /** what it was counted from */
+  basis: str,
+  /** plant figures: from equipment, or the twin's simulation (or hours partly measured) */
+  source: DataSource.optional(),
+});
+const sectionFields = {
+  figures: z.array(ValueFigure),
+  /** why the part has no data */
+  missing: str.optional(),
+  /** what to keep in mind reading it */
+  note: str.optional(),
+};
+export const ValueSection = z.object(sectionFields);
+export const PlanResult = z.object({
+  id: str, does: str, metric: str, label: str, want: str, adopted: time,
+  baseline: num.optional(), measured: num.optional(), target: num.optional(),
+  /** (measured − baseline) / |baseline| */
+  change: num.optional(),
+  /** it moved the way the plan wanted */
+  better: z.boolean().optional(),
+  dataDays: num,
+  outcome: z.enum(['achieved', 'missed', 'guard_broken', 'no_data']).optional(),
+  accepted: z.boolean(),
+  unit: str.optional(),
+});
+export const FieldReplay = z.object({ field: str, label: str, unit: str, before: num, after: num, machines: num, n: num });
+export const ValueWeek = z.object({
+  /** Monday */
+  start: time, days: num,
+  oee: num.nullable(), output: num.nullable(), downtime: num.nullable(),
+  /** output per line per day, downtime hours per machine per day, over the hours with records */
+  outputPerDay: num.nullable(), downtimePerDay: num.nullable(),
+  lineHours: num,
+  /** share of the week's line-hours measured from equipment */
+  measured: num.nullable(),
+});
+const ValueSide = z.object({ from: time, to: time, oee: num.nullable(), outputPerDay: num.nullable(), downtimePerDay: num.nullable(), days: num, lineHours: num });
+export const ValueCompare = z.object({
+  plan: str, does: str, adopted: time, days: num, source: DataSource.optional(), before: ValueSide, after: ValueSide,
+  /** correlation, not proof */
+  note: str,
+});
+export const ValueReport = z.object({
+  company: str, name: str,
+  period: z.object({ from: time, to: time, days: num, label: str }),
+  at: time,
+  suggestions: z.object({ ...sectionFields, plans: z.array(PlanResult) }),
+  ai: ValueSection,
+  calibration: z.object({ ...sectionFields, fields: z.array(FieldReplay) }),
+  orders: ValueSection,
+  plant: z.object({ ...sectionFields, source: DataSource.optional(), weeks: z.array(ValueWeek), compare: ValueCompare.optional() }),
+}).meta({ description: 'GET /api/value/{company}?days=30 | ?from=YYYY-MM-DD&to=YYYY-MM-DD (&format=csv for the export) — members and above; MCP value_report' });
 
 // ---------- the console agent (/api/admin/agent) ----------
 
-/** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
+/** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them, or turns it down (POST /api/admin/actions/dismiss). */
 export const ConsoleAction = z.object({
-  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration']),
+  /** the proposal (AP-…); the activity log keeps what became of it */
+  id: str.optional(),
+  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration', 'approve_command', 'deny_command']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [
@@ -1064,6 +1128,7 @@ export const DEFS = {
   GuardSettings, GuardOverview, CommandRequest, CommandRequests,
   BrokerDevice, BrokerDevices, RegisterDevice, DeviceCredential,
   CheckForm, CheckForms, CheckRounds, ChecksOverview, CheckSubmission, CheckSubmissions, CheckInput, MachineChecks,
+  ValueReport,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
