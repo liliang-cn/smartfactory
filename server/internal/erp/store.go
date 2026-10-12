@@ -173,6 +173,26 @@ func (s *Store) List(company string, f Filter) ([]Order, error) {
 	return out, rows.Err()
 }
 
+// Span is a company's orders received or finished at or after from and before to, and those
+// still open (queued or running), whenever they came.
+func (s *Store) Span(company string, from, to time.Time) ([]Order, error) {
+	rows, err := s.db.Query(`SELECT `+orderCols+` FROM orders WHERE company=? AND ((created>=? AND created<?) OR (finished>=? AND finished<?) OR status IN (?,?))
+		ORDER BY created`, company, ms(from), ms(to), ms(from), ms(to), Queued, Running)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Order{}
+	for rows.Next() {
+		o, err := scanOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 // Counts is how many orders there are in each status.
 func (s *Store) Counts(company string) (map[string]int, error) {
 	rows, err := s.db.Query(`SELECT status, count(*) FROM orders WHERE company=? GROUP BY status`, company)
