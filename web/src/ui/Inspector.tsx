@@ -1,4 +1,5 @@
-// Details of the selected asset: status, live tiles, trend/SPC chart, controls, recent log.
+// Details of the selected asset: status, live tiles, trend/SPC chart, what people last wrote down
+// on it, controls, recent log.
 // Desktop: a card on the right. Phone: a bottom sheet that can collapse to its header.
 import { useEffect, useState } from 'react';
 import { CrosshairIcon, NavigationIcon, RadioTowerIcon, XIcon } from 'lucide-react';
@@ -15,6 +16,7 @@ import { CHIP, STATE_LABEL, hhmm } from './status';
 import { HistoryChart, RANGES, type Range, type Summary } from './History';
 import { TrendChart, spcStats, type Metric } from './TrendChart';
 import { InventoryList } from './Panels';
+import { ManualRecords } from './ManualRecords';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 const isVehicle = (a: Asset) => a.type === 'agv' || a.type === 'truck';
@@ -307,6 +309,8 @@ export function Inspector() {
             </div>
           )}
         </div>
+
+        {a.line && <ManualRecords company={runtime().bundle.company.id} plant={layout.id} asset={a.id} />}
 
         <div className="mt-3.5 border-t pt-3.5"><Controls a={a} /></div>
 
