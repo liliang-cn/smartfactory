@@ -711,9 +711,11 @@ function whatIf(c: string, plantId: string, linesJson: string, hours: number, dt
       const after = average(plan);
       return {
         company: c, plant: plantId, hours, runs: n, seeds: [seed, seed + n - 1], lines: lines.map((l) => l.name), changes: plan[0].applied,
-        说明: '现状 = 不做任何改动；方案 = 应用 changes 之后；两边各跑 runs 次（同一组随机种子）取平均。变化 = 方案 − 现状。每次的 OEE 和废品率列在 每次 里，用来判断差异是否大于随机波动。',
+        说明: '现状 = 不做任何改动；方案 = 应用 changes 之后；两边各跑 runs 次（同一组随机种子）取平均。变化 = 方案 − 现状（每组种子各减一次再平均）。每条线的 p10 / p90 是这几次里的第 10 和第 90 百分位（次数少时接近最低和最高）：变化的 p10 到 p90 都在 0 的同一边，差异才大于随机波动。每次的 OEE 和废品率列在 每次 里。',
         校准: calibratedIn(lines),
-        现状: before, 方案: after, 变化: difference(before, after),
+        现状: { ...before, lines: banded(before.lines, base.map((b) => b.lines)) },
+        方案: { ...after, lines: banded(after.lines, plan.map((b) => b.lines)) },
+        变化: banded(difference(before, after), base.map((b, i) => difference(b, plan[i]))),
         每次: base.map((b, i) => ({ seed: seed + i, 现状: b.lines.map((l) => ({ line: l.line, oee: l.oee, scrapRate: l.scrapRate })), 方案: plan[i].lines.map((l) => ({ line: l.line, oee: l.oee, scrapRate: l.scrapRate })) })),
       };
     } finally {
@@ -758,6 +760,31 @@ function average(xs: Summary[]): Summary {
     }),
     spares: xs[0].spares.map((s, i) => ({ ...s, min: Math.min(...xs.map((x) => x.spares[i]?.min ?? s.min)), stockoutHours: mean(xs.map((x) => x.spares[i]?.stockoutHours ?? 0)) ?? 0 })),
   };
+}
+
+/** The p-th quantile of xs, between the nearest ranks: of three runs, P10 and P90 sit near the lowest and highest. */
+function quantile(xs: number[], p: number) {
+  const v = [...xs].sort((a, b) => a - b);
+  const i = (v.length - 1) * p;
+  const lo = Math.floor(i);
+  return v[lo] + (v[Math.min(lo + 1, v.length - 1)] - v[lo]) * (i - lo);
+}
+
+/**
+ * Each line's mean with how far the runs spread: p10 and p90 of every number over the runs. A
+ * mean alone hides whether one lucky run made the difference.
+ */
+function banded<L extends { line: string }>(mean: L[], runs: L[][]) {
+  const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+  const at = (i: number, p: number) => {
+    const out: Record<string, number> = {};
+    for (const k of Object.keys(mean[i])) {
+      const vs = runs.map((r) => (r[i] as Record<string, unknown> | undefined)?.[k]).filter((v): v is number => typeof v === 'number');
+      if (vs.length) out[k] = r4(quantile(vs, p));
+    }
+    return out;
+  };
+  return mean.map((l, i) => ({ ...l, p10: at(i, 0.1), p90: at(i, 0.9) }));
 }
 
 /** after − before, line by line, for the headline numbers. */

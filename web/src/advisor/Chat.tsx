@@ -15,6 +15,7 @@ import { runtime } from '@/state/store';
 import { ask, type AskEvent } from './api';
 import { day, type Model } from './model';
 import { ResultTable, SqlFold } from './parts';
+import { WhatIfResult, whatIfOf } from './WhatIf';
 
 // ---- the conversation, kept per company for this browser ------------------------
 
@@ -195,6 +196,10 @@ function describe(tool: string, a: Record<string, unknown> | undefined, m: Model
 function StepResult({ s, model }: { s: Step; model: Model }) {
   const r = s.result as Record<string, unknown> | string | undefined;
   if (r == null) return null;
+  if (bare(s.tool) === 'simulate_plan') {
+    const w = whatIfOf(r);
+    if (w) return <WhatIfResult w={w} />;
+  }
   if (typeof r === 'object' && Array.isArray(r.columns) && Array.isArray(r.rows)) {
     const rows = r.rows as unknown[][];
     const count = typeof r.row_count === 'number' ? r.row_count : rows.length;
