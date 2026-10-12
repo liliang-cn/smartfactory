@@ -16,6 +16,7 @@ import { useLive } from '@/live/client';
 import { liveFields } from '@/sim/plant';
 import { ALL, goToAsset, groupsOf, runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
 import { Approvals } from './Approvals';
+import { HintChip } from './Hints';
 import { groupFigures } from './group';
 import { CHIP, STATE_LABEL, hhmm } from './status';
 
@@ -415,6 +416,7 @@ export function TopBar() {
       <div className="flex-1 max-md:hidden" />
       <SpeedToggle />
       <LiveLinks />
+      <HintChip />
       <BusinessEntry />
       <LiveClock />
       <Approvals />

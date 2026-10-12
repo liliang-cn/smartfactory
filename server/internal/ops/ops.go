@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"smartfactory/internal/agents"
+	"smartfactory/internal/anomaly"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
@@ -56,6 +57,8 @@ type Ops struct {
 	Consult func(ctx context.Context, company string) ([]byte, error)
 	// History is each company's history database, for those that keep one.
 	History map[string]PlantHistory
+	// Hints are readings unusual for their machine.
+	Hints *anomaly.Detector
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

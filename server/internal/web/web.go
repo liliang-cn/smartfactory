@@ -21,6 +21,7 @@ import (
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 
 	"smartfactory/internal/agents"
+	"smartfactory/internal/anomaly"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
@@ -83,6 +84,8 @@ type Server struct {
 	Checks *checks.Service
 	// History is each company's history database, for those that keep one (the value report).
 	History map[string]ops.PlantHistory
+	// Hints are readings unusual for their machine (nil without data).
+	Hints *anomaly.Detector
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -157,6 +160,7 @@ func (s *Server) Handler() http.Handler {
 	s.deviceRoutes(mux)
 	s.checkRoutes(mux)
 	s.valueRoutes(mux)
+	s.anomalyRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())
@@ -373,6 +377,12 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := wsjson.Write(ctx, c, map[string]any{"type": "sources", "sources": s.sourcesFor(func(c string) bool { return c == watching })}); err != nil {
 				return
+			}
+			// readings unusual for their machine: hints, as public as the readings themselves
+			if s.Hints != nil && company != "" {
+				if err := wsjson.Write(ctx, c, map[string]any{"type": "anomalies", "anomalies": s.Hints.Current(company)}); err != nil {
+					return
+				}
 			}
 		}
 	}

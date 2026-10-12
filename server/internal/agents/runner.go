@@ -51,6 +51,8 @@ type Runner struct {
 	Orders *erp.Store
 	// Checks are the forms people fill in by hand at the machines, and what they wrote.
 	Checks *checks.Service
+	// Hints are the measured machines' readings unusual for them.
+	Hints Hints
 
 	dir string
 	llm domain.Generator
@@ -161,6 +163,10 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 	}
 	if r.Checks != nil {
 		t := checksTool(r.Checks, a.Company)
+		all[t.name] = t
+	}
+	if r.Hints != nil {
+		t := anomalyTool(r.Hints, a.Company)
 		all[t.name] = t
 	}
 	writes := map[string]bool{}

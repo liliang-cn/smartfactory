@@ -203,6 +203,31 @@ export const Hello = z.object({
   sources: z.array(Source),
 });
 export const Sources = z.object({ type: z.literal('sources'), sources: z.array(Source) });
+
+/**
+ * A hint: a measured machine's field reading unusually for that machine in its state, against the
+ * normal learned from its own readings. Not an alarm: nothing stops. Simulated machines have none.
+ */
+export const Anomaly = z.object({
+  id: num, company: str, plant: str, asset: str,
+  /** temp · power · vib · lastMeasure · any other number the equipment reports */
+  field: str,
+  /** the machine's state whose normal it is held against; "" when it reports no state */
+  state: str,
+  /** level: readings stayed K σ off the normal · drift: their recent average moved off it, by less */
+  kind: z.enum(['level', 'drift']),
+  /** RFC 3339; ended is absent while it lasts */
+  since: str, ended: str.optional(),
+  /** the reading now (level) or the recent average (drift); z: how far from the normal, in σ of a reading; peak: the furthest it went */
+  value: num, z: num, peak: num,
+  /** the normal in that state */
+  mean: num, sigma: num,
+  source: str,
+  /** the hint in words */
+  text: str,
+});
+/** Every 5 s with sources, the watched company's hints now (servers that keep readings). */
+export const Anomalies = z.object({ type: z.literal('anomalies'), anomalies: z.array(Anomaly) });
 export const Frame = z.object({
   type: z.literal('frame'),
   data: z.object({
@@ -228,7 +253,7 @@ export const CmdBroadcast = z.object({
   }),
 }).meta({ description: 'An operator or an AI assistant acted on the watched company' });
 
-export const ServerMessage = z.discriminatedUnion('type', [Hello, Sources, Frame, Result, Hist, CmdBroadcast]);
+export const ServerMessage = z.discriminatedUnion('type', [Hello, Sources, Anomalies, Frame, Result, Hist, CmdBroadcast]);
 
 // ---------- HTTP ----------
 
@@ -546,12 +571,13 @@ export const AuditEntry = z.object({
   id: num, at: time, who: str, role: Role,
   /** which token: the start of its hash ("token" for the original single token) */
   key: str,
-  /** api: another system (the ERP) calling the order API with its own token · guard: the command guard itself (a request lapsing) */
-  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard']),
+  /** api: another system (the ERP) calling the order API with its own token · guard: the command guard itself (a request lapsing) · anomaly: the detector of unusual readings */
+  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard', 'anomaly']),
   /** the company it happened in; * for what every company shares */
   company: str,
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · device.add / device.renew / device.revoke (a device on the embedded broker; target its name) */
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · check.form / check.form.delete (target the form id) · check.submit (a form filled in: target plant/asset and the submission id; context every value) */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · anomaly / anomaly.end (a hint raised and over; target plant/asset) · anomaly.reset */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
   /** what was true when it happened, for a command to a machine: its state, temperature and alarms, the rule that refused it, who asked and who approved */
@@ -1089,6 +1115,34 @@ export const ValueReport = z.object({
   orders: ValueSection,
   plant: z.object({ ...sectionFields, source: DataSource.optional(), weeks: z.array(ValueWeek), compare: ValueCompare.optional() }),
 }).meta({ description: 'GET /api/value/{company}?days=30 | ?from=YYYY-MM-DD&to=YYYY-MM-DD (&format=csv for the export) — members and above; MCP value_report' });
+// ---------- readings unusual for their machine (/api/anomalies/{company}) ----------
+
+/** A field's normal in one state; warm: learned long enough to be judged, progress (0–1) until then. */
+export const AnomalyBaseline = z.object({ state: str, n: num, mean: num, sigma: num, warm: z.boolean(), progress: num });
+export const AnomalyField = z.object({
+  field: str, value: num, at: time,
+  /** the last reading's distance, in σ, from the normal it was held against: now, that of the state the machine was in (absent until a reading in a state) */
+  z: num, now: AnomalyBaseline.optional(),
+  /** every state's normal, most readings first */
+  states: z.array(AnomalyBaseline),
+  anomaly: Anomaly.optional(),
+});
+export const AnomalyMachine = z.object({ plant: str, asset: str, state: str, source: str, fields: z.array(AnomalyField) })
+  .meta({ description: 'GET /api/anomalies/{company}/{plant}/{asset} — a measured machine\'s fields against their normals; anyone watching the twin' });
+export const AnomalyReport = z.object({
+  current: z.array(Anomaly),
+  /** the last 30 days', newest first, ended and current */
+  recent: z.array(Anomaly),
+  machines: z.array(AnomalyMachine),
+  /** k σ for sustain seconds is a hint; a field is learned for warmup seconds in a state first; the normal then follows span readings */
+  settings: z.object({ k: num, sustain: num, warmup: num, span: num }),
+  /** the caller may reset a machine's normal */
+  admin: z.boolean(),
+}).meta({ description: 'GET /api/anomalies/{company} — members and above; MCP list_anomalies' });
+/** POST /api/admin/anomalies/{company}/reset: the machines ("plant/asset" or the asset id) to learn again, after maintenance */
+export const AnomalyReset = z.object({ machines: z.array(str) });
+export const AnomalyResetResult = z.array(z.object({ machine: str, ok: z.boolean(), error: str.optional() }))
+  .meta({ description: 'POST /api/admin/anomalies/{company}/reset — administrators; each machine answered on its own' });
 
 // ---------- the console agent (/api/admin/agent) ----------
 
@@ -1096,7 +1150,7 @@ export const ValueReport = z.object({
 export const ConsoleAction = z.object({
   /** the proposal (AP-…); the activity log keeps what became of it */
   id: str.optional(),
-  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration', 'approve_command', 'deny_command']),
+  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration', 'approve_command', 'deny_command', 'reset_baseline']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [
@@ -1129,6 +1183,7 @@ export const DEFS = {
   BrokerDevice, BrokerDevices, RegisterDevice, DeviceCredential,
   CheckForm, CheckForms, CheckRounds, ChecksOverview, CheckSubmission, CheckSubmissions, CheckInput, MachineChecks,
   ValueReport,
+  Anomaly, Anomalies, AnomalyMachine, AnomalyReport, AnomalyReset, AnomalyResetResult,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -1137,3 +1192,4 @@ export type ServerMessage = z.infer<typeof ServerMessage>;
 export type PlantState = z.infer<typeof PlantState>;
 export type ProductTuple = z.infer<typeof ProductTuple>;
 export type SourceInfo = z.infer<typeof Source>;
+export type AnomalyInfo = z.infer<typeof Anomaly>;

@@ -63,7 +63,7 @@ const simWait = 20 * time.Second
 
 func addSimTool(s *mcp.Server, eng *engine.Engine) {
 	mcp.AddTool(s, &mcp.Tool{Name: "simulate_plan", Description: "What-if on the twin: copies the plant's current state, runs the given lines ahead twice — as they are, and with the changes applied — " +
-		"and returns the mean of both over several seeds (现状 / 方案), their difference (变化 = 方案 − 现状) and each run's OEE and scrap rate (每次), so a change can be told from luck: output, first-pass yield, scrap rate, availability, OEE, tool changes and average hits per change, downtime by category, defects by type, " +
+		"and returns the mean of both over several seeds (现状 / 方案), their difference (变化 = 方案 − 现状), each line's P10 and P90 over the runs beside its mean (p10 / p90; for 变化, of each seed's own difference: a change is more than luck when both are on the same side of 0) and each run's OEE and scrap rate (每次): output, first-pass yield, scrap rate, availability, OEE, tool changes and average hits per change, downtime by category, defects by type, " +
 		"and spare stock (minimum, stock-out hours). Nothing on the live plant changes. A run takes a few minutes: if status is running, call again with the same " +
 		"arguments later. Logistics are assumed to keep up; it predicts, the history database measures."},
 		guard(auth.Member, func(in simIn) string { return in.Company }, func(ctx context.Context, _ *mcp.CallToolRequest, in simIn) (*mcp.CallToolResult, simOut, error) {

@@ -46,6 +46,9 @@ export type CheckForm = z.infer<typeof P.CheckForm>;
 export type CheckField = z.infer<typeof P.CheckField>;
 export type CheckRound = z.infer<typeof P.CheckRound>;
 export type CheckSubmission = z.infer<typeof P.CheckSubmission>;
+export type AnomalyReport = z.infer<typeof P.AnomalyReport>;
+export type Anomaly = z.infer<typeof P.Anomaly>;
+export type AnomalyResetResult = z.infer<typeof P.AnomalyResetResult>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -255,6 +258,8 @@ export async function downloadValue(c: string, p: ValuePeriod) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+export const anomalies = (c: string) => call<AnomalyReport>('GET', `/api/anomalies/${encodeURIComponent(c)}`);
+export const resetBaseline = (c: string, machines: string[]) => call<AnomalyResetResult>('POST', `/api/admin/anomalies/${encodeURIComponent(c)}/reset`, { machines });
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;

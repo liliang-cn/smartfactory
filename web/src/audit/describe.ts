@@ -1,7 +1,7 @@
 // How the audit log reads: each entry as a sentence, where it came from, the day it falls on.
 // Shared by the twin's activity sheet and the console.
 import type { z } from 'zod';
-import { BotIcon, MousePointerClickIcon, PlugIcon, RadioTowerIcon, ShieldCheckIcon, SquareTerminalIcon, UnplugIcon, type LucideIcon } from 'lucide-react';
+import { ActivityIcon, BotIcon, MousePointerClickIcon, PlugIcon, RadioTowerIcon, ShieldCheckIcon, SquareTerminalIcon, UnplugIcon, type LucideIcon } from 'lucide-react';
 import { CMD_LABEL } from '@/live/client';
 import type * as P from '@/protocol/sfp';
 import type { Command } from '@/sim/types';
@@ -17,6 +17,7 @@ export const VIA: Record<Via, { label: string; icon: LucideIcon }> = {
   cli: { label: '命令行', icon: SquareTerminalIcon },
   api: { label: '接口', icon: UnplugIcon },
   guard: { label: '指令把关', icon: ShieldCheckIcon },
+  anomaly: { label: '异常检测', icon: ActivityIcon },
 };
 export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' };
 /** How each guard level reads. */
@@ -69,6 +70,11 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     }
     case 'check.form': return { text: `设置表单「${e.detail || e.target}」` };
     case 'check.form.delete': return { text: `停用表单「${e.detail || e.target}」` };
+    case 'anomaly': case 'anomaly.end': {
+      const [plant, asset] = e.target.split('/');
+      return { text: e.action === 'anomaly' ? `读数异常：${e.detail ?? ''}` : `${e.detail ?? ''}${e.context ? `（${e.context}）` : ''}`, plant, asset };
+    }
+    case 'anomaly.reset': return { text: `让 ${e.target} 重新学习平常读数` };
     case 'guard.config': return { text: `把指令把关设为「${GUARD_LEVEL[e.detail ?? ''] ?? e.detail}」` };
     case 'clock': return { text: `全厂倍速改为 ${e.detail}` };
     case 'save_note': return { text: `记笔记「${titleOf(e.target)}」` };

@@ -19,7 +19,7 @@ type Action struct {
 	// ID names a proposal of the console agent (AP-…), so what became of it can be counted;
 	// an action that was never proposed has none.
 	ID string `json:"id,omitempty"`
-	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order | apply_calibration | approve_command | deny_command
+	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order | apply_calibration | approve_command | deny_command | reset_baseline
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
 	Title  string         `json:"title"`
@@ -112,6 +112,8 @@ func (o *Ops) do(ctx context.Context, who auth.Who, via string, a Action) (any, 
 		return o.ApproveCommand(who, via, str("company"), str("id"))
 	case "deny_command":
 		return o.DenyCommand(who, via, str("company"), str("id"), str("reason"))
+	case "reset_baseline":
+		return o.ResetBaseline(who, via, str("company"), strs(a.Args["machines"]))
 	}
 	return nil, fail(400, "没有这种操作：%s", a.Kind)
 }
@@ -178,6 +180,8 @@ func (o *Ops) describe(a *Action) error {
 				a.Title = fmt.Sprintf("%s %s 对 %s 的「%s」", verb, r.Who, r.Asset, guard.Text(r.Cmd, r.Arg))
 			}
 		}
+	case "reset_baseline":
+		a.Title = fmt.Sprintf("重新学习%s %s的读数", named(str("company")), strings.Join(strs(a.Args["machines"]), "、"))
 	default:
 		return fail(400, "没有这种操作：%s", a.Kind)
 	}

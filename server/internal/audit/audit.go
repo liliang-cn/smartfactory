@@ -156,7 +156,8 @@ func (l *Log) Counts(ctx context.Context, company string, from, to time.Time, pr
 		return out, nil
 	}
 	var match []string
-	args := []any{company, from.UnixMilli(), to.UnixMilli()}
+	// entries keep milliseconds: one in the same millisecond as a period ending now is in it
+	args := []any{company, from.UnixMilli(), to.Add(time.Millisecond - 1).UnixMilli()}
 	for _, p := range prefixes {
 		match = append(match, `action = ? OR action LIKE ?`)
 		args = append(args, p, p+".%")
