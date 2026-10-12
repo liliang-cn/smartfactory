@@ -125,6 +125,8 @@ type machine struct {
 	// stated: it reports its state (now, or before a restart); until the state comes again its
 	// readings cannot be told apart and are let pass
 	stated bool
+	// since: when it changed to its state
+	since  time.Time
 	fields map[string]*field
 }
 
@@ -245,7 +247,7 @@ func (d *Detector) Add(t tags.Tag) {
 		m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
 		m.stated = true
 		if s != m.state {
-			d.switchState(t, m, s, at)
+			d.switchState(m, s, at)
 		}
 		d.mu.Unlock()
 		return
@@ -257,7 +259,7 @@ func (d *Detector) Add(t tags.Tag) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
-	if m.stated && m.state == "" {
+	if (m.stated && m.state == "") || at.Sub(m.since) < settle {
 		return
 	}
 	m.source = t.Source
@@ -270,25 +272,27 @@ func (d *Detector) Add(t tags.Tag) {
 	d.judge(t, m, f, s, x, at)
 }
 
+// settle is how long after a change of state readings are left out: a motor spinning down, a
+// heater still drawing, are neither the old state's normal nor the new one's.
+const settle = 5 * time.Second
+
 // switchState puts the machine in state s. Equipment sends a machine's fields together, in name
 // order: the power read with the new state came just before it, and went into the old state's
-// normal. A field read at the very moment of the change is taken back out of that normal and
-// judged again in the new state (a running machine's power learned as idle widens the idle normal
-// until nothing stands out).
-func (d *Detector) switchState(t tags.Tag, m *machine, s string, at time.Time) {
-	m.state = s
-	for name, f := range m.fields {
+// normal. A field read at the very moment of the change is taken back out of it.
+func (d *Detector) switchState(m *machine, s string, at time.Time) {
+	old := m.state
+	m.state, m.since = s, at
+	for _, f := range m.fields {
 		if f.cur == nil || !f.at.Equal(at) || f.cur.N != f.before.N+1 {
 			continue
 		}
 		*f.cur = f.before
 		f.cur.dirty = true
-		st := f.states[s]
-		if st == nil {
-			st = &Stat{First: at.UnixMilli()}
-			f.states[s] = st
+		if f.cur.N == 0 {
+			// a reading before the machine first said its state: no state of its own
+			delete(f.states, old)
+			f.cur = nil
 		}
-		d.judge(tags.Tag{Company: t.Company, Plant: t.Plant, Asset: t.Asset, Field: name, Source: m.source}, m, f, st, f.value, at)
 	}
 }
 

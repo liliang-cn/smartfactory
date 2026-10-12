@@ -226,10 +226,14 @@ func TestWarmup(t *testing.T) {
 	}
 }
 
-// Flagged, late and non-numeric readings are neither learned nor judged; counters are skipped.
+// Flagged, late and non-numeric readings are neither learned nor judged, nor those just after a
+// change of state; counters are skipped.
 func TestIgnored(t *testing.T) {
 	r := newRig(t, nil)
 	r.state("running")
+	// the first seconds after a change of state are left out
+	r.read("temp", 80)
+	r.now = r.now.Add(10 * time.Second)
 	r.read("temp", 50)
 	r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "temp", Value: 900.0, Q: tags.FlagRange, At: r.now})
 	r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "temp", Value: 900.0, At: r.now.Add(-time.Hour)})

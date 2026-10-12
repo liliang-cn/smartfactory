@@ -149,9 +149,9 @@ func TestAnomalies(t *testing.T) {
 		m.Fields[1].Field != "power" || m.Fields[1].Anomaly != nil || math.Abs(m.Fields[1].Z) > 4 {
 		t.Errorf("HP-101: %s", b)
 	}
-	// the 5000 °C reading was flagged and not learned
-	if n := m.Fields[0].Now.N; n != 42*60 {
-		t.Errorf("learned %d temperatures, want %d", n, 42*60)
+	// the 5000 °C reading was flagged and not learned (nor the first five seconds of running)
+	if n := m.Fields[0].Now.N; n != 42*60-5 {
+		t.Errorf("learned %d temperatures, want %d", n, 42*60-5)
 	}
 	// the engine simulates every other press: none has readings, none has a hint
 	if got, _ := do("", "GET", "/api/anomalies/huaduan/p1/HP-102", nil); got != 404 {
