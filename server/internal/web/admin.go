@@ -263,7 +263,7 @@ func writeOpError(w http.ResponseWriter, err error) {
 func (s *Server) ops() *ops.Ops {
 	if s.Ops == nil {
 		s.Ops = &ops.Ops{Engine: s.Engine, Keys: s.Keys, Audit: s.Audit, Agents: s.Agents, KB: s.Knowledge, Hub: s.Hub, Advisors: s.Advisors, Version: s.Version,
-			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard}
+			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard, Checks: s.Checks}
 	}
 	return s.Ops
 }

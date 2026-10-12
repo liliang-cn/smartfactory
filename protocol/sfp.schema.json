@@ -5493,6 +5493,828 @@
       },
       "description": "GET /api/guard/{company}/requests?status= — waiting first, then the newest"
     },
+    "CheckForm": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "patrol",
+            "first",
+            "lab",
+            "other"
+          ]
+        },
+        "plant": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "number",
+                  "choice",
+                  "yesno",
+                  "text",
+                  "photo"
+                ]
+              },
+              "unit": {
+                "type": "string"
+              },
+              "lo": {
+                "type": "number"
+              },
+              "hi": {
+                "type": "number"
+              },
+              "target": {
+                "type": "number"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "bad": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "twin": {
+                "type": "string",
+                "enum": [
+                  "measure",
+                  "temp",
+                  "power",
+                  "vib"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "label",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "every": {
+              "type": "string",
+              "enum": [
+                "",
+                "shift",
+                "day",
+                "hours"
+              ]
+            },
+            "hours": {
+              "type": "number"
+            },
+            "at": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "within": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "note": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        },
+        "created": {
+          "type": "string"
+        },
+        "updated": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "fields",
+        "schedule",
+        "created",
+        "updated"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/checks/{company}/forms — administrators; without an id a new form, else it replaces that one; answers the form as saved (422 with every problem)"
+    },
+    "CheckForms": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CheckForm"
+      },
+      "description": "GET /api/checks/{company}/templates — forms to start one from"
+    },
+    "CheckRounds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "form": {
+            "type": "string"
+          },
+          "formName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "patrol",
+              "first",
+              "lab",
+              "other"
+            ]
+          },
+          "plant": {
+            "type": "string"
+          },
+          "plantName": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "lineName": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetName": {
+            "type": "string"
+          },
+          "every": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "done",
+              "due",
+              "overdue",
+              "open"
+            ]
+          },
+          "start": {
+            "type": "string"
+          },
+          "due": {
+            "type": "string"
+          },
+          "next": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "last": {
+            "type": "string"
+          },
+          "lastBy": {
+            "type": "string"
+          },
+          "lastBad": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "form",
+          "formName",
+          "kind",
+          "plant",
+          "plantName",
+          "line",
+          "lineName",
+          "asset",
+          "assetName",
+          "every",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "description": "GET /api/checks/{company}/rounds?status=overdue,due — overdue first (longest first), then due soonest; members and above"
+    },
+    "ChecksOverview": {
+      "type": "object",
+      "properties": {
+        "forms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckForm"
+          }
+        },
+        "machines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "plant": {
+                "type": "string"
+              },
+              "plantName": {
+                "type": "string"
+              },
+              "line": {
+                "type": "string"
+              },
+              "lineName": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "measure": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "number"
+                  },
+                  "lo": {
+                    "type": "number"
+                  },
+                  "hi": {
+                    "type": "number"
+                  },
+                  "digits": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "label",
+                  "unit",
+                  "target",
+                  "digits"
+                ],
+                "additionalProperties": false
+              },
+              "rounds": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "form": {
+                      "type": "string"
+                    },
+                    "formName": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "patrol",
+                        "first",
+                        "lab",
+                        "other"
+                      ]
+                    },
+                    "plant": {
+                      "type": "string"
+                    },
+                    "plantName": {
+                      "type": "string"
+                    },
+                    "line": {
+                      "type": "string"
+                    },
+                    "lineName": {
+                      "type": "string"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "assetName": {
+                      "type": "string"
+                    },
+                    "every": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "done",
+                        "due",
+                        "overdue",
+                        "open"
+                      ]
+                    },
+                    "start": {
+                      "type": "string"
+                    },
+                    "due": {
+                      "type": "string"
+                    },
+                    "next": {
+                      "type": "string"
+                    },
+                    "since": {
+                      "type": "string"
+                    },
+                    "last": {
+                      "type": "string"
+                    },
+                    "lastBy": {
+                      "type": "string"
+                    },
+                    "lastBad": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "form",
+                    "formName",
+                    "kind",
+                    "plant",
+                    "plantName",
+                    "line",
+                    "lineName",
+                    "asset",
+                    "assetName",
+                    "every",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "plant",
+              "plantName",
+              "line",
+              "lineName",
+              "asset",
+              "name",
+              "label",
+              "rounds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "kinds": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "twinFields": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "operator": {
+          "type": "boolean"
+        },
+        "admin": {
+          "type": "boolean"
+        },
+        "now": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "forms",
+        "machines",
+        "kinds",
+        "twinFields",
+        "operator",
+        "admin",
+        "now"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/checks/{company} — members and above"
+    },
+    "CheckSubmission": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "form": {
+          "type": "string"
+        },
+        "formName": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "patrol",
+            "first",
+            "lab",
+            "other"
+          ]
+        },
+        "plant": {
+          "type": "string"
+        },
+        "plantName": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "assetName": {
+          "type": "string"
+        },
+        "taken": {
+          "type": "string"
+        },
+        "received": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "number",
+                  "choice",
+                  "yesno",
+                  "text",
+                  "photo"
+                ]
+              },
+              "num": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "lo": {
+                "type": "number"
+              },
+              "hi": {
+                "type": "number"
+              },
+              "bad": {
+                "type": "boolean"
+              },
+              "why": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              },
+              "flag": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "label",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "note": {
+          "type": "string"
+        },
+        "bad": {
+          "type": "number"
+        },
+        "late": {
+          "type": "boolean"
+        },
+        "duplicate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "form",
+        "formName",
+        "kind",
+        "plant",
+        "plantName",
+        "asset",
+        "assetName",
+        "taken",
+        "received",
+        "by",
+        "via",
+        "values",
+        "bad"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/checks/{company}/submissions answers the submission kept — operators and above"
+    },
+    "CheckSubmissions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CheckSubmission"
+      },
+      "description": "GET /api/checks/{company}/submissions?form=&plant=&asset=&from=&to=&bad=1&limit= — the latest taken first; format=csv: a spreadsheet, one value a row"
+    },
+    "CheckInput": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "form": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "taken": {
+          "type": "string"
+        },
+        "values": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string",
+              "boolean"
+            ]
+          }
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "form",
+        "plant",
+        "asset",
+        "values"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/checks/{company}/submissions"
+    },
+    "MachineChecks": {
+      "type": "object",
+      "properties": {
+        "machine": {
+          "type": "object",
+          "properties": {
+            "plant": {
+              "type": "string"
+            },
+            "plantName": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            },
+            "lineName": {
+              "type": "string"
+            },
+            "asset": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "measure": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "number"
+                },
+                "lo": {
+                  "type": "number"
+                },
+                "hi": {
+                  "type": "number"
+                },
+                "digits": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "label",
+                "unit",
+                "target",
+                "digits"
+              ],
+              "additionalProperties": false
+            },
+            "rounds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "form": {
+                    "type": "string"
+                  },
+                  "formName": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "patrol",
+                      "first",
+                      "lab",
+                      "other"
+                    ]
+                  },
+                  "plant": {
+                    "type": "string"
+                  },
+                  "plantName": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "string"
+                  },
+                  "lineName": {
+                    "type": "string"
+                  },
+                  "asset": {
+                    "type": "string"
+                  },
+                  "assetName": {
+                    "type": "string"
+                  },
+                  "every": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "done",
+                      "due",
+                      "overdue",
+                      "open"
+                    ]
+                  },
+                  "start": {
+                    "type": "string"
+                  },
+                  "due": {
+                    "type": "string"
+                  },
+                  "next": {
+                    "type": "string"
+                  },
+                  "since": {
+                    "type": "string"
+                  },
+                  "last": {
+                    "type": "string"
+                  },
+                  "lastBy": {
+                    "type": "string"
+                  },
+                  "lastBad": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "form",
+                  "formName",
+                  "kind",
+                  "plant",
+                  "plantName",
+                  "line",
+                  "lineName",
+                  "asset",
+                  "assetName",
+                  "every",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "plant",
+            "plantName",
+            "line",
+            "lineName",
+            "asset",
+            "name",
+            "label",
+            "rounds"
+          ],
+          "additionalProperties": false
+        },
+        "forms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckForm"
+          }
+        },
+        "last": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckSubmission"
+          }
+        },
+        "operator": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "machine",
+        "forms",
+        "last",
+        "operator"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/checks/{company}/machines/{plant}/{asset} — members and above; 404 when no form is for it"
+    },
     "Source": {
       "type": "object",
       "properties": {

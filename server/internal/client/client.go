@@ -181,6 +181,19 @@ func (c *Client) Do(ctx context.Context, method, p string, body, out any) error 
 	return json.NewDecoder(res.Body).Decode(out)
 }
 
+// Fetch GETs p and copies the answer as it is (a CSV, a photo) to w.
+func (c *Client) Fetch(ctx context.Context, p string, w io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	res, err := c.request(ctx, "GET", p, nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	_, err = io.Copy(w, res.Body)
+	return err
+}
+
 // Event is one server-sent event of the console agent or the scene architect.
 type Event struct {
 	Kind   string         `json:"kind"`

@@ -400,6 +400,34 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 命令行：`smartfactory guard <company>`（`set -level guarded -approve start,speed -expire 15`、`set -f settings.json`、`pending`、`requests`、`approve <编号>`、`deny <编号> -reason …`）。工作台助手有 `guard_status`，批准、拒绝要管理员确认。
 
+### 人工记录 `/api/checks/{company}`
+
+点检、首件检验、化验这些手写的数据，由管理员在后台「点检」页设成表单，操作员在手机上（`/check`）对着设备填。
+
+- **表单**（`CheckForm`）：用于哪个厂、哪些产线或设备（都不选就是全厂的工位）；每项是数字（单位、上下限、目标值）、选择（如 正常/异常，`bad` 是算异常的答案，默认含「异常」「不合格」的）、是否、文字或照片。周期：每班（`at` 是各班开始时间，默认 08:00、20:00）、每天、每几小时（从当天第一次起），`within` 是开始后多少分钟内要做完，不填就是下一轮开始前。删除的表单停用，填过的记录保留。
+- **轮次**（`CheckRound`）：每台设备每张表一轮一轮算。本轮填过是 `done`；没填、还在时间内是 `due`；过了 `within` 的时间，或者上一轮整轮没人填（表单那时已经有了），是 `overdue`，`since` 是从什么时候起逾期的。
+- **读数**：数字项按填写时间（`taken`，手机离线时记下的时间）作为读数入库，来源 `manual`，和设备读数走同一条路：先校验（不合理的标记、照样入库、不进孪生），再进 `/api/series`。设了 `twin`（`measure`、`temp`、`power`、`vib`）的存在设备的这个字段下，其余存在项的 `key` 下。`measure` 还会进孪生的质量图，没写上下限时按设备的公差判。人填的读数不让设备算作「在上报」，孪生照样仿真它。超过一分钟才到的（离线补发）只入库，不进孪生。
+- **异常**：数字超出上下限、选了异常的答案，在孪生里给这台设备报一条质量报警（和孪生自己判出的漂移报警同一级），同一项下一次填正常就消除。只按这张表在这台设备上最新的一次填写来报和消；补发的旧记录、标记为不合理的读数不报。
+- **离线**：手机没网时把填好的存在本机，带着填写时间，联网后自动补发；`id` 是手机自己起的编号，重复发只收一次（`duplicate: true`）。
+- **审计**：设表单（`check.form`）、停用（`check.form.delete`）、每次填写（`check.submit`，`context` 里是每一项的值、超差原因，离线补发的写明什么时候记的、什么时候收到），都记在填写人名下。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/checks/{company}` | `ChecksOverview` | 表单、每台有表的设备和它的轮次、调用者能不能填、能不能设；成员以上 |
+| `GET /api/checks/{company}/templates` | `CheckForms` | 模板：设备点检、首件检验、化验 |
+| `POST /api/checks/{company}/forms` | `CheckForm` → `CheckForm` | 新建（不带 `id`）或替换；写得不对 422，带每条问题；管理员 |
+| `DELETE /api/checks/{company}/forms/{id}` | → `{ok}` | 停用 |
+| `GET /api/checks/{company}/rounds?status=overdue,due` | `CheckRounds` | 逾期的在前（逾期最久的在前），再按截止时间 |
+| `GET /api/checks/{company}/machines/{plant}/{asset}` | `MachineChecks` | 一台设备的轮次、用于它的表单、每张表最近一次填的；没有表用于它 404 |
+| `POST /api/checks/{company}/submissions` | `CheckInput` → `CheckSubmission` | 填一次；照片是 data URL，最大 2 MB；最多补发 30 天前的；操作员以上 |
+| `GET /api/checks/{company}/submissions?form=&plant=&asset=&from=&to=&bad=1&limit=` | `CheckSubmissions` | 按填写时间新的在前；`format=csv` 导出表格，一项一行，带 BOM |
+| `GET /api/checks/{company}/photos/{id}` | 图片 | 成员以上 |
+| `GET /api/qr?text=` | SVG | 把一个链接画成二维码，后台打印设备码用 |
+
+手机页面：`/check?company=…&plant=…&asset=…` 直接打开一台设备（设备上贴的二维码就是这个链接），令牌可以带一次 `&token=`，之后存在手机上。
+
+命令行：`smartfactory checks <company>`（表单和逾期数）、`rounds [-status overdue,due]`、`results [-asset HP-101] [-bad] [-hours 24]`、`export -from 2026-10-01 -to 2026-10-12 -o 记录.csv`、`template 点检`、`save -f form.json`、`rm <编号>`、`submit -f values.json`。工作台助手有 `check_forms`、`check_rounds`、`check_results`；孪生里的研发笔记助手和售后服务助手用 `manual_records` 查人工记录。
+
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。
@@ -417,6 +445,9 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `list_sources` | 采集源的连接状态（只列喂给令牌所管公司的） | 成员 |
 | `send_command` | 操作设备，取值同 2.5；真实设备的指令先过指令把关：`status` 是 `sent`、`waiting`（等人批准，带 `request`）或 `refused`（带 `reason`）；记入审计日志 | 操作员 |
 | `command_request` | 一条等人批准的指令现在怎样了，`wait` 秒内等结果（最多 120） | 操作员 |
+| `check_forms` | 手填的表（点检、首件检验、化验）：每项问什么、标准、用于哪些设备、周期 | 成员 |
+| `check_rounds` | 各设备的轮次：逾期（默认）、待做、已做，上次谁什么时候填的 | 成员 |
+| `check_results` | 最近填的记录，每项的值、是否超差或异常、谁记的、什么时候记的 | 成员 |
 | `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
 | `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
 | `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |

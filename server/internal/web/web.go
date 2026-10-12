@@ -24,6 +24,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
+	"smartfactory/internal/checks"
 	"smartfactory/internal/config"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
@@ -73,6 +74,8 @@ type Server struct {
 	Guard *guard.Guard
 	// Series is the readings equipment sent (nil without data).
 	Series *series.Store
+	// Checks are the forms people fill in by hand at the machines (nil without data).
+	Checks *checks.Service
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -144,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	s.erpRoutes(mux)
 	s.calibRoutes(mux)
 	s.guardRoutes(mux)
+	s.checkRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())
@@ -504,10 +508,13 @@ func (s *Server) static() http.Handler {
 				return
 			}
 			r = r.Clone(r.Context())
-			// the console is its own page
+			// the console is its own page, and so is the phone page for filling forms in
 			if p == "admin" || strings.HasPrefix(p, "admin/") {
 				r.URL.Path = "/admin.html"
 				p = "admin.html"
+			} else if p == "check" {
+				r.URL.Path = "/check.html"
+				p = "check.html"
 			} else {
 				r.URL.Path = "/"
 				p = "index.html"

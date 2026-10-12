@@ -38,6 +38,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
+	"smartfactory/internal/checks"
 	"smartfactory/internal/config"
 	"smartfactory/internal/devices"
 	"smartfactory/internal/edge"
@@ -398,9 +399,23 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		defer cmds.Close()
 		go cmds.Run(ctx)
 	}
+	// the forms people fill in by hand at the machines: patrol rounds, first-article checks, lab results
+	var manual *checks.Service
+	if cfg.Data != "" {
+		if manual, err = checks.Open(cfg.Data, eng, hub, log); err != nil {
+			return fmt.Errorf("checks: %w", err)
+		}
+		defer manual.Close()
+		if assistants != nil {
+			assistants.Checks = manual
+		}
+	}
 	ms := mcptools.New(hub, eng, version, trail, cmds)
+	if manual != nil {
+		mcptools.AddChecks(ms, manual)
+	}
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Checks: manual, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

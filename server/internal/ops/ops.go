@@ -17,6 +17,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
+	"smartfactory/internal/checks"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/guard"
@@ -44,6 +45,8 @@ type Ops struct {
 	Calib *calib.Service
 	// Commands is the guard in front of the companies' machines.
 	Commands *guard.Guard
+	// Checks are the forms people fill in by hand at the machines, and what they wrote.
+	Checks *checks.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.
