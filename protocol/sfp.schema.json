@@ -3866,6 +3866,9 @@
         "orders": {
           "type": "number"
         },
+        "events": {
+          "type": "number"
+        },
         "library": {
           "type": "number"
         },
@@ -3879,6 +3882,7 @@
         "docs",
         "process",
         "orders",
+        "events",
         "library",
         "indexed"
       ],
@@ -3898,7 +3902,11 @@
                 "enum": [
                   "doc",
                   "process",
-                  "order"
+                  "order",
+                  "check",
+                  "anomaly",
+                  "calibration",
+                  "command"
                 ]
               },
               "title": {
@@ -3966,7 +3974,11 @@
                 "product",
                 "supplier",
                 "customer",
-                "order"
+                "order",
+                "check",
+                "anomaly",
+                "calibration",
+                "command"
               ]
             },
             "links": {
@@ -4003,6 +4015,28 @@
               "type": "array",
               "items": {
                 "type": "string"
+              }
+            },
+            "detail": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "bad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "additionalProperties": false
               }
             }
           },
@@ -4073,7 +4107,11 @@
                   "product",
                   "supplier",
                   "customer",
-                  "order"
+                  "order",
+                  "check",
+                  "anomaly",
+                  "calibration",
+                  "command"
                 ]
               },
               "mentions": {
@@ -4112,7 +4150,11 @@
                   "sold_to",
                   "for_customer",
                   "of_product",
-                  "runs_on"
+                  "runs_on",
+                  "checked_on",
+                  "seen_on",
+                  "calibrates",
+                  "targets"
                 ]
               }
             },

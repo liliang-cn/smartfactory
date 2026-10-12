@@ -1,7 +1,9 @@
 // The knowledge graph drawn as a network: plants, lines and their stations in order, the machines
-// the stations are, products, suppliers, customers and the production orders. Laid out once by a
-// force simulation, each plant's lines, stations and orders gathered around it; wheel to zoom,
-// drag to pan, click a thing to see what it connects to, and show or hide each kind.
+// the stations are, products, suppliers, customers, the production orders, and what recently
+// happened at the stations (checks, reading hints, calibrations, AI commands). Laid out once by a
+// force simulation, each plant's lines, stations and orders gathered around it, what happened next
+// to its station; wheel to zoom, drag to pan, click a thing to see what it connects to, and show
+// or hide each kind.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type SimulationLinkDatum, type SimulationNodeDatum } from 'd3-force';
 import { MinusIcon, PlusIcon, ScanIcon } from 'lucide-react';
@@ -18,18 +20,31 @@ export const KIND: Record<api.EntityKind, { label: string; color: string; r: num
   supplier: { label: '供应商', color: '#b99a6a', r: 5.5 },
   customer: { label: '客户', color: '#8f6ae0', r: 5.5 },
   order: { label: '工单', color: '#e0526b', r: 4.4 },
+  check: { label: '点检', color: '#0f9fb3', r: 3.2 },
+  anomaly: { label: '异常', color: '#e0a100', r: 3.2 },
+  calibration: { label: '校准', color: '#c056b5', r: 3.2 },
+  command: { label: '指令', color: '#4d5a6e', r: 3.2 },
 };
 
-const PRIORITY: Record<api.EntityKind, number> = { company: 0, plant: 1, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8 };
+const PRIORITY: Record<api.EntityKind, number> = {
+  company: 0, plant: 1, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9,
+};
+
+/** what happened at a station, and how it is linked to it */
+const EVENT: Record<string, api.EntityKind> = { checked_on: 'check', seen_on: 'anomaly', calibrates: 'calibration', targets: 'command' };
+const isEvent = (k: api.EntityKind) => k === 'check' || k === 'anomaly' || k === 'calibration' || k === 'command';
 
 const DIST: Record<string, number> = {
   has_plant: 70, has_line: 46, makes: 46, has_station: 12, feeds: 9, is_a: 60, supplies: 40, sold_to: 40, runs_on: 18, for_customer: 40, of_product: 50,
+  checked_on: 8, seen_on: 8, calibrates: 8, targets: 8,
 };
 
 interface N extends SimulationNodeDatum { id: string; kind: api.EntityKind; mentions: number; r: number; plant?: string }
+/** stations and what happened at them are labelled smaller */
+const small = (n: N) => n.kind === 'station' || isEvent(n.kind);
 interface L extends SimulationLinkDatum<N> { type: string }
 
-/** The plant each line, station and order belongs to, following has_line, has_station and runs_on. */
+/** The plant each line, station, order and what happened at a station belongs to, following has_line, has_station, runs_on and the station's. */
 function plantsOf(g: api.KnowledgeGraph) {
   const plant = new Map<string, string>();
   for (const e of g.edges) if (e.type === 'has_line') plant.set(e.to, e.from);
@@ -37,6 +52,7 @@ function plantsOf(g: api.KnowledgeGraph) {
     if (e.type === 'has_station' && plant.has(e.from)) plant.set(e.to, plant.get(e.from)!);
     if (e.type === 'runs_on' && plant.has(e.to)) plant.set(e.from, plant.get(e.to)!);
   }
+  for (const e of g.edges) if (EVENT[e.type] && plant.has(e.to)) plant.set(e.from, plant.get(e.to)!);
   for (const n of g.nodes) if (n.kind === 'plant') plant.set(n.name, n.name);
   return plant;
 }
@@ -60,8 +76,9 @@ function layout(g: api.KnowledgeGraph) {
   const pull = (n: N) => (n.plant ? 0.03 : 0.012);
   const sim = forceSimulation(nodes)
     .force('link', forceLink<N, L>(links).id((d) => d.id).distance((l) => DIST[l.type] ?? 30)
-      .strength((l) => (l.type === 'is_a' || l.type === 'of_product' || l.type === 'for_customer' ? 0.06 : l.type === 'feeds' || l.type === 'has_station' || l.type === 'runs_on' ? 0.9 : 0.4)))
-    .force('charge', forceManyBody<N>().strength((d) => (d.kind === 'station' || d.kind === 'order' ? -12 : d.kind === 'machine' ? -60 : -140)))
+      .strength((l) => (l.type === 'is_a' || l.type === 'of_product' || l.type === 'for_customer' ? 0.06
+        : l.type === 'feeds' || l.type === 'has_station' || l.type === 'runs_on' || EVENT[l.type] ? 0.9 : 0.4)))
+    .force('charge', forceManyBody<N>().strength((d) => (isEvent(d.kind) ? -6 : d.kind === 'station' || d.kind === 'order' ? -12 : d.kind === 'machine' ? -60 : -140)))
     .force('collide', forceCollide<N>((d) => d.r + 2))
     // wider than tall, like the box it is drawn in
     .force('x', forceX<N>((d) => anchor.get(d.plant ?? '')?.x ?? 0).strength(pull))
@@ -171,7 +188,7 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
     const out = new Set<string>();
     for (const n of inView.sort((a, b) => rank(a) - rank(b))) {
       if (out.size >= budget) break;
-      const fs = n.kind === 'station' ? 11.5 * 0.85 : 11.5;
+      const fs = small(n) ? 11.5 * 0.85 : 11.5;
       // a CJK character is about as wide as the font is tall, a Latin one a little over half
       const w = [...n.id].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? fs : fs * 0.6), 0);
       const cx = (n.x! - view.x) / u, top = (n.y! - n.r - view.y) / u - fs * 1.35;
@@ -219,10 +236,11 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
             const on = near ? near.has(a.id) && near.has(b.id) && (a.id === selected || b.id === selected) : false;
             const flow = l.type === 'feeds';
             const order = l.type === 'runs_on' || l.type === 'for_customer' || l.type === 'of_product';
+            const event = EVENT[l.type];
             return (
               <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={on ? 'var(--primary)' : flow ? '#7f93c8' : l.type === 'is_a' ? '#f29a2e' : order ? KIND.order.color : '#9aa7bd'}
-                strokeOpacity={near ? (on ? 0.9 : 0.06) : l.type === 'is_a' ? 0.18 : flow ? 0.7 : order ? (l.type === 'runs_on' ? 0.5 : 0.16) : 0.35}
+                stroke={on ? 'var(--primary)' : flow ? '#7f93c8' : l.type === 'is_a' ? '#f29a2e' : order ? KIND.order.color : event ? KIND[event].color : '#9aa7bd'}
+                strokeOpacity={near ? (on ? 0.9 : 0.06) : l.type === 'is_a' ? 0.18 : flow ? 0.7 : order ? (l.type === 'runs_on' ? 0.5 : 0.16) : event ? 0.45 : 0.35}
                 strokeWidth={(on ? 1.8 : flow ? 1.2 : 0.8) * unit} />
             );
           })}
@@ -234,7 +252,7 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
               <g key={n.id} opacity={dimmed ? 0.18 : 1} onPointerEnter={() => setHover(n.id)} onPointerLeave={() => setHover((h) => (h === n.id ? null : h))}>
                 <circle cx={n.x} cy={n.y} r={n.r} fill={KIND[n.kind].color} stroke={n.id === selected ? 'var(--foreground)' : 'var(--card)'} strokeWidth={(n.id === selected ? 2.5 : 1) * unit} />
                 {label(n) && (
-                  <text x={n.x} y={n.y! - n.r - font * 0.45} textAnchor="middle" fontSize={n.kind === 'station' ? font * 0.85 : font} fontWeight={n.kind === 'station' ? 600 : 700}
+                  <text x={n.x} y={n.y! - n.r - font * 0.45} textAnchor="middle" fontSize={small(n) ? font * 0.85 : font} fontWeight={small(n) ? 600 : 700}
                     fill="var(--foreground)" paintOrder="stroke" stroke="var(--card)" strokeWidth={font * 0.3} strokeLinejoin="round">
                     {n.id}
                   </text>
