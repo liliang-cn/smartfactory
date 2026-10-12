@@ -7,8 +7,6 @@ package main
 // removes the service and keeps the data unless told otherwise.
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -97,6 +95,7 @@ func runInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ExitOnError)
 	httpAddr := fs.String("http", ":4720", "where the console and the twin listen (first install only)")
 	mqtt := fs.String("mqtt", ":41883", "the MQTT broker devices report to; empty for none (first install only)")
+	mqttTLS := fs.String("mqtt-tls", ":48883", "the broker's TLS listener, for devices with a certificate; empty for none (first install only)")
 	unit := fs.Bool("unit", false, "only print the systemd unit (to install by hand)")
 	fs.Parse(args)
 	if *unit {
@@ -151,8 +150,14 @@ func runInstall(args []string) error {
 	if !fileExists(cfgPath) {
 		cfg := map[string]any{"http": *httpAddr, "data": installData}
 		if *mqtt != "" {
-			// devices connect with a password; anonymous clients are refused
-			cfg["mqtt"] = map[string]any{"listen": *mqtt, "prefix": "sf", "users": map[string]string{"device": randomHex(16)}}
+			// no shared password: each device is registered in the console and gets a token or a
+			// certificate of its own (the CA is made under the data directory when first needed);
+			// until one is, the broker takes connections from this machine only
+			m := map[string]any{"listen": *mqtt, "prefix": "sf"}
+			if *mqttTLS != "" {
+				m["tls"] = map[string]any{"listen": *mqttTLS}
+			}
+			cfg["mqtt"] = m
 		} else {
 			cfg["mqtt"] = map[string]any{"listen": ""}
 		}
@@ -203,7 +208,11 @@ func runInstall(args []string) error {
 	fmt.Printf("  配置       %s\n", cfgPath)
 	fmt.Printf("  大模型     在 %s 里填 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL，再 sudo systemctl restart smartfactory\n", filepath.Join(installEtc, "env"))
 	if *mqtt != "" {
-		fmt.Printf("  设备接入   MQTT %s，用户 device，密码在配置的 mqtt.users 里\n", *mqtt)
+		port := *mqtt
+		if *mqttTLS != "" {
+			port += "（TLS " + *mqttTLS + "）"
+		}
+		fmt.Printf("  设备接入   MQTT %s：在后台公司的「接入」里给每台设备登记，各发一个令牌或证书（smartfactory device add 也行）\n", port)
 	}
 	fmt.Printf("  数据       %s（备份它就是备份整个工厂）\n", installData)
 	fmt.Printf("  日志       journalctl -u smartfactory -f\n")
@@ -299,10 +308,4 @@ func writeOwned(path string, b []byte, mode os.FileMode, gid int) error {
 		return err
 	}
 	return os.Chown(path, 0, gid)
-}
-
-func randomHex(n int) string {
-	b := make([]byte, n)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }

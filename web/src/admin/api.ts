@@ -37,6 +37,10 @@ export type ResidualPoint = z.infer<typeof P.Residuals>[number];
 export type GuardSettings = z.infer<typeof P.GuardSettings>;
 export type GuardOverview = z.infer<typeof P.GuardOverview>;
 export type CommandRequest = z.infer<typeof P.CommandRequest>;
+export type BrokerDevice = z.infer<typeof P.BrokerDevice>;
+export type BrokerDevices = z.infer<typeof P.BrokerDevices>;
+export type RegisterDevice = z.infer<typeof P.RegisterDevice>;
+export type DeviceCredential = z.infer<typeof P.DeviceCredential>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -179,6 +183,11 @@ export const setGuard = (c: string, s: GuardSettings) => call<GuardOverview>('PU
 export const commandRequests = (c: string, status = '') => call<CommandRequest[]>('GET', `${guardPath(c)}/requests?status=${status}`);
 export const approveCommand = (c: string, id: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/approve`);
 export const denyCommand = (c: string, id: string, reason: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/deny`, { reason });
+const devicesPath = (c: string) => `/api/admin/devices/${encodeURIComponent(c)}`;
+export const devices = (c: string) => call<BrokerDevices>('GET', devicesPath(c));
+export const addDevice = (c: string, d: RegisterDevice) => call<DeviceCredential>('POST', devicesPath(c), d);
+export const renewDevice = (c: string, id: string) => call<DeviceCredential>('POST', `${devicesPath(c)}/${encodeURIComponent(id)}/renew`);
+export const revokeDevice = (c: string, id: string) => call<BrokerDevice>('DELETE', `${devicesPath(c)}/${encodeURIComponent(id)}`);
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;

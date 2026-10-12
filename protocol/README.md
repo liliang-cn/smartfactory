@@ -400,6 +400,25 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 命令行：`smartfactory guard <company>`（`set -level guarded -approve start,speed -expire 15`、`set -f settings.json`、`pending`、`requests`、`approve <编号>`、`deny <编号> -reason …`）。工作台助手有 `guard_status`，批准、拒绝要管理员确认。
 
+### 设备身份 `/api/admin/devices/{company}`
+
+内置 broker 上的每台设备（或网关）可以有自己的身份，而不是共用一个密码：
+
+- **登记**：设备名（字母、数字、`.-_`，整台服务器上不重复）就是它连 MQTT 的 client id 和用户名，也是证书的 CN。登记时选一个厂和它负责的设备：编号（`HP-101`）、前缀（`RF-*`）或 `*`（整个厂）。
+- **凭据**：`token` 是令牌（`sfd_…`），连 MQTT 时当密码，服务器只存它的 SHA-256；`cert` 是服务器自己的 CA 签发的客户端证书（CN 是设备名，另有 URI `urn:smartfactory:device:{名字}`），设备用它连 TLS 端口（`mqtt.tls`），不用密码，私钥服务器不留。CA 第一次用到时生成在数据目录的 `ca/`（目录 0700，文件 0600）。凭据只在登记、换新时给一次。
+- **能用的主题**：只能发 `{prefix}/{company}/{plant}/{设备}` 和 `…/{设备}/{字段}`（字段不能是 `cmd`），只能订阅 `…/{设备}/cmd`（负责整个厂的可以用 `+` 代替设备）。别的发布静默丢弃（QoS 0；MQTT 3.1.1 的 QoS 1、2 按协议断开），订阅回 0x80；client id 不是设备名、令牌不对、证书已换新或撤销的连接被拒。每次被拒都计数、记下最近一次，服务器日志每台设备每分钟至多一条。
+- **撤销、换新**：立即断开它的连接，旧凭据不再能用。
+- **共用账号**（配置的 `mqtt.users`）照旧，拿到密码的客户端什么主题都能发、能订阅。没有共用账号时，本机的客户端不用密码也能连（和以前一样），但不能冒用登记过的设备名。没有共用账号也没登记设备时，broker 只听本机；登记第一台设备后对网络开放，不用重启。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/admin/devices/{company}` | `BrokerDevices` | 登记的设备（在线、最近、被拒次数），已撤销的在后；共用账号；broker 的端口；管理员 |
+| `POST /api/admin/devices/{company}` | `RegisterDevice` → `DeviceCredential` | 登记；令牌或证书、私钥、CA（`bundle` 是三者的 zip，base64）只给这一次 |
+| `POST /api/admin/devices/{company}/{id}/renew` | → `DeviceCredential` | 换新凭据，旧的立即失效 |
+| `DELETE /api/admin/devices/{company}/{id}` | → `BrokerDevice` | 撤销 |
+
+审计记录 `device.add`、`device.renew`、`device.revoke`。命令行：`smartfactory device <company>`（`list [-all]`、`add <名字> -plant p1 -assets 'RF-*,HP-101' [-cert] [-out 目录]`、`cert <名字>`、`token <名字>`、`revoke <名字>`）。边缘网关用证书时在 `mqtt` 里写 `"url": "tls://主机:端口"` 和 `cert`、`key`、`ca` 三个文件。
+
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。

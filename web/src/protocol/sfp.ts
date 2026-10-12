@@ -550,7 +550,7 @@ export const AuditEntry = z.object({
   via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · device.add / device.renew / device.revoke (a device on the embedded broker; target its name) */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
   /** what was true when it happened, for a command to a machine: its state, temperature and alarms, the rule that refused it, who asked and who approved */
@@ -879,6 +879,49 @@ export const CommandRequest = z.object({
 }).meta({ description: 'POST /api/guard/{company}/requests/{id}/approve | deny {reason?} — operators and above; MCP command_request' });
 export const CommandRequests = z.array(CommandRequest).meta({ description: 'GET /api/guard/{company}/requests?status= — waiting first, then the newest' });
 
+// ---------- devices on the embedded broker (/api/admin/devices) ----------
+
+/**
+ * A device with an identity of its own on the embedded broker: a token (its MQTT password, user
+ * name and client id being its name) or a client certificate from the server's CA (CN = its
+ * name). It may publish readings of its own assets only and hear only their commands.
+ */
+export const BrokerDevice = z.object({
+  id: str,
+  /** MQTT client id and user name; the certificate's CN */
+  name: str,
+  company: str, plant: str,
+  /** asset ids; "*" every asset of the plant, a trailing * a prefix ("RF-*") */
+  assets: z.array(str),
+  kind: z.enum(['token', 'cert']),
+  created: time, createdBy: str,
+  /** when its certificate lapses */
+  expires: time.optional(),
+  revoked: time.optional(), revokedBy: str.optional(),
+  connected: z.boolean(),
+  /** its last accepted connection or message */
+  lastSeen: time.optional(),
+  /** how often it was refused (a wrong credential, a topic not its own), and the last time */
+  refused: num, lastRefusal: str.optional(), refusedAt: time.optional(),
+});
+export const BrokerDevices = z.object({
+  devices: z.array(BrokerDevice),
+  /** the broker's shared users (mqtt.users): whoever holds one may publish and subscribe to anything */
+  shared: z.array(str),
+  /** listen is empty when the server runs no broker; local: it takes connections from this machine only */
+  broker: z.object({ listen: str, tls: str.optional(), prefix: str, local: z.boolean() }),
+}).meta({ description: 'GET /api/admin/devices/{company} — administrators' });
+export const RegisterDevice = z.object({
+  name: str, plant: str, assets: z.array(str), kind: z.enum(['token', 'cert']).optional(),
+}).meta({ description: 'POST /api/admin/devices/{company} — administrators; answers DeviceCredential' });
+export const DeviceCredential = z.object({
+  device: BrokerDevice,
+  /** token devices: the token, shown this once */
+  token: str.optional(),
+  /** certificate devices: its certificate and private key (PEM), the CA's certificate, and the three as a zip (base64) — shown this once */
+  cert: str.optional(), key: str.optional(), ca: str.optional(), bundle: str.optional(),
+}).meta({ description: 'POST /api/admin/devices/{company} and /{id}/renew (a new credential; the old one stops working); DELETE /{id} revokes and answers BrokerDevice' });
+
 // ---------- the console agent (/api/admin/agent) ----------
 
 /** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
@@ -913,6 +956,7 @@ export const DEFS = {
   Order, Orders, OrderInput, OrderResults, OrderCallback, ERPConfig, ERPOverview, PullResult,
   CalibMachine, Calibration, CalibRequest, CalibOutcomes, Residuals,
   GuardSettings, GuardOverview, CommandRequest, CommandRequests,
+  BrokerDevice, BrokerDevices, RegisterDevice, DeviceCredential,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

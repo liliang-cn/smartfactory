@@ -22,6 +22,7 @@ import (
 	"smartfactory/internal/guard"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
+	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
 )
@@ -44,6 +45,9 @@ type Ops struct {
 	Calib *calib.Service
 	// Commands is the guard in front of the companies' machines.
 	Commands *guard.Guard
+	// Devices are the devices registered on the embedded broker, MQTT the broker itself.
+	Devices *mqttauth.Registry
+	MQTT    *MQTT
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

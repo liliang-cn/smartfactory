@@ -29,6 +29,7 @@ import (
 	"smartfactory/internal/erp"
 	"smartfactory/internal/guard"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
@@ -73,6 +74,10 @@ type Server struct {
 	Guard *guard.Guard
 	// Series is the readings equipment sent (nil without data).
 	Series *series.Store
+	// Devices are the devices registered on the embedded broker (nil without data), MQTT the
+	// broker as they reach it (nil when the server runs none).
+	Devices *mqttauth.Registry
+	MQTT    *ops.MQTT
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -144,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	s.erpRoutes(mux)
 	s.calibRoutes(mux)
 	s.guardRoutes(mux)
+	s.deviceRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())

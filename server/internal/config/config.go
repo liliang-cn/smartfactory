@@ -112,10 +112,28 @@ type Broker struct {
 	Listen string `json:"listen"`
 	// Prefix of the topic convention.
 	Prefix string `json:"prefix"`
-	// Users with passwords. Without any, the broker takes connections from this machine only.
+	// Users with passwords, shared: whoever holds one may publish and subscribe to anything.
+	// Devices registered in the console (or with `smartfactory device`) have credentials of their
+	// own and only their own assets' topics. With neither, the broker takes connections from this
+	// machine only.
 	Users map[string]string `json:"users"`
 	// Public: devices on this broker are emulated, so visitors' commands are published too.
 	Public bool `json:"public"`
+	// TLS is a second listener, for devices that connect over TLS: with a certificate the
+	// server issued them (no password), or with their token.
+	TLS *BrokerTLS `json:"tls,omitempty"`
+}
+
+// BrokerTLS is the broker's TLS listener.
+type BrokerTLS struct {
+	// Listen address, e.g. ":48883".
+	Listen string `json:"listen"`
+	// Cert and Key are PEM files of the broker's own certificate. Without them the server's CA
+	// issues one at each start, for Hosts and this machine's names and addresses; devices
+	// trust the CA (ca.crt, in each device's certificate bundle).
+	Cert  string   `json:"cert,omitempty"`
+	Key   string   `json:"key,omitempty"`
+	Hosts []string `json:"hosts,omitempty"`
 }
 
 type Source struct {

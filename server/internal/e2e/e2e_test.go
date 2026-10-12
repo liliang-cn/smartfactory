@@ -48,7 +48,7 @@ node_hwmon_temp_celsius{chip="nvme_nvme0",sensor="temp1"} 54.85
 
 	mqttPort, modbusPort, opcPort := freePort(t), freePort(t), freePort(t)
 	hub := tags.NewHub()
-	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", mqttPort), Prefix: "sf"}, hub, log)
+	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", mqttPort), Prefix: "sf"}, hub, nil, log)
 	if err != nil {
 		t.Fatal(err)
 	}

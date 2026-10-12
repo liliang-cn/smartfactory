@@ -79,9 +79,10 @@
 
 | 项 | 约定 |
 |---|---|
-| Broker | 服务器内置 broker，默认 `:41883`（配置项 `mqtt.listen`）。可以按用户名和密码鉴权（`mqtt.users`）。也可以接工厂自己的 broker，在数据源里写 `"convention": "sf"` |
+| Broker | 服务器内置 broker，默认 `:41883`（配置项 `mqtt.listen`），可另开 TLS 端口（`mqtt.tls.listen`）。也可以接工厂自己的 broker，在数据源里写 `"convention": "sf"` |
+| 身份 | 每台设备在后台「接入」登记（或 `smartfactory device add`），拿到自己的令牌（当密码）或客户端证书（连 TLS 端口，不用密码）；client id 和用户名都是设备名。登记的设备只能发它负责的设备的读数、只能订阅它们的 `cmd`，见 README.md 的「设备身份」。配置里的共用账号（`mqtt.users`）不受限 |
 | 前缀 | `sf`（配置项 `mqtt.prefix`） |
-| 数据源名 | 设备的 client id。断开连接时，这个数据源在界面上显示为离线 |
+| 数据源名 | 设备的 client id（登记的设备就是设备名）。断开连接时，这个数据源在界面上显示为离线 |
 | QoS | 数据用 0 或 1 都可以；命令以 QoS 1 下发 |
 
 | Topic | 方向 | 载荷 |
