@@ -149,7 +149,7 @@ func AddKnowledge(s *mcp.Server, kb Knowledge) {
 	mcp.AddTool(s, &mcp.Tool{Name: "knowledge_search", Description: "Search a company's knowledge base: passages of the documents in its library, descriptions of its process (plants, lines, each station with what comes before and after it, machines, products, suppliers, customers) " +
 		"and its production orders (customer, product, line, progress, due date). Station numbers, machines, lines, products, customers and order numbers named in the query (or in names) are recognised " +
 		"and the search walks the graph from them (mode ppr), so a document about a machine is found from a question naming only a station built from it; otherwise it searches words (mode lexical). " +
-		"Returns the best passages, each with from (doc / process / order), title, doc id and part for a document passage, cite (how to name the source), its text and the things it names. " +
+		"Returns the best passages, each with from (doc / process / order / check / anomaly / calibration / command), title, doc id and part for a document passage, cite (how to name the source), its text and the things it names. " +
 		"Answer from the passages and cite them; long passages are cut, read_doc reads a document whole."},
 		guard(auth.Member, func(in kbSearchIn) string { return in.Company }, func(ctx context.Context, req *mcp.CallToolRequest, in kbSearchIn) (*mcp.CallToolResult, kbSearchOut, error) {
 			limit := in.Limit
@@ -319,6 +319,9 @@ func passage(p knowledge.Passage, n int) kbPassage {
 		out.Cite = fmt.Sprintf("%s (doc %s, part %d)", p.Title, p.Doc, p.Part)
 	case "order":
 		out.Cite = p.Title + " (production order)"
+	case "check", "anomaly", "calibration", "command":
+		// a machine's record: a check, a reading hint, a calibration or an AI command
+		out.Cite = p.Title + " (" + p.From + " record)"
 	default:
 		out.Cite = p.Title + " (process)"
 	}
