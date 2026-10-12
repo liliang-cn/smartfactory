@@ -37,6 +37,9 @@ export type ResidualPoint = z.infer<typeof P.Residuals>[number];
 export type GuardSettings = z.infer<typeof P.GuardSettings>;
 export type GuardOverview = z.infer<typeof P.GuardOverview>;
 export type CommandRequest = z.infer<typeof P.CommandRequest>;
+export type AnomalyReport = z.infer<typeof P.AnomalyReport>;
+export type Anomaly = z.infer<typeof P.Anomaly>;
+export type AnomalyResetResult = z.infer<typeof P.AnomalyResetResult>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -179,6 +182,8 @@ export const setGuard = (c: string, s: GuardSettings) => call<GuardOverview>('PU
 export const commandRequests = (c: string, status = '') => call<CommandRequest[]>('GET', `${guardPath(c)}/requests?status=${status}`);
 export const approveCommand = (c: string, id: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/approve`);
 export const denyCommand = (c: string, id: string, reason: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/deny`, { reason });
+export const anomalies = (c: string) => call<AnomalyReport>('GET', `/api/anomalies/${encodeURIComponent(c)}`);
+export const resetBaseline = (c: string, machines: string[]) => call<AnomalyResetResult>('POST', `/api/admin/anomalies/${encodeURIComponent(c)}/reset`, { machines });
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;

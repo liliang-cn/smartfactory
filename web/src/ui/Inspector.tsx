@@ -15,6 +15,7 @@ import { CHIP, STATE_LABEL, hhmm } from './status';
 import { HistoryChart, RANGES, type Range, type Summary } from './History';
 import { TrendChart, spcStats, type Metric } from './TrendChart';
 import { InventoryList } from './Panels';
+import { MachineHints } from './Hints';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 const isVehicle = (a: Asset) => a.type === 'agv' || a.type === 'truck';
@@ -265,6 +266,7 @@ export function Inspector() {
           </div>
         )}
         <div className="grid grid-cols-3 gap-2"><Tiles a={a} /></div>
+        {isMachine(a) && <MachineHints plant={layout.id} asset={a.id} measured={measured} />}
         {a.type === 'warehouse' && sim.inventory.length > 0 && (
           <div className="mt-3">
             <h3 className="mb-1 text-[13px] font-extrabold">库存</h3>

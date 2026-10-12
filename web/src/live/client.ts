@@ -6,10 +6,10 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { runtime, useUI } from '@/state/store';
-import { PROTOCOL, type ClientMessage, type Role, type ServerMessage, type SourceInfo } from '@/protocol/sfp';
+import { PROTOCOL, type AnomalyInfo, type ClientMessage, type Role, type ServerMessage, type SourceInfo } from '@/protocol/sfp';
 import type { Command } from '@/sim/types';
 
-export type { SourceInfo };
+export type { AnomalyInfo, SourceInfo };
 
 interface LiveState {
   status: 'off' | 'connecting' | 'on';
@@ -22,9 +22,11 @@ interface LiveState {
   /** the token holder's name; 访客 without one */
   name: string;
   sources: SourceInfo[];
+  /** measured machines' readings unusual for them now (hints, not alarms) */
+  anomalies: AnomalyInfo[];
 }
 
-export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, role: 'visitor', name: '访客', sources: [] }));
+export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, role: 'visitor', name: '访客', sources: [], anomalies: [] }));
 
 const me = Math.random().toString(36).slice(2, 10);
 let ws: WebSocket | null = null;
@@ -79,7 +81,7 @@ function connect(tok: string | null, attempt: number) {
     if (ws === s) ws = null;
     // Keep showing the last state and simulate locally until the server is back.
     for (const p of runtime().plants) p.sim.follower = false;
-    useLive.setState({ status: 'off', following: false, sources: [] });
+    useLive.setState({ status: 'off', following: false, sources: [], anomalies: [] });
     // No server answered on the first tries: static hosting or dev without the server. Stay quiet.
     if (stale || (!opened && attempt >= 2)) return;
     setTimeout(() => connect(tok, opened ? 0 : attempt + 1), Math.min(30_000, 1500 * 2 ** attempt));
@@ -110,6 +112,9 @@ function handle(m: ServerMessage) {
       break;
     case 'sources':
       useLive.setState({ sources: m.sources });
+      break;
+    case 'anomalies':
+      useLive.setState({ anomalies: m.anomalies });
       break;
     case 'frame': {
       if (m.data.company !== rt.bundle.company.id) return;

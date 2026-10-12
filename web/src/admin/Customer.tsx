@@ -1,5 +1,5 @@
 // One customer: what their twin is made of, their assistants and documents, the equipment that
-// feeds it, who holds a token, and what was done.
+// feeds it and what its readings say, who holds a token, and what was done.
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import type { PlantLayout } from '@/core/layout';
 import * as api from './api';
 import { AccountList } from './Accounts';
+import { AnomalyPanel } from './Anomalies';
 import { ActivityList } from './Activity';
 import { Blueprint, BlueprintLegend } from './Blueprint';
 import { PageHead, useConsole } from './Console';
@@ -257,7 +258,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
           <Suspense fallback={null}><KnowledgeBase company={c.id} admin={ov.me.role === 'admin'} /></Suspense>
         </TabsContent>
         <TabsContent value="orders"><OrderBoard c={c} /></TabsContent>
-        <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><Connect c={c} /></TabsContent>
+        <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><Connect c={c} /><AnomalyPanel c={c} /></TabsContent>
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
