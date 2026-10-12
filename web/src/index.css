@@ -158,3 +158,33 @@
     @apply font-sans;
     }
 }
+
+/* Printing a page that marks what to print (data-print, the value report): everything else
+   goes, and the scrolling shells around it open up so the report runs across pages. */
+@media print {
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  body:has([data-print]) *:not(:has([data-print])):not([data-print]):not([data-print] *) {
+    display: none !important;
+  }
+  body:has([data-print]) *:has([data-print]) {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+  }
+  [data-print] section {
+    box-shadow: none !important;
+    border: 1px solid var(--border);
+  }
+}

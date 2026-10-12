@@ -21,6 +21,7 @@ import { Blueprint, BlueprintLegend } from './Blueprint';
 import { PageHead, useConsole } from './Console';
 import { Calibration } from './Calib';
 import { GuardPanel } from './Guard';
+import { ValuePanel } from './Value';
 import { OrderBoard, ERPPanel } from './Orders';
 import { Panel } from './Panel';
 import { Badge, totals } from './Customers';
@@ -37,6 +38,7 @@ const TABS = [
   { id: 'connect', label: '接入', icon: PlugZapIcon },
   { id: 'calib', label: '校准', icon: SlidersHorizontalIcon },
   { id: 'guard', label: '指令', icon: ShieldCheckIcon },
+  { id: 'value', label: '成效', icon: TrendingUpIcon },
   { id: 'accounts', label: '账号', icon: KeyRoundIcon },
   { id: 'activity', label: '记录', icon: ScrollTextIcon },
 ] as const;
@@ -260,6 +262,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><Connect c={c} /></TabsContent>
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
+        <TabsContent value="value"><ValuePanel c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
         <TabsContent value="activity"><ActivityList company={c.id} /></TabsContent>
       </Tabs>
