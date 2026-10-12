@@ -5970,6 +5970,18 @@
                       "null"
                     ]
                   },
+                  "outputPerDay": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "downtimePerDay": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
                   "lineHours": {
                     "type": "number"
                   },
@@ -5986,6 +5998,8 @@
                   "oee",
                   "output",
                   "downtime",
+                  "outputPerDay",
+                  "downtimePerDay",
                   "lineHours",
                   "measured"
                 ],

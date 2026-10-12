@@ -247,12 +247,16 @@ type PlantValue struct {
 // Week is a week of the period (Monday on), as far as it lies in the period. Values are absent
 // in a week without data from the trend's source.
 type Week struct {
-	Start     time.Time `json:"start"`
-	Days      int       `json:"days"`
-	OEE       *float64  `json:"oee"`
-	Output    *float64  `json:"output"`
-	Downtime  *float64  `json:"downtime"`
-	LineHours int       `json:"lineHours"`
+	Start    time.Time `json:"start"`
+	Days     int       `json:"days"`
+	OEE      *float64  `json:"oee"`
+	Output   *float64  `json:"output"`
+	Downtime *float64  `json:"downtime"`
+	// OutputPerDay and DowntimePerDay are per day with data, so a week the period cuts short
+	// compares with a whole one.
+	OutputPerDay   *float64 `json:"outputPerDay"`
+	DowntimePerDay *float64 `json:"downtimePerDay"`
+	LineHours      int      `json:"lineHours"`
 	// Measured is the share of the week's line-hours that came from equipment.
 	Measured *float64 `json:"measured"`
 }
@@ -1027,7 +1031,8 @@ func plantOf(days []history.Day, p Period, first *adoption, now time.Time, missi
 				wt.add(d)
 			}
 		}
-		wk := Week{Start: w, Days: int(math.Ceil(hi.Sub(lo).Hours() / 24)), OEE: wt.oee(), Output: wt.output(), Downtime: wt.downtime(), LineHours: wt.lineHours}
+		wk := Week{Start: w, Days: int(math.Ceil(hi.Sub(lo).Hours() / 24)), OEE: wt.oee(), Output: wt.output(), Downtime: wt.downtime(),
+			OutputPerDay: perDay(wt.output(), len(wt.days)), DowntimePerDay: perDay(wt.downtime(), len(wt.days)), LineHours: wt.lineHours}
 		if all.lineHours > 0 {
 			x := round3(float64(all.measuredHours) / float64(all.lineHours))
 			wk.Measured = &x
@@ -1074,8 +1079,13 @@ func compareAround(days []history.Day, p Period, first *adoption, now time.Time)
 		c.Source = "simulated"
 		c.Note = "两边没有都有设备实测的数据，下面是孪生仿真（或部分实测）的数字，不代表真实工厂。" + c.Note
 	}
-	if before.lineHours == 0 && after.lineHours == 0 {
-		c.Source = ""
+	switch {
+	case before.lineHours == 0 && after.lineHours == 0:
+		c.Source, c.Note = "", "采纳前后这两段时间历史库里都没有记录，没法比。"
+	case before.lineHours == 0:
+		c.Source, c.Note = "", "采纳前这段时间历史库里没有记录，没法比。"
+	case after.lineHours == 0:
+		c.Source, c.Note = "", "采纳后这段时间历史库里没有记录，没法比。"
 	}
 	side := func(t tally, from, to time.Time) Side {
 		nd := len(t.days)
@@ -1123,9 +1133,9 @@ func (v *Value) CSV() []byte {
 	}
 	if len(v.Plant.Weeks) > 0 {
 		w.Write(nil)
-		w.Write([]string{"周（周一起）", "天数", "OEE", "产量（件）", "设备停机（h）", "产线小时", "实测占比", "数据来源"})
+		w.Write([]string{"周（周一起）", "天数", "OEE", "产量（件）", "日均产量（件）", "设备停机（h）", "日均设备停机（h）", "产线小时", "实测占比", "数据来源"})
 		for _, wk := range v.Plant.Weeks {
-			w.Write([]string{wk.Start.Format("2006-01-02"), strconv.Itoa(wk.Days), share(wk.OEE, "%"), share(wk.Output, ""), share(wk.Downtime, ""), strconv.Itoa(wk.LineHours), share(wk.Measured, "%"), sourceLabel(v.Plant.Source)})
+			w.Write([]string{wk.Start.Format("2006-01-02"), strconv.Itoa(wk.Days), share(wk.OEE, "%"), share(wk.Output, ""), share(wk.OutputPerDay, ""), share(wk.Downtime, ""), share(wk.DowntimePerDay, ""), strconv.Itoa(wk.LineHours), share(wk.Measured, "%"), sourceLabel(v.Plant.Source)})
 		}
 	}
 	if c := v.Plant.Compare; c != nil {

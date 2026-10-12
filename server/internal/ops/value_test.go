@@ -357,8 +357,15 @@ func TestPlant(t *testing.T) {
 	if v.Weeks[0].Days != 2 || v.Weeks[2].OEE != nil || v.Weeks[2].Measured == nil || *v.Weeks[2].Measured != 0 {
 		t.Errorf("early weeks: %+v %+v", v.Weeks[0], v.Weeks[2])
 	}
-	if w := v.Weeks[3]; w.OEE == nil || *w.OEE != 0.629 || w.LineHours != 7*24 || *w.Measured != 0.5 {
+	if w := v.Weeks[3]; w.OEE == nil || *w.OEE != 0.629 || w.LineHours != 7*24 || *w.Measured != 0.5 || *w.OutputPerDay != 800 || *w.DowntimePerDay != 1 {
 		t.Errorf("week of Sep 28: %+v", w)
+	}
+	// the period's last week is one day, without data yet; per day a week compares with another
+	if w := v.Weeks[5]; w.Days != 1 || w.OutputPerDay != nil {
+		t.Errorf("week of Oct 12: %+v", w)
+	}
+	if w := v.Weeks[4]; *w.Output != 7*800 || *w.OutputPerDay != 800 {
+		t.Errorf("week of Oct 5: %+v", w)
 	}
 	c := v.Compare
 	if c == nil {
@@ -377,6 +384,11 @@ func TestPlant(t *testing.T) {
 	v = plantOf(append(days[:0:0], sim(date(2026, 10, 1)), sim(date(2026, 10, 3)), real(date(2026, 10, 4), 0.7)), p, first, now, "")
 	if c := v.Compare; c.Source != "simulated" || !strings.Contains(c.Note, "不代表真实工厂") || c.Before.Days != 1 || c.After.Days != 2 {
 		t.Errorf("one-sided measurements: %+v", c)
+	}
+	// nothing recorded before the adoption: no comparison, and it says why
+	v = plantOf(days, p, &adoption{at: time.Date(2026, 9, 20, 15, 0, 0, 0, shanghai)}, now, "")
+	if c := v.Compare; c.Source != "" || !strings.Contains(c.Note, "采纳前这段时间历史库里没有记录") || c.Before.Days != 0 {
+		t.Errorf("no data before: %+v", c)
 	}
 	// adopted today: nothing after it yet
 	v = plantOf(days, p, &adoption{at: now.Add(-time.Hour)}, now, "")

@@ -918,7 +918,10 @@ export const FieldReplay = z.object({ field: str, label: str, unit: str, before:
 export const ValueWeek = z.object({
   /** Monday */
   start: time, days: num,
-  oee: num.nullable(), output: num.nullable(), downtime: num.nullable(), lineHours: num,
+  oee: num.nullable(), output: num.nullable(), downtime: num.nullable(),
+  /** per day with data, so a week the period cuts short compares with a whole one */
+  outputPerDay: num.nullable(), downtimePerDay: num.nullable(),
+  lineHours: num,
   /** share of the week's line-hours measured from equipment */
   measured: num.nullable(),
 });

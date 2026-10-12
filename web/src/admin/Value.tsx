@@ -154,11 +154,11 @@ function Plant({ p }: { p: api.ValueReport['plant'] }) {
           <h3 className="flex items-center gap-2 text-[13px] font-extrabold">每周（周一起）<SourceTag source={p.source} /></h3>
           <div className="grid gap-4 sm:grid-cols-3">
             <WeekBars weeks={shown} pick={(w) => w.oee} unit="%" label="OEE" tone="var(--chart-1)" />
-            <WeekBars weeks={shown} pick={(w) => w.output} label="产量（件）" tone="var(--chart-2)" />
-            <WeekBars weeks={shown} pick={(w) => w.downtime} label="设备停机（h）" tone="var(--chart-3)" />
+            <WeekBars weeks={shown} pick={(w) => w.outputPerDay} label="日均产量（件）" tone="var(--chart-2)" />
+            <WeekBars weeks={shown} pick={(w) => w.downtimePerDay} label="日均设备停机（h）" tone="var(--chart-3)" />
           </div>
           <p className="text-[11.5px] text-muted-foreground">
-            第一周和最后一周只算落在这段时间里的天：{shown.map((w) => `${day(w.start)} ${w.days} 天`).join('，')}。虚线是这周没有{p.source === 'measured' ? '实测' : ''}数据。
+            产量和停机按有数据的天平均，第一周和最后一周只算落在这段时间里的天（{shown.map((w) => `${day(w.start)} 起 ${w.days} 天`).join('，')}）。虚线是这周没有{p.source === 'measured' ? '实测' : ''}数据。
           </p>
         </div>
       )}
@@ -166,7 +166,7 @@ function Plant({ p }: { p: api.ValueReport['plant'] }) {
         <div className="grid gap-2 rounded-xl border p-3 break-inside-avoid">
           <h3 className="flex flex-wrap items-center gap-2 text-[13px] font-extrabold">第一条采纳的计划前后<SourceTag source={c.source} /></h3>
           <p className="text-[12.5px]"><b>{c.does}</b> <span className="text-muted-foreground">{c.plan}，采纳于 {date(c.adopted)}{c.days > 0 ? `，前后各 ${c.days} 天，采纳当天不算` : ''}</span></p>
-          {c.days > 0 && (
+          {c.days > 0 && c.source && (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] text-[13px] tabular-nums">
                 <thead>
