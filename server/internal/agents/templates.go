@@ -27,12 +27,13 @@ var Templates = []Template{
 	{
 		Kind:  "notes",
 		Title: "研发笔记",
-		Tools: []string{"search_notes", "list_notes", "save_note", "update_note", "twin_machines", "search_docs", "process_graph"},
+		Tools: []string{"search_notes", "list_notes", "save_note", "update_note", "twin_machines", "machine_anomalies", "search_docs", "process_graph"},
 		prompt: `你是研发与工艺改进团队的笔记助手：把口述的试验、调参、问题记录整理成笔记存下来，也帮人查以前的笔记。
 
 记录时：
 - 整理成这几段（没有的省略）：目的、条件（设备、零件、参数）、过程、结果（带数字）、结论、下一步。
 - 提到设备时用 twin_machines 查它在孪生里的编号和当前状态，把编号写进 assets，把当时的温度、健康度等写进“条件”。
+- 问到设备读数是不是正常、有没有异常苗头，用 machine_anomalies 查：它把每台接了真实数据的设备和它自己平常的读数比，说明偏了几个标准差、平常是多少。
 - 先 search_notes 看有没有同一件事（同一试验、同一问题的后续）的笔记：有就只用 update_note 的 append 追加这次的内容；没有才 save_note 新建。一次记录只写一处，追加了就不要再新建。
 - 标签 2～4 个，用名词（零件、工序、缺陷名）。
 - 存完回一句：存了哪条、标题是什么。

@@ -9,7 +9,7 @@
 //	smartfactory version
 //
 // and, against a running server, the console's commands (cli.go): login, company, industries,
-// tokens, kb, orders, activity, agent.
+// tokens, kb, orders, calib, guard, anomalies, activity, agent.
 package main
 
 import (
@@ -35,6 +35,7 @@ import (
 
 	"smartfactory/internal/adapters"
 	"smartfactory/internal/agents"
+	"smartfactory/internal/anomaly"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
@@ -171,9 +172,29 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		if readings, err = series.Open(cfg.Data, series.RetentionFrom(cfg.Series), log); err != nil {
 			return fmt.Errorf("series: %w", err)
 		}
-		hub.Tap = readings.Add
 		readings.Start(ctx)
 		defer readings.Close()
+	}
+	// what each measured machine normally reads, and readings unusual for it
+	var hints *anomaly.Detector
+	if cfg.Data != "" && !cfg.Series.Anomaly.Off {
+		st, err := anomaly.Open(cfg.Data)
+		if err != nil {
+			return fmt.Errorf("anomaly: %w", err)
+		}
+		if hints, err = anomaly.New(st, anomaly.SettingsFrom(cfg.Series.Anomaly), nil, log); err != nil {
+			st.Close()
+			return fmt.Errorf("anomaly: %w", err)
+		}
+	}
+	switch {
+	case readings != nil && hints != nil:
+		hub.Tap = func(t tags.Tag) {
+			readings.Add(t)
+			hints.Add(t)
+		}
+	case readings != nil:
+		hub.Tap = readings.Add
 	}
 	eng.Dir = cfg.Data
 	switch {
@@ -288,6 +309,12 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if assistants != nil {
 		assistants.Audit = trail
 	}
+	if hints != nil {
+		// started once the activity log is open: hints go into it
+		hints.Audit = trail
+		hints.Start(ctx)
+		defer hints.Close()
+	}
 	// each company's knowledge base: its process as a graph, its documents linked to it
 	var kb *knowledge.Base
 	if cfg.Data != "" {
@@ -400,12 +427,27 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	ms := mcptools.New(hub, eng, version, trail, cmds)
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Hints: hints, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
 			Stateless: true, JSONResponse: true, DisableLocalhostProtection: true,
 		}),
+	}
+	if hints != nil {
+		// MCP's tool and the assistants' ask the console's operation, with its checks
+		o := ws.Operations()
+		report := func(w auth.Who, company string) (*anomaly.Report, error) {
+			r, err := o.Anomalies(w, company)
+			if err != nil {
+				return nil, err
+			}
+			return &r.Report, nil
+		}
+		mcptools.AddHints(ms, report)
+		if assistants != nil {
+			assistants.Hints = report
+		}
 	}
 	srv := &http.Server{Addr: cfg.HTTP, Handler: ws.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

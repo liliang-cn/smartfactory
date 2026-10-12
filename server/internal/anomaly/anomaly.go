@@ -547,7 +547,32 @@ func (d *Detector) Machines(company string) []Machine {
 	return out
 }
 
-// Recent are the company's hints of the last days, newest first (ended and current).
+// Report is a company's hints now, those of the last 30 days, its measured machines' normals and
+// how they are judged.
+type Report struct {
+	Current  []Anomaly `json:"current"`
+	Recent   []Anomaly `json:"recent"`
+	Machines []Machine `json:"machines"`
+	Settings struct {
+		K float64 `json:"k"`
+		// Sustain and Warmup in seconds; Span in readings.
+		Sustain float64 `json:"sustain"`
+		Warmup  float64 `json:"warmup"`
+		Span    int     `json:"span"`
+	} `json:"settings"`
+}
+
+func (d *Detector) Report(company string) (*Report, error) {
+	recent, err := d.Recent(company, 100)
+	if err != nil {
+		return nil, err
+	}
+	r := &Report{Current: d.Current(company), Recent: recent, Machines: d.Machines(company)}
+	r.Settings.K, r.Settings.Sustain, r.Settings.Warmup, r.Settings.Span = d.Set.K, d.Set.Sustain.Seconds(), d.Set.Warmup.Seconds(), d.Set.Span
+	return r, nil
+}
+
+// Recent are the company's hints of the last 30 days, newest first (ended and current).
 func (d *Detector) Recent(company string, limit int) ([]Anomaly, error) {
 	if d.store == nil {
 		return []Anomaly{}, nil

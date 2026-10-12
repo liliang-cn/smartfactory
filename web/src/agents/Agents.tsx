@@ -91,7 +91,7 @@ function Md({ text, className }: { text: string; className?: string }) {
 const TOOL: Record<string, string> = {
   list_docs: '列出文档', search_docs: '搜索文档', read_doc: '阅读文档',
   search_notes: '搜索笔记', list_notes: '最近笔记', save_note: '保存笔记', update_note: '更新笔记',
-  twin_machines: '查看设备', search_tickets: '搜索工单', get_ticket: '查看工单', create_ticket: '登记工单', update_ticket: '处理工单',
+  twin_machines: '查看设备', machine_anomalies: '读数异常', search_tickets: '搜索工单', get_ticket: '查看工单', create_ticket: '登记工单', update_ticket: '处理工单',
 };
 
 const s = (v: unknown) => (v == null ? '' : typeof v === 'string' ? v : Array.isArray(v) ? v.join('、') : JSON.stringify(v));
@@ -111,6 +111,7 @@ function summary(st: Step, docs: Doc[]): string {
       case 'save_note': return s(a.title);
       case 'update_note': return s(a.title);
       case 'twin_machines': return s(a.query);
+      case 'machine_anomalies': return s(a.asset);
       case 'get_ticket': case 'update_ticket': return [s(a.id), s(a.status)].filter(Boolean).join(' · ');
       case 'create_ticket': return [s(a.customer), s(a.title)].filter(Boolean).join(' · ');
     }

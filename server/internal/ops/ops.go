@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"smartfactory/internal/agents"
+	"smartfactory/internal/anomaly"
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
@@ -44,6 +45,8 @@ type Ops struct {
 	Calib *calib.Service
 	// Commands is the guard in front of the companies' machines.
 	Commands *guard.Guard
+	// Hints are readings unusual for their machine.
+	Hints *anomaly.Detector
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

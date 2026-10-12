@@ -205,6 +205,9 @@
           "additionalProperties": false
         },
         {
+          "$ref": "#/$defs/Anomalies"
+        },
+        {
           "type": "object",
           "properties": {
             "type": {
@@ -3187,7 +3190,8 @@
               "mcp",
               "cli",
               "api",
-              "guard"
+              "guard",
+              "anomaly"
             ]
           },
           "company": {
@@ -4141,7 +4145,10 @@
             "revoke_token",
             "rebuild_knowledge",
             "cancel_order",
-            "apply_calibration"
+            "apply_calibration",
+            "approve_command",
+            "deny_command",
+            "reset_baseline"
           ]
         },
         "title": {
@@ -5492,6 +5499,322 @@
         "$ref": "#/$defs/CommandRequest"
       },
       "description": "GET /api/guard/{company}/requests?status= — waiting first, then the newest"
+    },
+    "Anomaly": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "company": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "level",
+            "drift"
+          ]
+        },
+        "since": {
+          "type": "string"
+        },
+        "ended": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        },
+        "peak": {
+          "type": "number"
+        },
+        "mean": {
+          "type": "number"
+        },
+        "sigma": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "company",
+        "plant",
+        "asset",
+        "field",
+        "state",
+        "kind",
+        "since",
+        "value",
+        "z",
+        "peak",
+        "mean",
+        "sigma",
+        "source",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "Anomalies": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "anomalies"
+        },
+        "anomalies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Anomaly"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "anomalies"
+      ],
+      "additionalProperties": false
+    },
+    "AnomalyMachine": {
+      "type": "object",
+      "properties": {
+        "plant": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "at": {
+                "type": "string"
+              },
+              "z": {
+                "type": "number"
+              },
+              "now": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "number"
+                  },
+                  "mean": {
+                    "type": "number"
+                  },
+                  "sigma": {
+                    "type": "number"
+                  },
+                  "warm": {
+                    "type": "boolean"
+                  },
+                  "progress": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "state",
+                  "n",
+                  "mean",
+                  "sigma",
+                  "warm",
+                  "progress"
+                ],
+                "additionalProperties": false
+              },
+              "states": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    },
+                    "n": {
+                      "type": "number"
+                    },
+                    "mean": {
+                      "type": "number"
+                    },
+                    "sigma": {
+                      "type": "number"
+                    },
+                    "warm": {
+                      "type": "boolean"
+                    },
+                    "progress": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "n",
+                    "mean",
+                    "sigma",
+                    "warm",
+                    "progress"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "anomaly": {
+                "$ref": "#/$defs/Anomaly"
+              }
+            },
+            "required": [
+              "field",
+              "value",
+              "at",
+              "z",
+              "states"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "plant",
+        "asset",
+        "state",
+        "source",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/anomalies/{company}/{plant}/{asset} — a measured machine's fields against their normals; anyone watching the twin"
+    },
+    "AnomalyReport": {
+      "type": "object",
+      "properties": {
+        "current": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Anomaly"
+          }
+        },
+        "recent": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Anomaly"
+          }
+        },
+        "machines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AnomalyMachine"
+          }
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "k": {
+              "type": "number"
+            },
+            "sustain": {
+              "type": "number"
+            },
+            "warmup": {
+              "type": "number"
+            },
+            "span": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "k",
+            "sustain",
+            "warmup",
+            "span"
+          ],
+          "additionalProperties": false
+        },
+        "admin": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "current",
+        "recent",
+        "machines",
+        "settings",
+        "admin"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/anomalies/{company} — members and above; MCP list_anomalies"
+    },
+    "AnomalyReset": {
+      "type": "object",
+      "properties": {
+        "machines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "machines"
+      ],
+      "additionalProperties": false
+    },
+    "AnomalyResetResult": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "machine",
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "description": "POST /api/admin/anomalies/{company}/reset — administrators; each machine answered on its own"
     },
     "Source": {
       "type": "object",

@@ -48,6 +48,8 @@ type Runner struct {
 	KB *knowledge.Base
 	// Orders are the production orders the companies' ERPs sent.
 	Orders *erp.Store
+	// Hints are the measured machines' readings unusual for them.
+	Hints Hints
 
 	dir string
 	llm domain.Generator
@@ -154,6 +156,10 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 	}
 	if r.Orders != nil {
 		t := ordersTool(r.Orders, a.Company)
+		all[t.name] = t
+	}
+	if r.Hints != nil {
+		t := anomalyTool(r.Hints, a.Company)
 		all[t.name] = t
 	}
 	writes := map[string]bool{}

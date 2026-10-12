@@ -28,8 +28,9 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
 - 仿真校准：calibration（每台设备的模型参数：模板值、按实测拟合的值、在用的值，拟合回放的误差，最近一天模型和实测差多少）。拟合要管理员在后台点；你可以 propose_apply_calibration 提出应用拟合好的参数，说清楚哪些参数会变、误差能降多少。
 - 指令把关：guard_status（AI 能对真实设备做到哪一步、规则、哪些设备接了真实设备、等待批准的指令）。
+- 读数异常：anomalies（接了真实设备的机器，哪些读数和它自己平常不一样：现在的、最近的，每台设备各字段在各状态下的平常值 均值±标准差）。这是提示不是报警，设备照常运行。设备检修后读数本来就会变，可以 propose_reset_baseline 让它重新学习。
 - 写配置：check_company 检查一份公司配置（不创建）；check_industry 检查一个行业包（不保存）。
-- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order、propose_apply_calibration、propose_approve_command、propose_deny_command。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
+- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order、propose_apply_calibration、propose_approve_command、propose_deny_command、propose_reset_baseline。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
 规则：
 - 用中文，简洁。数字、编号、名称以工具返回为准，不要编。
@@ -191,6 +192,27 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				}
 				waiting, err := o.CommandRequests(who, s(m, "company"), "waiting")
 				return map[string]any{"guard": ov, "waiting": waiting}, err
+			}},
+		{"anomalies", "一家公司接了真实设备的机器读数异常：现在的提示（哪台设备、哪个字段、偏离平常几个标准差、平常值、从什么时候起）、最近 30 天的提示，和每台设备各字段在各状态下学到的平常值（还在学习的标明进度）。", obj(map[string]any{"company": str("公司 id")}, "company"),
+			func(m map[string]any) (any, error) {
+				r, err := o.Anomalies(who, s(m, "company"))
+				if err != nil {
+					return nil, err
+				}
+				recent := r.Recent[:min(len(r.Recent), 30)]
+				return map[string]any{"current": r.Current, "recent": recent, "machines": r.Machines, "settings": r.Settings,
+					"note": "z 是偏离平常多少个标准差；level 是读数持续偏离，drift 是近期平均慢慢偏离。只是提示，设备照常运行"}, nil
+			}},
+		{"propose_reset_baseline", "提出让设备重新学习平常读数（检修、换件之后读数本来就会变），交管理员确认。忘掉学过的平常值，结束它的提示，学满预热时间前不判断。", obj(map[string]any{
+			"company":  str("公司 id"),
+			"machines": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "设备编号，如 HP-101，或 plant/asset"},
+		}, "company", "machines"),
+			func(m map[string]any) (any, error) {
+				ms, _ := m["machines"].([]any)
+				if len(ms) == 0 {
+					return nil, errors.New("machines 至少一台")
+				}
+				return propose(Action{Kind: "reset_baseline", Args: map[string]any{"company": s(m, "company"), "machines": ms}, Detail: "忘掉学过的平常值，从现在起重新学习，学满之前不提示"})
 			}},
 		{"propose_approve_command", "提出批准一条等待中的指令（会按批准时设备的状态再过一遍规则，然后下到设备），交管理员确认。", obj(map[string]any{"company": str("公司 id"), "id": str("指令编号 CQ-…")}, "company", "id"),
 			func(m map[string]any) (any, error) {
