@@ -154,11 +154,11 @@ function Plant({ p }: { p: api.ValueReport['plant'] }) {
           <h3 className="flex items-center gap-2 text-[13px] font-extrabold">每周（周一起）<SourceTag source={p.source} /></h3>
           <div className="grid gap-4 sm:grid-cols-3">
             <WeekBars weeks={shown} pick={(w) => w.oee} unit="%" label="OEE" tone="var(--chart-1)" />
-            <WeekBars weeks={shown} pick={(w) => w.outputPerDay} label="日均产量（件）" tone="var(--chart-2)" />
-            <WeekBars weeks={shown} pick={(w) => w.downtimePerDay} label="日均设备停机（h）" tone="var(--chart-3)" />
+            <WeekBars weeks={shown} pick={(w) => w.outputPerDay} label="每条线日均产量（件）" tone="var(--chart-2)" />
+            <WeekBars weeks={shown} pick={(w) => w.downtimePerDay} label="每台设备日均停机（h）" tone="var(--chart-3)" />
           </div>
           <p className="text-[11.5px] text-muted-foreground">
-            产量和停机按有数据的天平均，第一周和最后一周只算落在这段时间里的天（{shown.map((w) => `${day(w.start)} 起 ${w.days} 天`).join('，')}）。虚线是这周没有{p.source === 'measured' ? '实测' : ''}数据。
+            产量按每条线每天、停机按每台设备每天算（只算有记录的小时），这样没过完的一天、接了实测的线多少不同的周也能比；第一周和最后一周只算落在这段时间里的天（{shown.map((w) => `${day(w.start)} 起 ${w.days} 天`).join('，')}）。虚线是这周没有{p.source === 'measured' ? '实测' : ''}数据。
           </p>
         </div>
       )}
@@ -171,8 +171,8 @@ function Plant({ p }: { p: api.ValueReport['plant'] }) {
               <table className="w-full min-w-[420px] text-[13px] tabular-nums">
                 <thead>
                   <tr className="text-[12px] text-muted-foreground">
-                    <th className="py-1 text-left font-semibold" /><th className="text-right font-semibold">OEE</th><th className="text-right font-semibold">日均产量</th>
-                    <th className="text-right font-semibold">日均停机 h</th><th className="text-right font-semibold">有数据的天</th>
+                    <th className="py-1 text-left font-semibold" /><th className="text-right font-semibold">OEE</th><th className="text-right font-semibold">每条线日均产量</th>
+                    <th className="text-right font-semibold">每台设备日均停机 h</th><th className="text-right font-semibold">有数据的天</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -919,7 +919,7 @@ export const ValueWeek = z.object({
   /** Monday */
   start: time, days: num,
   oee: num.nullable(), output: num.nullable(), downtime: num.nullable(),
-  /** per day with data, so a week the period cuts short compares with a whole one */
+  /** output per line per day, downtime hours per machine per day, over the hours with records */
   outputPerDay: num.nullable(), downtimePerDay: num.nullable(),
   lineHours: num,
   /** share of the week's line-hours measured from equipment */

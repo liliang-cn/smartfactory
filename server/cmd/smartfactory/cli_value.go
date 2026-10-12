@@ -110,13 +110,17 @@ func cliValue(ctx context.Context, args []string) error {
 		for _, w := range v.Plant.Weeks {
 			rows = append(rows, []string{w.Start.Format("01-02"), strconv.Itoa(w.Days), valueText(w.OEE, "%"), valueText(w.OutputPerDay, ""), valueText(w.DowntimePerDay, ""), valueText(w.Measured, "%")})
 		}
-		fmt.Println(dim("  每周（" + sourceText[v.Plant.Source] + "，产量和停机按有数据的天平均）"))
-		table([]string{"周一", "天数", "OEE", "日均产量", "日均停机 h", "实测占比"}, rows)
+		fmt.Println(dim("  每周（" + sourceText[v.Plant.Source] + "，产量按每条线每天、停机按每台设备每天）"))
+		table([]string{"周一", "天数", "OEE", "每线日均产量", "每台日均停机 h", "实测占比"}, rows)
 	}
 	if cp := v.Plant.Compare; cp != nil {
-		fmt.Printf("\n%s %s %s，各 %d 天%s\n", bold("第一条采纳的计划前后"), cp.Plan, cp.Does, cp.Days, dim("（"+sourceText[cp.Source]+"）"))
+		src := ""
+		if cp.Source != "" {
+			src = dim("（" + sourceText[cp.Source] + "）")
+		}
+		fmt.Printf("\n%s %s %s，各 %d 天%s\n", bold("第一条采纳的计划前后"), cp.Plan, cp.Does, cp.Days, src)
 		if cp.Days > 0 && cp.Source != "" {
-			table([]string{"", "OEE", "日均产量", "日均停机 h", "有数据的天数"}, [][]string{
+			table([]string{"", "OEE", "每线日均产量", "每台日均停机 h", "有数据的天数"}, [][]string{
 				{"采纳前", valueText(cp.Before.OEE, "%"), valueText(cp.Before.OutputPerDay, ""), valueText(cp.Before.DowntimePerDay, ""), strconv.Itoa(cp.Before.Days)},
 				{"采纳后", valueText(cp.After.OEE, "%"), valueText(cp.After.OutputPerDay, ""), valueText(cp.After.DowntimePerDay, ""), strconv.Itoa(cp.After.Days)},
 			})

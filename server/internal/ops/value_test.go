@@ -357,7 +357,7 @@ func TestPlant(t *testing.T) {
 	if v.Weeks[0].Days != 2 || v.Weeks[2].OEE != nil || v.Weeks[2].Measured == nil || *v.Weeks[2].Measured != 0 {
 		t.Errorf("early weeks: %+v %+v", v.Weeks[0], v.Weeks[2])
 	}
-	if w := v.Weeks[3]; w.OEE == nil || *w.OEE != 0.629 || w.LineHours != 7*24 || *w.Measured != 0.5 || *w.OutputPerDay != 800 || *w.DowntimePerDay != 1 {
+	if w := v.Weeks[3]; w.OEE == nil || *w.OEE != 0.629 || w.LineHours != 7*24 || *w.Measured != 0.5 || *w.OutputPerDay != 800 || *w.DowntimePerDay != 0.5 {
 		t.Errorf("week of Sep 28: %+v", w)
 	}
 	// the period's last week is one day, without data yet; per day a week compares with another
@@ -373,7 +373,7 @@ func TestPlant(t *testing.T) {
 	}
 	// 10 days since the adoption: Sep 22–Oct 1 against Oct 3–12, measured from Sep 28 on
 	if c.Days != 10 || c.Source != "measured" || c.Before.Days != 4 || c.After.Days != 9 || *c.Before.OEE != 0.6 || *c.After.OEE != 0.7 ||
-		*c.Before.OutputPerDay != 800 || *c.After.DowntimePerDay != 1 || !strings.Contains(c.Note, "不证明") {
+		*c.Before.OutputPerDay != 800 || *c.After.DowntimePerDay != 0.5 || !strings.Contains(c.Note, "不证明") {
 		t.Errorf("compare: %+v", c)
 	}
 	if c.Before.From.Format("2006-01-02") != "2026-09-22" || c.After.To.Format("2006-01-02") != "2026-10-13" {

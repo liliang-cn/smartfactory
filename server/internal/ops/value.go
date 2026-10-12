@@ -252,8 +252,9 @@ type Week struct {
 	OEE      *float64  `json:"oee"`
 	Output   *float64  `json:"output"`
 	Downtime *float64  `json:"downtime"`
-	// OutputPerDay and DowntimePerDay are per day with data, so a week the period cuts short
-	// compares with a whole one.
+	// OutputPerDay is output per line per day of records, DowntimePerDay machine downtime hours
+	// per machine per day of records: a week the period cuts short, or one in which equipment
+	// reported from fewer lines, compares with the others.
 	OutputPerDay   *float64 `json:"outputPerDay"`
 	DowntimePerDay *float64 `json:"downtimePerDay"`
 	LineHours      int      `json:"lineHours"`
@@ -274,7 +275,8 @@ type Compare struct {
 	Note    string    `json:"note"`
 }
 
-// Side is one side of a comparison: OEE, output and machine downtime per day of data.
+// Side is one side of a comparison: OEE, output per line per day and downtime per machine per
+// day, over the days that have records.
 type Side struct {
 	From           time.Time `json:"from"`
 	To             time.Time `json:"to"`
@@ -949,11 +951,22 @@ func (t *tally) downtime() *float64 {
 	return &v
 }
 
-func perDay(v *float64, days int) *float64 {
-	if v == nil || days == 0 {
+// lineDay is output per line per day of its records: a day still running, or a week in which
+// equipment reported from fewer lines, compares with a whole one.
+func (t *tally) lineDay() *float64 {
+	if t.lineHours == 0 {
 		return nil
 	}
-	x := math.Round(*v/float64(days)*10) / 10
+	x := math.Round(float64(t.produced)*24/float64(t.lineHours)*10) / 10
+	return &x
+}
+
+// machineDay is downtime hours per machine per day of its records.
+func (t *tally) machineDay() *float64 {
+	if t.machineHours == 0 {
+		return nil
+	}
+	x := math.Round(t.down/3600*24/float64(t.machineHours)*100) / 100
 	return &x
 }
 
@@ -1032,7 +1045,7 @@ func plantOf(days []history.Day, p Period, first *adoption, now time.Time, missi
 			}
 		}
 		wk := Week{Start: w, Days: int(math.Ceil(hi.Sub(lo).Hours() / 24)), OEE: wt.oee(), Output: wt.output(), Downtime: wt.downtime(),
-			OutputPerDay: perDay(wt.output(), len(wt.days)), DowntimePerDay: perDay(wt.downtime(), len(wt.days)), LineHours: wt.lineHours}
+			OutputPerDay: wt.lineDay(), DowntimePerDay: wt.machineDay(), LineHours: wt.lineHours}
 		if all.lineHours > 0 {
 			x := round3(float64(all.measuredHours) / float64(all.lineHours))
 			wk.Measured = &x
@@ -1089,7 +1102,7 @@ func compareAround(days []history.Day, p Period, first *adoption, now time.Time)
 	}
 	side := func(t tally, from, to time.Time) Side {
 		nd := len(t.days)
-		return Side{From: from, To: to, OEE: t.oee(), OutputPerDay: perDay(t.output(), nd), DowntimePerDay: perDay(t.downtime(), nd), Days: nd, LineHours: t.lineHours}
+		return Side{From: from, To: to, OEE: t.oee(), OutputPerDay: t.lineDay(), DowntimePerDay: t.machineDay(), Days: nd, LineHours: t.lineHours}
 	}
 	c.Before, c.After = side(before, bFrom, d), side(after, aFrom, aTo)
 	return c
@@ -1133,7 +1146,7 @@ func (v *Value) CSV() []byte {
 	}
 	if len(v.Plant.Weeks) > 0 {
 		w.Write(nil)
-		w.Write([]string{"周（周一起）", "天数", "OEE", "产量（件）", "日均产量（件）", "设备停机（h）", "日均设备停机（h）", "产线小时", "实测占比", "数据来源"})
+		w.Write([]string{"周（周一起）", "天数", "OEE", "产量（件）", "每条线日均产量（件）", "设备停机（h）", "每台设备日均停机（h）", "产线小时", "实测占比", "数据来源"})
 		for _, wk := range v.Plant.Weeks {
 			w.Write([]string{wk.Start.Format("2006-01-02"), strconv.Itoa(wk.Days), share(wk.OEE, "%"), share(wk.Output, ""), share(wk.OutputPerDay, ""), share(wk.Downtime, ""), share(wk.DowntimePerDay, ""), strconv.Itoa(wk.LineHours), share(wk.Measured, "%"), sourceLabel(v.Plant.Source)})
 		}
@@ -1141,7 +1154,7 @@ func (v *Value) CSV() []byte {
 	if c := v.Plant.Compare; c != nil {
 		w.Write(nil)
 		w.Write([]string{"第一条采纳的计划前后", c.Plan + " " + c.Does, "采纳于 " + c.Adopted.In(shanghai).Format("2006-01-02"), fmt.Sprintf("各 %d 天", c.Days), sourceLabel(c.Source)})
-		w.Write([]string{"", "OEE", "日均产量（件）", "日均设备停机（h）", "有数据的天数", "产线小时"})
+		w.Write([]string{"", "OEE", "每条线日均产量（件）", "每台设备日均停机（h）", "有数据的天数", "产线小时"})
 		for _, s := range []struct {
 			name string
 			x    Side
