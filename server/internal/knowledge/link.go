@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -186,4 +187,46 @@ func wholeIn(s, word string) bool {
 		}
 		i = j + 1
 	}
+}
+
+// Resolve is what name stands for in the company's graph when it is not a name there as
+// written: the things it names the way people write them ("rf101" is station RF-101, "mo-7"
+// order MO-7), or, for a station or line that recurs in several plants, each plant's ("SAW-101"
+// is 一厂 SAW-101 and 二厂 SAW-101). None when it names nothing.
+func (b *Base) Resolve(company, name string) []Link {
+	q := norm(name)
+	if len([]rune(q)) < 2 {
+		return nil
+	}
+	m, err := b.model(company)
+	if err != nil {
+		return nil
+	}
+	vocab := terms(m)
+	for _, v := range b.orderVocabulary(company) {
+		vocab = append(vocab, term{key: norm(v[0]), name: v[0], typ: v[1]})
+	}
+	var plants []string
+	for _, p := range m.Plants {
+		plants = append(plants, norm(p.Name))
+	}
+	var exact, inPlant []Link
+	add := func(list *[]Link, t term) {
+		if !slices.ContainsFunc(*list, func(l Link) bool { return l.Name == t.name && l.Kind == t.typ }) {
+			*list = append(*list, Link{Name: t.name, Kind: t.typ})
+		}
+	}
+	for _, t := range vocab {
+		switch {
+		case t.code != nil:
+		case t.key == q:
+			add(&exact, t)
+		case (t.typ == TStation || t.typ == TLine) && strings.HasSuffix(t.key, q) && slices.Contains(plants, strings.TrimSuffix(t.key, q)):
+			add(&inPlant, t)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	return inPlant
 }
