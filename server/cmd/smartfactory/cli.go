@@ -1083,6 +1083,9 @@ func cliAgent(ctx context.Context, args []string) error {
 			}
 			if !confirm("执行？") {
 				fmt.Println(dim("  没执行"))
+				if err := c.Do(ctx, "POST", "/api/admin/actions/dismiss", a, nil); err != nil {
+					fmt.Println(dim("  （没记下：" + err.Error() + "）"))
+				}
 				continue
 			}
 			var res json.RawMessage

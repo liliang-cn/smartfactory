@@ -115,7 +115,7 @@ function ActionCard({ card, onChange }: { card: Card; onChange(c: Card): void })
       {token && <p className="mt-1 text-[11.5px] text-muted-foreground">只显示这一次，复制下来交给持有人</p>}
       {card.state === 'ask' && (
         <div className="mt-2.5 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => onChange({ ...card, state: 'declined' })}>不要</Button>
+          <Button variant="ghost" size="sm" className="rounded-lg" onClick={() => { onChange({ ...card, state: 'declined' }); api.dismissAction(card.action).catch(() => {}); }}>不要</Button>
           <Button size="sm" className="rounded-lg font-bold" onClick={run}>确认执行</Button>
         </div>
       )}

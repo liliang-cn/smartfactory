@@ -1,7 +1,10 @@
 package ops
 
 import (
+	"cmp"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -13,6 +16,9 @@ import (
 // An Action is a change the console agent proposes and a person carries out: the page shows it
 // with a button, the command line asks y/N, and either runs it here as the person who confirmed.
 type Action struct {
+	// ID names a proposal of the console agent (AP-…), so what became of it can be counted;
+	// an action that was never proposed has none.
+	ID string `json:"id,omitempty"`
 	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order | apply_calibration | approve_command | deny_command
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
@@ -21,8 +27,56 @@ type Action struct {
 	Args   map[string]any `json:"args"`
 }
 
-// Do carries out an action as who.
+// Do carries out an action as who. A proposal's outcome goes into the activity log as
+// agent.confirm, beside the change's own entry.
 func (o *Ops) Do(ctx context.Context, who auth.Who, via string, a Action) (any, error) {
+	v, err := o.do(ctx, who, via, a)
+	if a.ID != "" && who.Key != "" {
+		o.Audit.Record(who, via, actionCompany(a), "agent.confirm", a.ID, a.Kind, err)
+	}
+	return v, err
+}
+
+// Dismiss records that who turned a proposal down.
+func (o *Ops) Dismiss(who auth.Who, via string, a Action) error {
+	if err := Admin(who); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(a.ID, "AP-") {
+		return fail(400, "没有这条提议的编号")
+	}
+	o.Audit.Record(who, via, actionCompany(a), "agent.dismiss", a.ID, a.Kind, nil)
+	return nil
+}
+
+// propose names an action the console agent proposes and records it, so the value report can
+// say how many were confirmed and how many turned down.
+func (o *Ops) propose(who auth.Who, a *Action) {
+	b := make([]byte, 4)
+	rand.Read(b)
+	a.ID = "AP-" + strings.ToUpper(hex.EncodeToString(b))
+	o.Audit.Record(who, "assistant", actionCompany(*a), "agent.propose", a.ID, a.Kind+" "+a.Title, nil)
+}
+
+// actionCompany is the company an action is about, as its activity entries file it: "*" when
+// it is about none or several.
+func actionCompany(a Action) string {
+	str := func(k string) string { s, _ := a.Args[k].(string); return s }
+	switch a.Kind {
+	case "create_company":
+		cfg, _ := a.Args["config"].(map[string]any)
+		return cmp.Or(configID(cfg), "*")
+	case "delete_company":
+		return cmp.Or(str("id"), "*")
+	case "issue_token":
+		return scopeOf(strs(a.Args["companies"]))
+	case "create_industry", "revoke_token":
+		return "*"
+	}
+	return cmp.Or(str("company"), "*")
+}
+
+func (o *Ops) do(ctx context.Context, who auth.Who, via string, a Action) (any, error) {
 	str := func(k string) string { s, _ := a.Args[k].(string); return s }
 	switch a.Kind {
 	case "create_company":

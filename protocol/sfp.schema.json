@@ -4131,6 +4131,9 @@
     "ConsoleAction": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string"
+        },
         "kind": {
           "type": "string",
           "enum": [
@@ -4141,7 +4144,9 @@
             "revoke_token",
             "rebuild_knowledge",
             "cancel_order",
-            "apply_calibration"
+            "apply_calibration",
+            "approve_command",
+            "deny_command"
           ]
         },
         "title": {

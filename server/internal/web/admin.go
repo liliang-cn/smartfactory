@@ -178,6 +178,14 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 		v, err := o.Do(r.Context(), s.caller(r), via(r), a)
 		answer(w, v, err)
 	})
+	// a proposal the person turned down: nothing runs, the value report counts it
+	mux.HandleFunc("POST /api/admin/actions/dismiss", func(w http.ResponseWriter, r *http.Request) {
+		var a ops.Action
+		if !read(w, r, &a) {
+			return
+		}
+		answer(w, done, o.Dismiss(s.caller(r), via(r), a))
+	})
 
 	// templates: built in, and saved or imported here
 	mux.HandleFunc("GET /api/admin/templates", func(w http.ResponseWriter, r *http.Request) {

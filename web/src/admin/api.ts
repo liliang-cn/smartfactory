@@ -107,6 +107,8 @@ export const agent = (conversation: string | null, text: string, signal: AbortSi
 
 /** Carry out an action (one the console agent proposed), as the signed-in person. */
 export const doAction = (a: ConsoleAction) => call<unknown>('POST', '/api/admin/actions', a);
+/** Turn a proposal down: nothing runs; the value report counts it. */
+export const dismissAction = (a: ConsoleAction) => call<{ ok: true }>('POST', '/api/admin/actions/dismiss', a);
 
 export const templates = () => call<TemplateSummary[]>('GET', '/api/admin/templates');
 export const template = (source: TemplateSummary['source'], id: string) => call<Template>('GET', `/api/admin/templates/${source}/${encodeURIComponent(id)}`);

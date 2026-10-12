@@ -79,6 +79,7 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 		if err := o.describe(&a); err != nil {
 			return nil, err
 		}
+		o.propose(who, &a)
 		emit(agents.Event{Kind: "action", Result: a})
 		return map[string]any{"proposed": a.Title, "note": "已交给管理员确认，确认后才会执行"}, nil
 	}

@@ -288,9 +288,10 @@
 | `GET /api/admin/companies/{id}` | — | 公司配置 | 内置的和运行时建的都有 |
 | `POST /api/admin/companies?check=1` | 公司配置 | `CompanyCreated` | 只检查（校验、排布），不创建 |
 | `POST /api/admin/agent` | `{conversation?, text}` | SSE，`ConsoleEvent` 流 | 工作台助手：用后台自己的操作回答；它提出的改动作为 `action` 事件发出，**不会自己执行**。第一个事件 `conversation` 给出对话 id，带上它继续说。同一个令牌同一时间只能跑一个 |
-| `POST /api/admin/actions` | `ConsoleAction {kind, args}` | 视 `kind` 而定 | 执行一个改动（通常是助手提出、人确认的那个），以确认的人的身份，检查和审计与对应的接口相同。`kind`：`create_company {config}`、`delete_company {id}`、`create_industry {config}`、`issue_token {name, role, companies, expires?}`、`revoke_token {key}`、`rebuild_knowledge {company}`、`cancel_order {company, no}` |
+| `POST /api/admin/actions` | `ConsoleAction {id?, kind, args}` | 视 `kind` 而定 | 执行一个改动（通常是助手提出、人确认的那个），以确认的人的身份，检查和审计与对应的接口相同。`kind`：`create_company {config}`、`delete_company {id}`、`create_industry {config}`、`issue_token {name, role, companies, expires?}`、`revoke_token {key}`、`rebuild_knowledge {company}`、`cancel_order {company, no}`、`apply_calibration {company, machines?}`、`approve_command {company, id}`、`deny_command {company, id, reason?}`。带助手给的 `id` 的另记一条 `agent.confirm` |
+| `POST /api/admin/actions/dismiss` | `ConsoleAction {id, kind, args}` | `Done` | 不执行助手提出的改动，记一条 `agent.dismiss`；管理员 |
 
-`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`（一份通过检查的公司配置）和 `industry`（一个通过检查的行业包），都在 `result` 里。`ConsoleEvent` 另加 `action`：一个待确认的改动，在 `result` 里，带 `title`、`detail`。审计日志新增 `token.issue`、`token.revoke`、`knowledge.rebuild`；请求头带 `X-SF-Via: cli` 的（命令行）记为 `via: cli`，其余后台请求记为 `page`。
+`ComposeEvent` 的 `kind` 与 `AssistantEvent` 相同（没有 `conversation`），另加 `draft`（一份通过检查的公司配置）和 `industry`（一个通过检查的行业包），都在 `result` 里。`ConsoleEvent` 另加 `action`：一个待确认的改动，在 `result` 里，带 `id`（`AP-…`）、`title`、`detail`；提出时记一条 `agent.propose`。审计日志新增 `token.issue`、`token.revoke`、`knowledge.rebuild`；请求头带 `X-SF-Via: cli` 的（命令行）记为 `via: cli`，其余后台请求记为 `page`。
 
 **操作只有一份**：后台页面、命令行（`smartfactory company|industries|tokens|kb|orders|activity|agent`）和工作台助手调用的是服务器上同一组操作（`server/internal/ops`），权限检查和审计记录完全相同。
 

@@ -881,9 +881,11 @@ export const CommandRequests = z.array(CommandRequest).meta({ description: 'GET 
 
 // ---------- the console agent (/api/admin/agent) ----------
 
-/** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them. */
+/** A change the console agent proposes; a person confirms it (POST /api/admin/actions) and it runs as them, or turns it down (POST /api/admin/actions/dismiss). */
 export const ConsoleAction = z.object({
-  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration']),
+  /** the proposal (AP-…); the activity log keeps what became of it */
+  id: str.optional(),
+  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration', 'approve_command', 'deny_command']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [
