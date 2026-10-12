@@ -65,7 +65,7 @@ func TestEdgeStoreAndForward(t *testing.T) {
 		got = append(got, tg)
 		mu.Unlock()
 	}
-	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", port), Prefix: "sf"}, hub, log)
+	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", port), Prefix: "sf"}, hub, nil, log)
 	if err != nil {
 		t.Fatal(err)
 	}

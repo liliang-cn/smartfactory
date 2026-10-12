@@ -57,7 +57,7 @@ func TestSeriesEndToEnd(t *testing.T) {
 	l, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := l.Addr().(*net.TCPAddr).Port
 	l.Close()
-	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", port), Prefix: "sf"}, hub, log)
+	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", port), Prefix: "sf"}, hub, nil, log)
 	if err != nil {
 		t.Fatal(err)
 	}

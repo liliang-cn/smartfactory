@@ -39,7 +39,7 @@ func TestDeviceConformance(t *testing.T) {
 	port := freePort(t)
 	url := fmt.Sprintf("tcp://127.0.0.1:%d", port)
 	hub := tags.NewHub()
-	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", port), Prefix: "sf", Public: true}, hub, log)
+	broker, err := adapters.StartBroker(config.Broker{Listen: fmt.Sprintf("127.0.0.1:%d", port), Prefix: "sf", Public: true}, hub, nil, log)
 	if err != nil {
 		t.Fatal(err)
 	}

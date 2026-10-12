@@ -47,6 +47,8 @@ import (
 	"smartfactory/internal/history"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
+	"smartfactory/internal/mqttauth"
+	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/tags"
@@ -149,13 +151,6 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if *demo {
 		cfg.Demo, cfg.Companies = true, nil
 	}
-	// a broker anyone on the network could publish to: only this machine, until devices have passwords
-	if l := cfg.MQTT.Listen; l != "" && len(cfg.MQTT.Users) == 0 {
-		if host, port, err := net.SplitHostPort(l); err == nil && !loopback(host) {
-			cfg.MQTT.Listen = net.JoinHostPort("127.0.0.1", port)
-			log.Warn("the MQTT broker takes connections from this machine only: give devices passwords (mqtt.users) to let them connect over the network", "listen", cfg.MQTT.Listen)
-		}
-	}
 
 	hub := tags.NewHub()
 	eng, err := engine.New(log)
@@ -208,12 +203,21 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			}
 		}
 	}()
+	// devices with credentials of their own, and the CA that signs their certificates
+	var devs *mqttauth.Registry
+	if cfg.Data != "" {
+		if devs, err = mqttauth.Open(cfg.Data); err != nil {
+			return fmt.Errorf("devices: %w", err)
+		}
+		defer devs.Close()
+		go devs.Run(ctx)
+	}
+	var broker *adapters.Broker
 	if cfg.MQTT.Listen != "" {
-		b, err := adapters.StartBroker(cfg.MQTT, hub, log)
-		if err != nil {
+		if broker, err = adapters.StartBroker(cfg.MQTT, hub, devs, log); err != nil {
 			return fmt.Errorf("mqtt broker: %w", err)
 		}
-		defer b.Close()
+		defer broker.Close()
 	}
 	for _, src := range cfg.Sources {
 		if src.Convention == "sf" && (src.Type == "modbus" || src.Type == "opcua") {
@@ -399,8 +403,18 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		go cmds.Run(ctx)
 	}
 	ms := mcptools.New(hub, eng, version, trail, cmds)
+	var mq *ops.MQTT
+	if broker != nil {
+		mq = &ops.MQTT{Prefix: cfg.MQTT.Prefix, Listen: broker.Listening}
+		if cfg.MQTT.TLS != nil {
+			mq.TLS = cfg.MQTT.TLS.Listen
+		}
+		for u := range cfg.MQTT.Users {
+			mq.Shared = append(mq.Shared, u)
+		}
+	}
 	ws := &sfweb.Server{
-		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
+		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Devices: devs, MQTT: mq, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

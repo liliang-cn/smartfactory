@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,7 +106,7 @@ func TestRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cred.Token == "" || cred.Cert != "" {
-		t.Fatalf("token device got %+v", cred.Token != "")
+		t.Fatal("a token device got no token, or a certificate")
 	}
 	if _, _, err := r.Add("厂长", "rf-line1", Token, sc); err == nil {
 		t.Fatal("two devices with one name")
@@ -204,7 +205,7 @@ func TestRegistry(t *testing.T) {
 	}
 	list, _ := r.List("huaduan")
 	if len(list) != 2 || list[1].Name != "rf-line1" || list[1].Refused != 1 || list[1].LastSeen == nil {
-		t.Fatalf("listed %+v", list)
+		t.Fatalf("listed %v", names(list))
 	}
 
 	// revoked: refused at once, and listed as revoked
@@ -217,7 +218,7 @@ func TestRegistry(t *testing.T) {
 	}
 	list, _ = r.List("huaduan")
 	if len(list) != 2 || list[1].Revoked == nil || list[1].Name != "hp-plc" {
-		t.Fatalf("listed %+v", list)
+		t.Fatalf("listed %v", names(list))
 	}
 	// its name can be used again
 	if _, _, err := r.Add("厂长", "hp-plc", Token, sc); err != nil {
@@ -226,4 +227,12 @@ func TestRegistry(t *testing.T) {
 	if len(dropped) != 2 || dropped[0] != "rf-line1" || dropped[1] != "hp-plc" {
 		t.Fatalf("dropped %v", dropped)
 	}
+}
+
+func names(list []Device) []string {
+	var out []string
+	for _, d := range list {
+		out = append(out, fmt.Sprintf("%s refused=%d revoked=%v", d.Name, d.Refused, d.Revoked != nil))
+	}
+	return out
 }

@@ -80,7 +80,7 @@ func TestGuard(t *testing.T) {
 	l, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := l.Addr().String()
 	l.Close()
-	broker, err := adapters.StartBroker(config.Broker{Listen: addr, Prefix: "sf", Users: map[string]string{"press": "pw"}}, hub, log)
+	broker, err := adapters.StartBroker(config.Broker{Listen: addr, Prefix: "sf", Users: map[string]string{"press": "pw"}}, hub, nil, log)
 	if err != nil {
 		t.Fatal(err)
 	}

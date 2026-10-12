@@ -80,7 +80,9 @@ type Registry struct {
 	live     map[string]int
 	dirty    map[string]bool
 	reserved map[string]bool
-	ca       *CA
+	// every name a device was ever registered under
+	names map[string]bool
+	ca    *CA
 	onAdd    func()
 	onDrop   func(name string)
 }
@@ -106,14 +108,18 @@ func Open(dir string) (*Registry, error) {
 	}
 	// hashes of tokens, but still nobody else's business
 	os.Chmod(path, 0o600)
-	r := &Registry{dir: dir, db: db, Now: time.Now, active: map[string]*Device{}, live: map[string]int{}, dirty: map[string]bool{}, reserved: map[string]bool{}}
-	list, err := r.query(`WHERE revoked = 0`)
+	r := &Registry{dir: dir, db: db, Now: time.Now, active: map[string]*Device{}, live: map[string]int{}, dirty: map[string]bool{}, reserved: map[string]bool{},
+		names: map[string]bool{}}
+	list, err := r.query(``)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
 	for i := range list {
-		r.active[list[i].Name] = &list[i]
+		r.names[list[i].Name] = true
+		if list[i].Revoked == nil {
+			r.active[list[i].Name] = &list[i]
+		}
 	}
 	return r, nil
 }
@@ -210,6 +216,7 @@ func (r *Registry) Add(by, name, kind string, sc Scope) (Device, *Credential, er
 		return Device{}, nil, err
 	}
 	r.active[name] = &d
+	r.names[name] = true
 	if r.onAdd != nil {
 		go r.onAdd()
 	}
@@ -333,12 +340,12 @@ func (r *Registry) Login(name, token string) (d Device, cred string, ok bool) {
 	return r.view(a), a.sum, true
 }
 
-// Known: a registered device has this name.
+// Known: a device is or was registered under this name, so a client giving it must prove it is
+// that device (a revoked one cannot).
 func (r *Registry) Known(name string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, ok := r.active[name]
-	return ok
+	return r.names[name]
 }
 
 // LoginCert is the device a client certificate (already verified against the CA) names, if
