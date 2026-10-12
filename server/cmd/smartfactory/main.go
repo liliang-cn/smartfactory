@@ -470,6 +470,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		}),
 	}
 	mcptools.AddValueTool(ms, ws.Operations().ValueTool)
+	if kb != nil {
+		mcptools.AddKnowledge(ms, ws.Operations().KnowledgeTools())
+	}
 	if hints != nil {
 		// MCP's tool and the assistants' ask the console's operation, with its checks
 		o := ws.Operations()

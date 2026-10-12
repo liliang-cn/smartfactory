@@ -9,6 +9,7 @@ import (
 	"smartfactory/internal/agents"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/mcptools"
 )
 
 // A company's knowledge base: members of the company read it, its administrators rebuild it.
@@ -199,4 +200,37 @@ func (o *Ops) KnowledgeRebuild(ctx context.Context, who auth.Who, via, company s
 		return nil, err
 	}
 	return &Rebuilt{Docs: n}, nil
+}
+
+// KnowledgeTools are these operations as MCP's knowledge tools ask them.
+func (o *Ops) KnowledgeTools() mcptools.Knowledge {
+	k := mcptools.Knowledge{
+		Stats: func(ctx context.Context, who auth.Who, company string) (any, error) {
+			return o.KnowledgeStats(ctx, who, company)
+		},
+		Search: o.KnowledgeSearch,
+		Entity: func(ctx context.Context, who auth.Who, company, name string) (*knowledge.Entity, []knowledge.Link, error) {
+			a, err := o.KnowledgeEntity(ctx, who, company, name)
+			if err != nil {
+				return nil, nil, err
+			}
+			return a.Entity, a.Candidates, nil
+		},
+		Mentions: o.KnowledgeMentions,
+		Graph:    o.KnowledgeGraph,
+	}
+	if o.Agents != nil {
+		k.ReadDoc = func(ctx context.Context, who auth.Who, company, doc string, from, n int) (string, int, []mcptools.DocPart, error) {
+			d, err := o.KnowledgeDoc(ctx, who, company, doc, from, n)
+			if err != nil {
+				return "", 0, nil, err
+			}
+			parts := make([]mcptools.DocPart, len(d.Parts))
+			for i, p := range d.Parts {
+				parts[i] = mcptools.DocPart{Part: p.Seq, Heading: p.Heading, Text: p.Text}
+			}
+			return d.Title, d.Total, parts, nil
+		}
+	}
+	return k
 }
