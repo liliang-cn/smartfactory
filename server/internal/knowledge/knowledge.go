@@ -741,6 +741,9 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 	pool := max(k*3, 12)
 	req := cortexdb.KnowledgeSearchRequest{
 		Query: query, EntityNames: names, Keywords: uniq(append(slices.Clone(keywords), found...)), TopK: pool, MaxContextChunks: pool, RetrievalMode: "auto",
+		// the whole pool, not as much as fits CortexDB's context budget: a long line or document
+		// passage would leave out the short ones about what happened that go first here
+		MaxContextChars: 1 << 20,
 	}
 	asked := askedKinds(query)
 	if len(found) > 0 {

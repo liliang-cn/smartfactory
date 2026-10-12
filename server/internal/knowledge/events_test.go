@@ -77,7 +77,7 @@ func TestEvents(t *testing.T) {
 			t.Errorf("%s: %d nodes, %d relations, want %d", k, st.Kinds[k], st.Relations[eventRelation[k]], n)
 		}
 	}
-	if st.Events != perMachine+6 || st.Docs != 0 {
+	if st.Events != perMachine+6 || st.Docs != 0 || st.Process == 0 {
 		t.Errorf("passages: %+v", st)
 	}
 
@@ -128,7 +128,14 @@ func TestEvents(t *testing.T) {
 		t.Error("a check 40 days old is kept")
 	}
 
-	// asked about
+	// asked about, with long passages about the station in the base too
+	var doc []Part
+	for i := range 4 {
+		doc = append(doc, Part{Seq: i, Heading: fmt.Sprint("第 ", i+1, " 节"), Text: strings.Repeat("RF-101 辊锻机的坯料要对中，辊锻前检查模具和导板。", 40)})
+	}
+	if err := kb.AddDoc(ctx, "huaduan", "d1", "辊锻作业指导书", doc); err != nil {
+		t.Fatal(err)
+	}
 	first := func(q string) Passage {
 		t.Helper()
 		a, err := kb.Search(ctx, "huaduan", q, nil, nil, 6)
