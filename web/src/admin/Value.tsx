@@ -33,8 +33,8 @@ const NoData = () => <span className="text-muted-foreground">没有数据</span>
 function SourceTag({ source }: { source?: string }) {
   if (!source) return null;
   return source === 'measured'
-    ? <span className="rounded-md bg-success-soft px-1.5 py-0.5 text-[11.5px] font-bold text-success">实测</span>
-    : <span className="rounded-md bg-warning-soft px-1.5 py-0.5 text-[11.5px] font-bold text-warning">仿真</span>;
+    ? <span className="shrink-0 rounded-md bg-success-soft px-1.5 py-0.5 text-[11.5px] font-bold whitespace-nowrap text-success">实测</span>
+    : <span className="shrink-0 rounded-md bg-warning-soft px-1.5 py-0.5 text-[11.5px] font-bold whitespace-nowrap text-warning">仿真</span>;
 }
 
 /** One number: what it is, the number (or 没有数据), and n with what it was counted from. */
