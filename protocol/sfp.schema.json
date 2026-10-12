@@ -5493,6 +5493,185 @@
       },
       "description": "GET /api/guard/{company}/requests?status= — waiting first, then the newest"
     },
+    "BrokerDevice": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "token",
+            "cert"
+          ]
+        },
+        "created": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "expires": {
+          "type": "string"
+        },
+        "revoked": {
+          "type": "string"
+        },
+        "revokedBy": {
+          "type": "string"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "lastSeen": {
+          "type": "string"
+        },
+        "refused": {
+          "type": "number"
+        },
+        "lastRefusal": {
+          "type": "string"
+        },
+        "refusedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "company",
+        "plant",
+        "assets",
+        "kind",
+        "created",
+        "createdBy",
+        "connected",
+        "refused"
+      ],
+      "additionalProperties": false
+    },
+    "BrokerDevices": {
+      "type": "object",
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BrokerDevice"
+          }
+        },
+        "shared": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "broker": {
+          "type": "object",
+          "properties": {
+            "listen": {
+              "type": "string"
+            },
+            "tls": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "local": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "listen",
+            "prefix",
+            "local"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "devices",
+        "shared",
+        "broker"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/admin/devices/{company} — administrators"
+    },
+    "RegisterDevice": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "plant": {
+          "type": "string"
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "token",
+            "cert"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "plant",
+        "assets"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/admin/devices/{company} — administrators; answers DeviceCredential"
+    },
+    "DeviceCredential": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "$ref": "#/$defs/BrokerDevice"
+        },
+        "token": {
+          "type": "string"
+        },
+        "cert": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "ca": {
+          "type": "string"
+        },
+        "bundle": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "device"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/admin/devices/{company} and /{id}/renew (a new credential; the old one stops working); DELETE /{id} revokes and answers BrokerDevice"
+    },
     "Source": {
       "type": "object",
       "properties": {
