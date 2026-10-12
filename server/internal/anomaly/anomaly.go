@@ -122,7 +122,10 @@ type mkey struct{ company, plant, asset string }
 
 type machine struct {
 	state, source string
-	fields        map[string]*field
+	// stated: it reports its state (now, or before a restart); until the state comes again its
+	// readings cannot be told apart and are let pass
+	stated bool
+	fields map[string]*field
 }
 
 // field is one field of a machine: its normal in each state and how it is judged now.
@@ -180,7 +183,9 @@ func New(st *Store, set Settings, trail *audit.Log, log *slog.Logger) (*Detector
 		}
 		for _, r := range rows {
 			s := r.stat
-			d.fieldOf(d.machineOf(mkey{r.company, r.plant, r.asset}), r.field).states[r.state] = &s
+			m := d.machineOf(mkey{r.company, r.plant, r.asset})
+			m.stated = m.stated || r.state != ""
+			d.fieldOf(m, r.field).states[r.state] = &s
 		}
 		if d.nextID, err = st.lastID(); err != nil {
 			return nil, err
@@ -238,6 +243,7 @@ func (d *Detector) Add(t tags.Tag) {
 		}
 		d.mu.Lock()
 		m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
+		m.stated = true
 		if s != m.state {
 			d.switchState(t, m, s, at)
 		}
@@ -251,6 +257,9 @@ func (d *Detector) Add(t tags.Tag) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
+	if m.stated && m.state == "" {
+		return
+	}
 	m.source = t.Source
 	f := d.fieldOf(m, t.Field)
 	s := f.states[m.state]

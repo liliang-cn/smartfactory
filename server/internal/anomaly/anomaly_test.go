@@ -266,6 +266,11 @@ func TestRestart(t *testing.T) {
 	if !ok || len(m.Fields) != 1 || len(m.Fields[0].States) != 1 || !m.Fields[0].States[0].Warm || math.Abs(m.Fields[0].States[0].Mean-4) > 0.05 {
 		t.Fatalf("after a restart: %+v", m)
 	}
+	// a reading before the machine says its state again is not taken for a state of its own
+	r2.read("vib", 4)
+	if m, _ := r2.d.Machine("c", "p", "M1"); len(m.Fields[0].States) != 1 {
+		t.Errorf("states after a reading without one: %+v", m.Fields[0].States)
+	}
 	r2.state("running")
 	r2.run("vib", 2*time.Minute, 0.2, flat(5))
 	if len(r2.hints()) != 1 {
