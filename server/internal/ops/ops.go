@@ -44,6 +44,11 @@ type Ops struct {
 	Calib *calib.Service
 	// Commands is the guard in front of the companies' machines.
 	Commands *guard.Guard
+	// Consult reads a company's consulting record from its advisor service (GET /v1/consult);
+	// ErrNoAdvisor for a company without one.
+	Consult func(ctx context.Context, company string) ([]byte, error)
+	// History is each company's history database, for those that keep one.
+	History map[string]PlantHistory
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.
