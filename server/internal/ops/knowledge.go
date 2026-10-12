@@ -2,9 +2,11 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 
+	"smartfactory/internal/agents"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/knowledge"
 )
@@ -57,7 +59,9 @@ func (o *Ops) KnowledgeStats(ctx context.Context, who auth.Who, company string) 
 	return out, nil
 }
 
-func (o *Ops) KnowledgeSearch(ctx context.Context, who auth.Who, company, query string, limit int) (*knowledge.Answer, error) {
+// KnowledgeSearch finds the passages that answer query. names are things the question is about
+// and keywords other words for it, if the caller knows them (both can be nil).
+func (o *Ops) KnowledgeSearch(ctx context.Context, who auth.Who, company, query string, names, keywords []string, limit int) (*knowledge.Answer, error) {
 	if err := o.kb(who, company, auth.Member); err != nil {
 		return nil, err
 	}
@@ -65,7 +69,15 @@ func (o *Ops) KnowledgeSearch(ctx context.Context, who auth.Who, company, query 
 	if query == "" {
 		return nil, fail(400, "问点什么")
 	}
-	a, err := o.KB.Search(ctx, company, query, nil, nil, max(1, min(limit, 20)))
+	var named []string
+	for _, n := range names {
+		// a name as the graph has it, when it means one thing: "rf101" is RF-101
+		if ls := o.KB.Resolve(company, n); len(ls) == 1 {
+			n = ls[0].Name
+		}
+		named = append(named, strings.TrimSpace(n))
+	}
+	a, err := o.KB.Search(ctx, company, query, named, keywords, max(1, min(limit, 20)))
 	if err != nil {
 		return nil, err
 	}
@@ -78,19 +90,78 @@ type EntityAnswer struct {
 	Candidates []knowledge.Link  `json:"candidates"`
 }
 
+// KnowledgeEntity is the thing called name, also as people write it ("rf101" is RF-101); when
+// that is not one thing, the things it may be.
 func (o *Ops) KnowledgeEntity(ctx context.Context, who auth.Who, company, name string) (*EntityAnswer, error) {
 	if err := o.kb(who, company, auth.Member); err != nil {
 		return nil, err
 	}
-	e, err := o.KB.Lookup(ctx, company, strings.TrimSpace(name))
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fail(400, "查什么")
+	}
+	e, err := o.KB.Lookup(ctx, company, name)
 	if err != nil {
 		return nil, err
 	}
 	out := &EntityAnswer{Entity: e, Candidates: []knowledge.Link{}}
-	if e == nil {
-		if out.Candidates, err = o.KB.Find(ctx, company, strings.TrimSpace(name), "", 20); err != nil {
-			return nil, err
+	if e != nil {
+		return out, nil
+	}
+	resolved := o.KB.Resolve(company, name)
+	if len(resolved) == 1 {
+		if out.Entity, err = o.KB.Lookup(ctx, company, resolved[0].Name); err != nil || out.Entity != nil {
+			return out, err
 		}
+	}
+	found, err := o.KB.Find(ctx, company, name, "", 20)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range append(resolved, found...) {
+		if len(out.Candidates) < 20 && !slices.Contains(out.Candidates, l) {
+			out.Candidates = append(out.Candidates, l)
+		}
+	}
+	return out, nil
+}
+
+// KnowledgeMentions is the passages that name the thing called name (as the graph has it), up
+// to limit, and how many there are.
+func (o *Ops) KnowledgeMentions(ctx context.Context, who auth.Who, company, name string, limit int) ([]knowledge.Passage, int, error) {
+	if err := o.kb(who, company, auth.Member); err != nil {
+		return nil, 0, err
+	}
+	return o.KB.Mentioning(ctx, company, name, limit)
+}
+
+// DocParts is a run of a library document's passages.
+type DocParts struct {
+	Doc   string        `json:"doc"`
+	Title string        `json:"title"`
+	Total int           `json:"total"`
+	Parts []agents.Part `json:"parts"`
+}
+
+// KnowledgeDoc reads n passages of a library document from passage from on: around what a
+// search found in it, or all of it.
+func (o *Ops) KnowledgeDoc(ctx context.Context, who auth.Who, company, doc string, from, n int) (*DocParts, error) {
+	if err := o.kb(who, company, auth.Member); err != nil {
+		return nil, err
+	}
+	if o.Agents == nil {
+		return nil, fail(503, "这台服务器没有资料库")
+	}
+	parts, total, err := o.Agents.Store.ReadDoc(company, doc, from, n)
+	if errors.Is(err, agents.ErrNotFound) {
+		return nil, fail(404, "没有文档 %s", doc)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := &DocParts{Doc: doc, Total: total, Parts: parts}
+	if len(parts) > 0 {
+		out.Title = parts[0].Title
 	}
 	return out, nil
 }

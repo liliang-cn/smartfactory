@@ -224,7 +224,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/knowledge/{company}/search", func(w http.ResponseWriter, r *http.Request) {
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		v, err := o.KnowledgeSearch(r.Context(), s.caller(r), r.PathValue("company"), r.URL.Query().Get("q"), max(limit, 6))
+		v, err := o.KnowledgeSearch(r.Context(), s.caller(r), r.PathValue("company"), r.URL.Query().Get("q"), nil, nil, max(limit, 6))
 		answer(w, v, err)
 	})
 	mux.HandleFunc("GET /api/knowledge/{company}/entity", func(w http.ResponseWriter, r *http.Request) {
