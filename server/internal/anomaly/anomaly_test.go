@@ -196,7 +196,8 @@ func TestStateChangeInOneMessage(t *testing.T) {
 			state, power = "idle", 15.0
 		}
 		r.read("power", power+r.rnd.NormFloat64()*0.5)
-		r.state(state)
+		// stamped as the hub publishes it, a moment after the power
+		r.d.Add(tags.Tag{Company: "c", Plant: "p", Asset: "M1", Field: "state", Value: state, At: r.now.Add(40 * time.Microsecond)})
 		r.now = r.now.Add(time.Second)
 	}
 	m, _ := r.d.Machine("c", "p", "M1")

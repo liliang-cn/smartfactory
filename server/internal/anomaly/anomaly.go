@@ -276,14 +276,18 @@ func (d *Detector) Add(t tags.Tag) {
 // heater still drawing, are neither the old state's normal nor the new one's.
 const settle = 5 * time.Second
 
+// sameReport is how close readings are that came in one report: the hub stamps each field of a
+// message as it publishes it, a few microseconds apart.
+const sameReport = 250 * time.Millisecond
+
 // switchState puts the machine in state s. Equipment sends a machine's fields together, in name
 // order: the power read with the new state came just before it, and went into the old state's
-// normal. A field read at the very moment of the change is taken back out of it.
+// normal. A field read in the same report as the change is taken back out of it.
 func (d *Detector) switchState(m *machine, s string, at time.Time) {
 	old := m.state
 	m.state, m.since = s, at
 	for _, f := range m.fields {
-		if f.cur == nil || !f.at.Equal(at) || f.cur.N != f.before.N+1 {
+		if gap := at.Sub(f.at); f.cur == nil || gap < 0 || gap > sameReport || f.cur.N != f.before.N+1 {
 			continue
 		}
 		*f.cur = f.before
