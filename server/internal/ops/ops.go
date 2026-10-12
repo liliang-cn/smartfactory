@@ -17,6 +17,7 @@ import (
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/calib"
+	"smartfactory/internal/checks"
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/guard"
@@ -48,6 +49,8 @@ type Ops struct {
 	// Devices are the devices registered on the embedded broker, MQTT the broker itself.
 	Devices *mqttauth.Registry
 	MQTT    *MQTT
+	// Checks are the forms people fill in by hand at the machines, and what they wrote.
+	Checks *checks.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

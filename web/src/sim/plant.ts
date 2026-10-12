@@ -1408,6 +1408,15 @@ export class PlantSim {
     return this.alarms.filter((x) => x.active || !x.acked);
   }
 
+  /** A quality alarm from what a person wrote down (a value out of spec, an 异常 answer); text "" clears it. */
+  alert(id: string, code: string, text: string): boolean {
+    const a = this.assets.get(id);
+    if (!a) return false;
+    if (text) this.raise(a, code, 3, text);
+    else this.clear(a, code);
+    return true;
+  }
+
   ack(id: number) {
     const al = this.alarms.find((x) => x.id === id);
     if (al && !al.acked) {
@@ -1496,6 +1505,13 @@ export class PlantSim {
   ingest(id: string, field: string, value: number | string | boolean, src: string): boolean {
     const a = this.assets.get(id);
     if (!a) return false;
+    // a person's reading (a form filled in on a phone): a measured unit for the quality chart and
+    // nothing more; the machine is not reporting on its own, so the simulation keeps running it
+    if (src === 'manual') {
+      const v = typeof value === 'number' ? value : Number(value);
+      if (field === 'measure' && a.measure && Number.isFinite(v)) this.record(a, v, false, true);
+      return true;
+    }
     a.live ??= { src, at: 0, f: {} };
     const prev = a.live.f[field];
     a.live.src = src;

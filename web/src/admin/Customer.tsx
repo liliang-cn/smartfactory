@@ -3,7 +3,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  BookOpenTextIcon, BotIcon, BoxIcon, ClipboardListIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, KeyRoundIcon, NotebookPenIcon,
+  BookOpenTextIcon, BotIcon, BoxIcon, ClipboardCheckIcon, ClipboardListIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, KeyRoundIcon, NotebookPenIcon,
   PencilIcon, PlugZapIcon, ScrollTextIcon, ShieldCheckIcon, SlidersHorizontalIcon, Trash2Icon, TrendingUpIcon,
 } from 'lucide-react';
 import {
@@ -21,6 +21,7 @@ import { Blueprint, BlueprintLegend } from './Blueprint';
 import { PageHead, useConsole } from './Console';
 import { Calibration } from './Calib';
 import { DevicePanel } from './Devices';
+import { ChecksPanel } from './Checks';
 import { GuardPanel } from './Guard';
 import { OrderBoard, ERPPanel } from './Orders';
 import { Panel } from './Panel';
@@ -38,6 +39,7 @@ const TABS = [
   { id: 'connect', label: '接入', icon: PlugZapIcon },
   { id: 'calib', label: '校准', icon: SlidersHorizontalIcon },
   { id: 'guard', label: '指令', icon: ShieldCheckIcon },
+  { id: 'checks', label: '点检', icon: ClipboardCheckIcon },
   { id: 'accounts', label: '账号', icon: KeyRoundIcon },
   { id: 'activity', label: '记录', icon: ScrollTextIcon },
 ] as const;
@@ -261,6 +263,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><DevicePanel c={c} /><Connect c={c} /></TabsContent>
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
+        <TabsContent value="checks"><ChecksPanel c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
         <TabsContent value="activity"><ActivityList company={c.id} /></TabsContent>
       </Tabs>

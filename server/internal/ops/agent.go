@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	agentpkg "github.com/liliang-cn/agent-go/v3/pkg/agent"
 
 	"smartfactory/internal/agents"
 	"smartfactory/internal/auth"
+	"smartfactory/internal/checks"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/mcptools"
 )
@@ -28,6 +30,7 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
 - 仿真校准：calibration（每台设备的模型参数：模板值、按实测拟合的值、在用的值，拟合回放的误差，最近一天模型和实测差多少）。拟合要管理员在后台点；你可以 propose_apply_calibration 提出应用拟合好的参数，说清楚哪些参数会变、误差能降多少。
 - 指令把关：guard_status（AI 能对真实设备做到哪一步、规则、哪些设备接了真实设备、等待批准的指令）。
+- 人工记录：check_forms（点检、首件检验、化验这些手填的表：问什么、标准、用于哪些设备、多久一次）、check_rounds（哪些设备的点检逾期了、哪些待做）、check_results（最近填了什么，哪些超差或异常，谁记的）。表单要管理员在后台「点检」页里设。
 - 写配置：check_company 检查一份公司配置（不创建）；check_industry 检查一个行业包（不保存）。
 - 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order、propose_apply_calibration、propose_approve_command、propose_deny_command。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
@@ -191,6 +194,39 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				}
 				waiting, err := o.CommandRequests(who, s(m, "company"), "waiting")
 				return map[string]any{"guard": ov, "waiting": waiting}, err
+			}},
+		{"check_forms", "一家公司手填的表（点检、首件检验、化验）：每项问什么、单位和上下限、对应哪个设备字段，用于哪个厂哪些产线和设备，多久一轮（每班、每天、每几小时）。", obj(map[string]any{"company": str("公司 id")}, "company"),
+			func(m map[string]any) (any, error) {
+				ov, err := o.ChecksOverview(who, s(m, "company"))
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"forms": ov.Forms}, nil
+			}},
+		{"check_rounds", "一家公司各设备的点检轮次：overdue 逾期（附从什么时候起）、due 待做（附截止时间）、done 已做、open 不定期；每轮上次谁什么时候填的。默认只列逾期的。", obj(map[string]any{
+			"company": str("公司 id"), "status": str("overdue、due、done、open，逗号分隔；all 是全部；默认 overdue"),
+		}, "company"),
+			func(m map[string]any) (any, error) {
+				st := []string{"overdue"}
+				if v := s(m, "status"); v == "all" {
+					st = nil
+				} else if v != "" {
+					st = strings.Split(strings.ReplaceAll(v, " ", ""), ",")
+				}
+				return o.CheckRounds(who, s(m, "company"), st)
+			}},
+		{"check_results", "一家公司最近填的人工记录，新的在前：每项的值、单位、标准、是否超差或异常、谁记的、什么时候记的（离线补发的标 late）。", obj(map[string]any{
+			"company": str("公司 id"), "form": str("表单 id（F-…），可省"), "asset": str("设备编号，可省"),
+			"hours": map[string]any{"type": "integer", "description": "看最近几小时，默认 24"}, "bad": map[string]any{"type": "boolean", "description": "只看有超差或异常的"},
+		}, "company"),
+			func(m map[string]any) (any, error) {
+				h, _ := m["hours"].(float64)
+				if h <= 0 {
+					h = 24
+				}
+				bad, _ := m["bad"].(bool)
+				return o.CheckSubmissions(who, s(m, "company"), checks.Filter{Form: s(m, "form"), Asset: s(m, "asset"), Bad: bad, Limit: 50,
+					From: time.Now().Add(-time.Duration(min(h, 720)) * time.Hour)})
 			}},
 		{"propose_approve_command", "提出批准一条等待中的指令（会按批准时设备的状态再过一遍规则，然后下到设备），交管理员确认。", obj(map[string]any{"company": str("公司 id"), "id": str("指令编号 CQ-…")}, "company", "id"),
 			func(m map[string]any) (any, error) {

@@ -60,6 +60,15 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
       }[e.action]!;
       return { text, plant, asset };
     }
+    case 'check.submit': {
+      const [where] = e.target.split(' ');
+      const [plant, asset] = where.split('/');
+      // detail: 首件检验：3 项，1 项异常
+      const [form, rest] = (e.detail ?? '').split('：');
+      return { text: `填写「${form}」${rest ? `，${rest}` : ''}`, plant, asset };
+    }
+    case 'check.form': return { text: `设置表单「${e.detail || e.target}」` };
+    case 'check.form.delete': return { text: `停用表单「${e.detail || e.target}」` };
     case 'guard.config': return { text: `把指令把关设为「${GUARD_LEVEL[e.detail ?? ''] ?? e.detail}」` };
     case 'clock': return { text: `全厂倍速改为 ${e.detail}` };
     case 'save_note': return { text: `记笔记「${titleOf(e.target)}」` };

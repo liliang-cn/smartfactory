@@ -119,12 +119,15 @@ func NewHub() *Hub {
 
 // Publish records a value and fans it out. A doubtful or late reading only reaches Tap: the
 // twin, the browsers and the current values carry on with the last good one.
-func (h *Hub) Publish(t Tag) {
+func (h *Hub) Publish(t Tag) { h.Put(t) }
+
+// Put publishes like Publish and says how the reading was judged: its flags, and why it was
+// flagged ("" when it was not).
+func (h *Hub) Put(t Tag) (q uint8, why string) {
 	now := time.Now()
 	if t.At.IsZero() {
 		t.At = now
 	}
-	why := ""
 	if h.Check != nil {
 		why = h.Check(&t)
 	}
@@ -153,6 +156,7 @@ func (h *Hub) Publish(t Tag) {
 	if live {
 		h.broadcast(Event{Type: "tag", Tag: &t})
 	}
+	return t.Q, why
 }
 
 // Command hands an operator action to every adapter that can act on it and to every browser.

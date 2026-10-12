@@ -551,6 +551,7 @@ export const AuditEntry = z.object({
   /** the company it happened in; * for what every company shares */
   company: str,
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · device.add / device.renew / device.revoke (a device on the embedded broker; target its name) */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · check.form / check.form.delete (target the form id) · check.submit (a form filled in: target plant/asset and the submission id; context every value) */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
   /** what was true when it happened, for a command to a machine: its state, temperature and alarms, the rule that refused it, who asked and who approved */
@@ -921,6 +922,111 @@ export const DeviceCredential = z.object({
   /** certificate devices: its certificate and private key (PEM), the CA's certificate, and the three as a zip (base64) — shown this once */
   cert: str.optional(), key: str.optional(), ca: str.optional(), bundle: str.optional(),
 }).meta({ description: 'POST /api/admin/devices/{company} and /{id}/renew (a new credential; the old one stops working); DELETE /{id} revokes and answers BrokerDevice' });
+// ---------- forms filled in by hand (/api/checks/{company}) ----------
+
+export const CheckFieldKind = z.enum(['number', 'choice', 'yesno', 'text', 'photo']);
+/**
+ * One thing a form asks. key: a letter, then letters, digits and _. A number is stored as
+ * readings (source manual) under its key, or under twin — the machine's own field it stands for,
+ * stored with the machine's readings of it; a measure also reaches the twin's quality chart and,
+ * without a spec of its own, is judged by the machine's.
+ */
+export const CheckField = z.object({
+  key: str, label: str, kind: CheckFieldKind, unit: str.optional(),
+  /** a number's spec */
+  lo: num.optional(), hi: num.optional(), target: num.optional(),
+  /** a choice's answers; a yes/no question's are 是 and 否 */
+  options: z.array(str).optional(),
+  /** the abnormal answers (for a choice, 异常 and 不合格 unless given) */
+  bad: z.array(str).optional(),
+  twin: z.enum(['measure', 'temp', 'power', 'vib']).optional(),
+  required: z.boolean().optional(),
+});
+/** When a round is due on each machine: every shift (at: the shifts' starts, default 08:00 and 20:00), every day (at: its start, default 08:00) or every so many hours from the day's first (at, default 00:00); within: minutes from its start a round must be done in (0: before the next starts). No every: filled in when needed. */
+export const CheckSchedule = z.object({
+  every: z.enum(['', 'shift', 'day', 'hours']).optional(),
+  hours: num.optional(), at: z.array(str).optional(), within: num.optional(),
+});
+/** patrol 点检 · first 首件检验 · lab 化验 · other */
+export const CheckKind = z.enum(['patrol', 'first', 'lab', 'other']);
+export const CheckForm = z.object({
+  id: str, name: str, kind: CheckKind,
+  /** the plant it is for (none: every plant); lines and assets narrow it to those of the plant */
+  plant: str.optional(), lines: z.array(str).optional(), assets: z.array(str).optional(),
+  fields: z.array(CheckField), schedule: CheckSchedule,
+  /** what the person filling it in reads first */
+  note: str.optional(), by: str.optional(), created: time, updated: time,
+}).meta({ description: 'POST /api/checks/{company}/forms — administrators; without an id a new form, else it replaces that one; answers the form as saved (422 with every problem)' });
+export const CheckForms = z.array(CheckForm).meta({ description: 'GET /api/checks/{company}/templates — forms to start one from' });
+/** A form due on one machine. */
+export const CheckRound = z.object({
+  form: str, formName: str, kind: CheckKind, plant: str, plantName: str, line: str, lineName: str, asset: str, assetName: str,
+  every: str,
+  /** done: this round is in · due: still in time · overdue: past its time, or the last round was missed · open: no schedule */
+  status: z.enum(['done', 'due', 'overdue', 'open']),
+  /** this round's start, when it must be done by, when the next starts, since when it is overdue */
+  start: time.optional(), due: time.optional(), next: time.optional(), since: time.optional(),
+  /** the last time it was filled in, by whom, with how many abnormal values */
+  last: time.optional(), lastBy: str.optional(), lastBad: num.optional(),
+});
+export const CheckRounds = z.array(CheckRound).meta({ description: 'GET /api/checks/{company}/rounds?status=overdue,due — overdue first (longest first), then due soonest; members and above' });
+export const CheckMachine = z.object({
+  plant: str, plantName: str, line: str, lineName: str, asset: str, name: str, label: str,
+  /** the machine's quality measure and its spec */
+  measure: z.object({ label: str, unit: str, target: num, lo: num.optional(), hi: num.optional(), digits: num }).optional(),
+  rounds: z.array(CheckRound),
+});
+export const ChecksOverview = z.object({
+  forms: z.array(CheckForm),
+  /** every station some form is for, with its rounds */
+  machines: z.array(CheckMachine),
+  kinds: z.record(str, str), twinFields: z.record(str, str),
+  /** the caller's name, whether they may fill forms in, set them up */
+  who: str, operator: z.boolean(), admin: z.boolean(), now: time,
+}).meta({ description: 'GET /api/checks/{company} — members and above' });
+/** One answer as it was kept and judged. */
+export const CheckValue = z.object({
+  key: str, label: str, kind: CheckFieldKind,
+  num: num.optional(),
+  /** an answer, a note, or a photo's id (GET /api/checks/{company}/photos/{id}) */
+  text: str.optional(), unit: str.optional(),
+  /** the spec the number was judged by */
+  lo: num.optional(), hi: num.optional(),
+  /** out of spec or abnormal, and how */
+  bad: z.boolean().optional(), why: str.optional(),
+  /** the readings field a number went to, and why the store keeps it but does not believe it */
+  field: str.optional(), flag: str.optional(),
+});
+export const CheckSubmission = z.object({
+  id: str, form: str, formName: str, kind: CheckKind, plant: str, plantName: str, asset: str, assetName: str,
+  /** when the values were taken, and when they arrived */
+  taken: time, received: time,
+  /** who filled it in, and from where (page, cli …) */
+  by: str, via: str,
+  values: z.array(CheckValue), note: str.optional(),
+  /** how many values were out of spec or abnormal */
+  bad: num,
+  /** sent well after it was taken (a phone that was offline): stored at its time, kept from the twin */
+  late: z.boolean().optional(),
+  /** sent before; nothing was done again */
+  duplicate: z.boolean().optional(),
+}).meta({ description: 'POST /api/checks/{company}/submissions answers the submission kept — operators and above' });
+export const CheckSubmissions = z.array(CheckSubmission).meta({ description: 'GET /api/checks/{company}/submissions?form=&plant=&asset=&from=&to=&bad=1&limit= — the latest taken first; format=csv: a spreadsheet, one value a row' });
+export const CheckInput = z.object({
+  /** the phone's own id for it: sent twice, kept once */
+  id: str.optional(), form: str, plant: str, asset: str,
+  /** when the values were taken (default: when it arrives); up to 30 days back */
+  taken: time.optional(),
+  /** by field key: a number, an answer, a text, or a photo as a data URL (JPEG, PNG or WebP, up to 2 MB) */
+  values: z.record(str, z.union([num, str, z.boolean()])),
+  note: str.optional(),
+}).meta({ description: 'POST /api/checks/{company}/submissions' });
+export const MachineChecks = z.object({
+  machine: CheckMachine, forms: z.array(CheckForm),
+  /** the last time each form was filled in on it, the latest first */
+  last: z.array(CheckSubmission),
+  operator: z.boolean(),
+}).meta({ description: 'GET /api/checks/{company}/machines/{plant}/{asset} — members and above; 404 when no form is for it' });
 
 // ---------- the console agent (/api/admin/agent) ----------
 
@@ -957,6 +1063,7 @@ export const DEFS = {
   CalibMachine, Calibration, CalibRequest, CalibOutcomes, Residuals,
   GuardSettings, GuardOverview, CommandRequest, CommandRequests,
   BrokerDevice, BrokerDevices, RegisterDevice, DeviceCredential,
+  CheckForm, CheckForms, CheckRounds, ChecksOverview, CheckSubmission, CheckSubmissions, CheckInput, MachineChecks,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

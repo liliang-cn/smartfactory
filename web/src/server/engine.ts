@@ -379,6 +379,27 @@ function residuals(c: string): string {
   return JSON.stringify(co.plants.flatMap((p) => p.takeResiduals().map((r) => ({ plant: p.layout.id, ...r }))));
 }
 
+/** Every plant's lines and their stations, with each machine's quality measure: what forms people fill in apply to. */
+function stations(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify(co.plants.map((p) => ({
+    id: p.layout.id, name: p.layout.name,
+    lines: p.lines.map((l) => ({
+      id: l.id, name: l.name,
+      stations: l.stations.map((a) => ({
+        id: a.id, name: a.name, label: a.spec?.label ?? '',
+        measure: a.measure ? { label: a.measure.label, unit: a.measure.unit, target: a.measure.target, lo: a.measure.lo, hi: a.measure.hi, digits: a.measure.digits } : undefined,
+      })),
+    })),
+  })));
+}
+
+/** Raises a quality alarm on a machine from a record a person filled in, or clears it (text ""). */
+function alert(c: string, plant: string, asset: string, code: string, text: string): boolean {
+  return get(c)?.byId[plant]?.alert(asset, code, text) ?? false;
+}
+
 /** Every machine's parameters: the template's, the calibration in force, and whether it is reporting now. */
 function machineParams(c: string): string {
   const co = get(c);
@@ -820,5 +841,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
-  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams,
+  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert,
 };

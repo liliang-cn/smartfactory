@@ -41,6 +41,11 @@ export type BrokerDevice = z.infer<typeof P.BrokerDevice>;
 export type BrokerDevices = z.infer<typeof P.BrokerDevices>;
 export type RegisterDevice = z.infer<typeof P.RegisterDevice>;
 export type DeviceCredential = z.infer<typeof P.DeviceCredential>;
+export type ChecksOverview = z.infer<typeof P.ChecksOverview>;
+export type CheckForm = z.infer<typeof P.CheckForm>;
+export type CheckField = z.infer<typeof P.CheckField>;
+export type CheckRound = z.infer<typeof P.CheckRound>;
+export type CheckSubmission = z.infer<typeof P.CheckSubmission>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -188,6 +193,37 @@ export const devices = (c: string) => call<BrokerDevices>('GET', devicesPath(c))
 export const addDevice = (c: string, d: RegisterDevice) => call<DeviceCredential>('POST', devicesPath(c), d);
 export const renewDevice = (c: string, id: string) => call<DeviceCredential>('POST', `${devicesPath(c)}/${encodeURIComponent(id)}/renew`);
 export const revokeDevice = (c: string, id: string) => call<BrokerDevice>('DELETE', `${devicesPath(c)}/${encodeURIComponent(id)}`);
+
+const checksPath = (c: string) => `/api/checks/${encodeURIComponent(c)}`;
+export const checks = (c: string) => call<ChecksOverview>('GET', checksPath(c));
+export const checkTemplates = (c: string) => call<CheckForm[]>('GET', `${checksPath(c)}/templates`);
+export const saveCheckForm = (c: string, f: CheckForm) => call<CheckForm>('POST', `${checksPath(c)}/forms`, f);
+export const deleteCheckForm = (c: string, id: string) => call<{ ok: boolean }>('DELETE', `${checksPath(c)}/forms/${encodeURIComponent(id)}`);
+export const checkSubmissions = (c: string, q: URLSearchParams) => call<CheckSubmission[]>('GET', `${checksPath(c)}/submissions?${q}`);
+
+async function fetchBlob(path: string): Promise<Blob> {
+  const t = token();
+  const res = await fetch(path, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+  if (!res.ok) {
+    const b = await res.json().catch(() => null) as { error?: string } | null;
+    throw new ApiError(res.status, b?.error ?? `下载失败（${res.status}）`);
+  }
+  return res.blob();
+}
+/** What was filled in that q picks, as a CSV file the browser saves. */
+export async function downloadChecks(c: string, q: URLSearchParams, name: string) {
+  const qq = new URLSearchParams(q);
+  qq.set('format', 'csv');
+  qq.delete('limit');
+  const url = URL.createObjectURL(await fetchBlob(`${checksPath(c)}/submissions?${qq}`));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+/** A photo taken with a submission, as a URL an <img> can show. */
+export const checkPhoto = async (c: string, id: string) => URL.createObjectURL(await fetchBlob(`${checksPath(c)}/photos/${encodeURIComponent(id)}`));
 
 export const assistants = (c: string) => call<z.infer<typeof P.Assistants>>('GET', `/api/agents/${encodeURIComponent(c)}`);
 export type Doc = z.infer<typeof P.Doc>;
