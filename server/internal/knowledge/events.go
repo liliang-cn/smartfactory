@@ -454,6 +454,10 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 			fmt.Fprintf(&b, "%s 由%s启用，在用的参数（模板 → 校准）：%s。", clock(*c.AppliedAt), c.AppliedBy, strings.Join(ps, "；"))
 			detail = append(detail, Fact{"启用", c.AppliedBy + " " + clock(*c.AppliedAt), false})
 			desc = "在用，" + c.AppliedBy + " " + clock(*c.AppliedAt) + "启用"
+		} else if len(ps) == 0 {
+			b.WriteString("读数不够，没拟合出能用的参数，在用的是模板参数。")
+			detail = append(detail, Fact{"启用", "没有，读数不够没拟合出参数", false})
+			desc = "读数不够，没拟合出参数"
 		} else {
 			fmt.Fprintf(&b, "拟合出的参数没有启用（或已撤回），在用的是模板参数。拟合值（模板 → 拟合）：%s。", strings.Join(ps, "；"))
 			detail = append(detail, Fact{"启用", "没有，在用模板参数", false})
