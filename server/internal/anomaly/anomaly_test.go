@@ -186,6 +186,31 @@ func TestStateSwitch(t *testing.T) {
 	}
 }
 
+// Equipment sends a machine's fields in name order, power before state: the power read with a
+// change of state belongs to the new state, not the old one's normal.
+func TestStateChangeInOneMessage(t *testing.T) {
+	r := newRig(t, nil)
+	for i := 0; i < 2*3600; i++ {
+		state, power := "running", 120.0
+		if (i/300)%2 == 1 {
+			state, power = "idle", 15.0
+		}
+		r.read("power", power+r.rnd.NormFloat64()*0.5)
+		r.state(state)
+		r.now = r.now.Add(time.Second)
+	}
+	m, _ := r.d.Machine("c", "p", "M1")
+	for _, b := range m.Fields[0].States {
+		// one reading of the other state in each ten minutes would make it several times wider
+		if b.Sigma > 2 {
+			t.Errorf("%s normal %.2f±%.2f (%d): readings of the other state learned into it", b.State, b.Mean, b.Sigma, b.N)
+		}
+	}
+	if h := r.hints(); len(h) != 0 {
+		t.Errorf("hints %+v", h)
+	}
+}
+
 // Nothing is judged while a field is still being learned.
 func TestWarmup(t *testing.T) {
 	r := newRig(t, nil)

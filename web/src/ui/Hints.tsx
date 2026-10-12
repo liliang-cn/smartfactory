@@ -25,6 +25,8 @@ export const stateLabel = (s: string) => HINT_STATE[s] ?? s;
 export const short = (x: number) => (Math.abs(x) >= 100 ? x.toFixed(1) : Math.abs(x) >= 10 ? x.toFixed(2) : x.toFixed(3)).replace(/\.?0+$/, '');
 /** Wall-clock time of day (hints happen on the equipment's clock, not the plant's). */
 const at = (iso: string) => new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+/** What a hint says of its field: 振动缓慢偏高. Which way is the way it went furthest. */
+export const what = (h: { field: string; kind: string; peak: number }) => `${fieldLabel(h.field)}${h.kind === 'drift' ? '缓慢' : ''}${h.peak >= 0 ? '偏高' : '偏低'}`;
 export const sigma = (z: number) => `${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ`;
 
 /** The company's hints now, in the top bar while there are any. */
@@ -50,8 +52,8 @@ export function HintChip() {
         {hints.map((h) => (
           <DropdownMenuItem key={h.id} onSelect={() => goToAsset(h.plant, h.asset)} className="mt-0.5 grid gap-0.5 rounded-xl px-2 py-1.5">
             <span className="flex items-center gap-2 text-[13px]">
-              <b>{h.asset}</b><span>{fieldLabel(h.field)}{h.kind === 'drift' ? '缓慢' : ''}{h.z >= 0 ? '偏高' : '偏低'}</span>
-              <b className="ml-auto text-warning tabular-nums">{sigma(h.z)}</b>
+              <b>{h.asset}</b><span>{what(h)}</span>
+              <b className="ml-auto text-warning tabular-nums" title="最远偏离">{sigma(h.peak)}</b>
             </span>
             <small className="text-[11.5px] text-muted-foreground tabular-nums">
               {place(h.plant)} · {stateLabel(h.state)}时平常 {short(h.mean)}±{short(h.sigma)} · {at(h.since)} 起
@@ -127,9 +129,9 @@ function Hint({ h }: { h: AnomalyInfo }) {
   return (
     <div className="mb-2 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] leading-relaxed text-amber-900">
       <b className="flex items-center gap-1.5 text-[13px]"><ActivityIcon className="size-3.5" />
-        {fieldLabel(h.field)}{h.kind === 'drift' ? '缓慢' : ''}{h.z >= 0 ? '偏高' : '偏低'} {sigma(h.z)}
+        {what(h)}，最远 {sigma(h.peak)}
       </b>
-      {h.kind === 'drift' ? '近期平均' : '现在'} {short(h.value)}，{stateLabel(h.state)}时平常 {short(h.mean)}±{short(h.sigma)}，{at(h.since)} 起。
+      {h.kind === 'drift' ? '近期平均' : '现在'} {short(h.value)}（{sigma(h.z)}），{stateLabel(h.state)}时平常 {short(h.mean)}±{short(h.sigma)}，{at(h.since)} 起。
       只是提示，设备照常运行。
     </div>
   );

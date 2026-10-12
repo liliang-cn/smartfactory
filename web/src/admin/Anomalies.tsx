@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { fieldLabel, short, sigma, stateLabel } from '@/ui/Hints';
+import { fieldLabel, short, sigma, stateLabel, what } from '@/ui/Hints';
 import * as api from './api';
 import { ago } from './Accounts';
 import { Panel } from './Panel';
@@ -25,8 +25,8 @@ function HintRow({ a }: { a: api.Anomaly }) {
     <li className={cn('grid gap-0.5 rounded-xl px-3 py-2', ended === null ? 'bg-warning-soft' : 'border')}>
       <span className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
         <b className="font-mono">{a.asset}</b>
-        <b>{fieldLabel(a.field)}{a.kind === 'drift' ? '缓慢' : ''}{a.z >= 0 ? '偏高' : '偏低'}</b>
-        <b className={cn('tabular-nums', ended === null ? 'text-warning' : 'text-muted-foreground')}>{sigma(ended === null ? a.z : a.peak)}</b>
+        <b>{what(a)}</b>
+        <b className={cn('tabular-nums', ended === null ? 'text-warning' : 'text-muted-foreground')} title="最远偏离">{sigma(a.peak)}</b>
         <span className="ml-auto text-[12px] text-muted-foreground tabular-nums">{when(a.since)}{ended !== null ? `，持续 ${span(ended)}` : ' 起'}</span>
       </span>
       <small className="text-[12px] text-muted-foreground tabular-nums">

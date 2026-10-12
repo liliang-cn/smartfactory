@@ -129,9 +129,10 @@ type machine struct {
 type field struct {
 	states map[string]*Stat
 	cur    *Stat
-	// the last reading and how far it was
+	// the last reading and how far it was, and its normal before it was learned
 	value, z float64
 	at       time.Time
+	before   Stat
 	// since when (and for how many readings in a row) it has been beyond K σ, its average
 	// beyond K of its own spread, and back within both
 	outSince, driftSince, inSince time.Time
@@ -237,7 +238,9 @@ func (d *Detector) Add(t tags.Tag) {
 		}
 		d.mu.Lock()
 		m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
-		m.state = s
+		if s != m.state {
+			d.switchState(t, m, s, at)
+		}
 		d.mu.Unlock()
 		return
 	}
@@ -258,6 +261,28 @@ func (d *Detector) Add(t tags.Tag) {
 	d.judge(t, m, f, s, x, at)
 }
 
+// switchState puts the machine in state s. Equipment sends a machine's fields together, in name
+// order: the power read with the new state came just before it, and went into the old state's
+// normal. A field read at the very moment of the change is taken back out of that normal and
+// judged again in the new state (a running machine's power learned as idle widens the idle normal
+// until nothing stands out).
+func (d *Detector) switchState(t tags.Tag, m *machine, s string, at time.Time) {
+	m.state = s
+	for name, f := range m.fields {
+		if f.cur == nil || !f.at.Equal(at) || f.cur.N != f.before.N+1 {
+			continue
+		}
+		*f.cur = f.before
+		f.cur.dirty = true
+		st := f.states[s]
+		if st == nil {
+			st = &Stat{First: at.UnixMilli()}
+			f.states[s] = st
+		}
+		d.judge(tags.Tag{Company: t.Company, Plant: t.Plant, Asset: t.Asset, Field: name, Source: m.source}, m, f, st, f.value, at)
+	}
+}
+
 // judge holds a reading against its field's normal in the machine's state, learns it, and raises
 // or ends the field's hint.
 //
@@ -276,6 +301,7 @@ func (d *Detector) Add(t tags.Tag) {
 // it leaves behind would be one), and both have to be back within for Sustain to end it.
 func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, at time.Time) {
 	set := d.Set
+	f.before = *s
 	if f.cur != s {
 		// another state: its own normal, and the evidence so far was against the other one
 		s.Short, f.cur = x, s
@@ -339,15 +365,17 @@ func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, a
 		kind = Drift
 	}
 	if h := f.hint; h != nil {
-		if kind == Level {
-			h.Kind = Level
-		}
 		h.Value, h.Z = x, z
-		if h.Kind == Drift {
+		if h.Kind == Drift && kind != Level {
 			h.Value, h.Z = s.Short, (s.Short-s.Mean)/sigma
 		}
 		if math.Abs(h.Z) > math.Abs(h.Peak) {
 			h.Peak = h.Z
+		}
+		if kind == Level && h.Kind == Drift {
+			// the drift went on to readings K σ out
+			h.Kind = Level
+			h.Text = Describe(*h)
 		}
 		if !f.inSince.IsZero() && at.Sub(f.inSince) >= set.Sustain {
 			end := at
@@ -406,17 +434,17 @@ func num(x float64) string {
 	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.3f", x), "0"), ".")
 }
 
-// Describe is a hint in words: "HP-101 振动偏高：现在 5.2，运行时平常 4.0±0.2（+6.0σ）".
+// Describe is a hint in words: "HP-101 振动偏高：现在 5.2，运行时平常 4.0±0.2（最远 +6.0σ）".
 func Describe(a Anomaly) string {
 	dir := "偏高"
-	if a.Z < 0 {
+	if a.Peak < 0 {
 		dir = "偏低"
 	}
 	what := "现在"
 	if a.Kind == Drift {
 		dir, what = "缓慢"+dir, "近期平均"
 	}
-	return fmt.Sprintf("%s %s%s：%s %s，%s时平常 %s±%s（%+.1fσ）", a.Asset, FieldLabel(a.Field), dir, what, num(a.Value), StateLabel(a.State), num(a.Mean), num(a.Sigma), a.Z)
+	return fmt.Sprintf("%s %s%s：%s %s，%s时平常 %s±%s（最远 %+.1fσ）", a.Asset, FieldLabel(a.Field), dir, what, num(a.Value), StateLabel(a.State), num(a.Mean), num(a.Sigma), a.Peak)
 }
 
 // Current are the company's hints now, the most unusual first.
@@ -429,9 +457,7 @@ func (d *Detector) Current(company string) []Anomaly {
 		}
 		for _, f := range m.fields {
 			if f.hint != nil {
-				h := *f.hint
-				h.Text = Describe(h)
-				out = append(out, h)
+				out = append(out, *f.hint)
 			}
 		}
 	}
@@ -500,7 +526,6 @@ func (d *Detector) machineView(k mkey, m *machine) Machine {
 		sort.Slice(x.States, func(i, j int) bool { return x.States[i].N > x.States[j].N })
 		if f.hint != nil {
 			h := *f.hint
-			h.Text = Describe(h)
 			x.Anomaly = &h
 		}
 		out.Fields = append(out.Fields, x)

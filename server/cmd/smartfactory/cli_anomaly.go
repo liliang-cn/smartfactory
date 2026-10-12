@@ -62,10 +62,10 @@ func cliAnomalies(ctx context.Context, args []string) error {
 		} else {
 			rows := make([][]string, len(rep.Current))
 			for i, a := range rep.Current {
-				rows[i] = []string{a.Plant + "/" + a.Asset, anomaly.FieldLabel(a.Field), hintKind[a.Kind], red(fmt.Sprintf("%+.1fσ", a.Z)),
+				rows[i] = []string{a.Plant + "/" + a.Asset, anomaly.FieldLabel(a.Field), hintKind[a.Kind], red(fmt.Sprintf("%+.1fσ", a.Peak)),
 					fmt.Sprintf("%s±%s", short(a.Mean), short(a.Sigma)), anomaly.StateLabel(a.State), a.Since.Local().Format("01-02 15:04")}
 			}
-			table([]string{"设备", "读数", "怎么了", "现在", "平常", "状态", "开始"}, rows)
+			table([]string{"设备", "读数", "怎么了", "最远", "平常", "状态", "开始"}, rows)
 		}
 		var ended [][]string
 		for _, a := range rep.Recent {
