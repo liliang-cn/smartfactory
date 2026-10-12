@@ -279,7 +279,12 @@ func TestSubmit(t *testing.T) {
 	}
 	// the twin took the unit on its quality chart (among the units it simulates itself)
 	var hist struct{ Meas []float64 }
-	json.Unmarshal([]byte(eng.Hist("jianghe", plant, asset)), &hist)
+	for end := time.Now().Add(3 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		json.Unmarshal([]byte(eng.Hist("jianghe", plant, asset)), &hist)
+		if slices.Contains(hist.Meas, over) || time.Now().After(end) {
+			break
+		}
+	}
 	if !slices.Contains(hist.Meas, over) {
 		t.Errorf("the quality chart's units: %v, want %v among them", hist.Meas, over)
 	}
