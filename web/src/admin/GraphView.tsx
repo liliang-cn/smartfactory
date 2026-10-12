@@ -199,7 +199,9 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
     }
     return out;
   }, [nodes, view, px]);
-  const label = (n: N) => labelled.has(n.id) || n.id === selected || n.id === hover || !!near?.has(n.id);
+  // what happened at a station sits close around it: named on hover or when picked, not as a
+  // neighbour of the station, where their names would cover each other
+  const label = (n: N) => labelled.has(n.id) || n.id === selected || n.id === hover || (!!near?.has(n.id) && !isEvent(n.kind));
   // world units per screen pixel
   const unit = Math.max(view.w / px.w, view.h / px.h);
   const font = 11.5 * unit;
