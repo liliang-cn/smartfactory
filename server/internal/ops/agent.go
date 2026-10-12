@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	agentpkg "github.com/liliang-cn/agent-go/v3/pkg/agent"
@@ -28,6 +29,7 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
 - 仿真校准：calibration（每台设备的模型参数：模板值、按实测拟合的值、在用的值，拟合回放的误差，最近一天模型和实测差多少）。拟合要管理员在后台点；你可以 propose_apply_calibration 提出应用拟合好的参数，说清楚哪些参数会变、误差能降多少。
 - 指令把关：guard_status（AI 能对真实设备做到哪一步、规则、哪些设备接了真实设备、等待批准的指令）。
+- 成效：value_report（一段时间里顾问的计划提了多少、采纳多少、采纳后量出来变了多少，你提出的改动和 AI 的设备指令后来怎样，校准，工单按期率，工厂每周的 OEE、产量、停机）。问“这个系统给我们带来了什么”就用它：每个数字带上 n 和依据；value 是 null 就说没有数据，不要估；标着仿真的数字要说明不是真实工厂；采纳前后的对比只说明同时发生，不能说成是计划带来的。
 - 写配置：check_company 检查一份公司配置（不创建）；check_industry 检查一个行业包（不保存）。
 - 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order、propose_apply_calibration、propose_approve_command、propose_deny_command。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
@@ -192,6 +194,17 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				}
 				waiting, err := o.CommandRequests(who, s(m, "company"), "waiting")
 				return map[string]any{"guard": ov, "waiting": waiting}, err
+			}},
+		{"value_report", "一家公司一段时间里从这套系统得到了什么：顾问计划的提出、采纳、否决、采纳率、决定用时，采纳后量出的变化和验收；你提出的改动确认和不要的条数；AI 的设备指令直接执行、等批准、批准、拒绝、被规则拒绝、过期；校准；工单按期完工率；工厂每周的 OEE、产量、停机和第一条采纳计划前后的对比。每个数字有 n（从多少条记录算的）和 basis（依据），value 为 null 是没有数据。", obj(map[string]any{
+			"company": str("公司 id"), "days": map[string]any{"type": "integer", "description": "往前几天，默认 30（常用 7、30、90）"},
+			"from": str("第一天 YYYY-MM-DD（和 to 一起给，代替 days）"), "to": str("最后一天 YYYY-MM-DD（含）"),
+		}, "company"),
+			func(m map[string]any) (any, error) {
+				days := ""
+				if n, ok := m["days"].(float64); ok && n > 0 {
+					days = strconv.Itoa(int(n))
+				}
+				return o.ValueTool(ctx, who, s(m, "company"), days, s(m, "from"), s(m, "to"))
 			}},
 		{"propose_approve_command", "提出批准一条等待中的指令（会按批准时设备的状态再过一遍规则，然后下到设备），交管理员确认。", obj(map[string]any{"company": str("公司 id"), "id": str("指令编号 CQ-…")}, "company", "id"),
 			func(m map[string]any) (any, error) {

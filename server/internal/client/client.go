@@ -166,6 +166,18 @@ func (c *Client) send(ctx context.Context, method, p string, rd io.Reader, ctype
 	return res, nil
 }
 
+// Get is what the API answers, as it came (an export that is not JSON).
+func (c *Client) Get(ctx context.Context, p string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	res, err := c.send(ctx, "GET", p, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	return io.ReadAll(res.Body)
+}
+
 // Do calls the API and decodes the answer into out (raw JSON when out is *json.RawMessage).
 func (c *Client) Do(ctx context.Context, method, p string, body, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)

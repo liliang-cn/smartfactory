@@ -73,6 +73,7 @@ const STEP: Record<string, string> = {
   list_orders: '看工单', erp_status: '看 ERP 对接', propose_cancel_order: '提出撤回工单',
   check_industry: '检查行业包', propose_create_industry: '提出保存行业包',
   calibration: '看仿真校准', propose_apply_calibration: '提出应用校准',
+  guard_status: '看指令把关', propose_approve_command: '提出批准指令', propose_deny_command: '提出拒绝指令', value_report: '看成效',
 };
 const stepText = (s: Step) => [STEP[s.tool] ?? s.tool, ...['id', 'company', 'name', 'query'].map((k) => s.args?.[k]).filter((v): v is string => typeof v === 'string' && !!v)].join(' ');
 
