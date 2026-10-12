@@ -57,7 +57,7 @@ function SiteSwitcher() {
   const lines = rt.plants.reduce((n, p) => n + p.layout.lines.length, 0);
   const group = rt.plants.length > 1 ? groupFigures(rt.plants) : null;
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 shrink-0 items-center gap-1.5">
       <div className="flex h-11 items-center gap-2 rounded-xl pl-1.5 pr-2.5 max-md:h-[38px] max-md:pr-1.5" title={company.name}>
         <SiteBadge text={company.short} tone="ink" />
         <b className="max-w-36 truncate text-[13.5px] max-lg:hidden">{company.name}</b>
@@ -136,10 +136,11 @@ function Search() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-10 w-[min(300px,22vw)] min-w-0 items-center gap-2 rounded-xl border bg-background px-3 text-[13.5px] text-muted-foreground transition-colors hover:bg-surface max-md:h-[38px] max-md:w-auto max-md:flex-1 max-md:px-2.5"
+        aria-label="搜索设备、产线、AGV"
+        className="flex h-10 w-[min(300px,22vw)] min-w-0 items-center gap-2 rounded-xl border bg-background px-3 text-[13.5px] text-muted-foreground transition-colors hover:bg-surface max-md:size-[38px] max-md:shrink-0 max-md:justify-center max-md:px-0"
       >
         <SearchIcon className="size-[17px]" />
-        <span className="flex-1 truncate text-left"><span className="max-md:hidden">搜索设备、产线、AGV</span><span className="md:hidden">搜索</span></span>
+        <span className="flex-1 truncate text-left max-md:hidden">搜索设备、产线、AGV</span>
         <Kbd className="max-md:hidden">/</Kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen} title="搜索" description="按编号或名称查找设备">
@@ -178,7 +179,7 @@ function SpeedToggle() {
       type="single"
       value={String(timeScale)}
       onValueChange={(v) => v && useUI.getState().setTimeScale(Number(v))}
-      className="rounded-xl bg-muted p-[3px]"
+      className="rounded-xl bg-muted p-[3px] max-sm:hidden"
       spacing={0}
       aria-label="仿真速度"
     >
