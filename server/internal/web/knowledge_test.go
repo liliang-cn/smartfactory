@@ -153,8 +153,8 @@ func TestKnowledgeMCP(t *testing.T) {
 	if msg != "" {
 		t.Fatal(msg)
 	}
-	if !slices.Contains(out["recognized"].([]any), any("HP-101")) || out["mode"] != "ppr" {
-		t.Errorf("HP-101 not recognised: %v %v", out["recognized"], out["mode"])
+	if !slices.Contains(out["entities"].([]any), any("HP-101")) || out["mode"] != "ppr" {
+		t.Errorf("HP-101 not recognised: %v %v", out["entities"], out["mode"])
 	}
 	ps := list(out["passages"])
 	i := slices.IndexFunc(ps, func(p map[string]any) bool {

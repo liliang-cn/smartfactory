@@ -59,10 +59,10 @@ type kbPassage struct {
 type kbSearchOut struct {
 	// Mode is how it searched: ppr (a walk over the graph from the things the question names) or lexical.
 	Mode string `json:"mode"`
-	// Recognized are the things of the graph the question was found to name.
-	Recognized []string    `json:"recognized,omitempty"`
-	Passages   []kbPassage `json:"passages"`
-	Note       string      `json:"note"`
+	// Entities are the things of the graph the search started from (those the question names) and went through.
+	Entities []string    `json:"entities,omitempty"`
+	Passages []kbPassage `json:"passages"`
+	Note     string      `json:"note"`
 }
 
 type kbEntityIn struct {
@@ -160,7 +160,7 @@ func AddKnowledge(s *mcp.Server, kb Knowledge) {
 			if err != nil {
 				return nil, kbSearchOut{}, err
 			}
-			out := kbSearchOut{Mode: a.Mode, Recognized: a.Entities, Passages: []kbPassage{}}
+			out := kbSearchOut{Mode: a.Mode, Entities: a.Entities, Passages: []kbPassage{}}
 			cut := false
 			for _, p := range a.Passages {
 				kp := passage(p, searchText)
