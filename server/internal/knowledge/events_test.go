@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 )
 
 func f(x float64) *float64 { return &x }
@@ -104,7 +106,14 @@ func TestEvents(t *testing.T) {
 	if a, _ := kb.Search(ctx, "huaduan", "RF-101 点检", nil, nil, 6); a.Mode != "ppr" {
 		t.Errorf("not walked: %+v", a)
 	}
-	name := "RF-101 点检异常 " + clock(checks[0].Taken)
+	// a question that says what a node is after the station ("RF-101 最近点检") does not name the
+	// node: the walk starts from the station alone
+	co, _ := kb.open("huaduan")
+	r, err := co.db.SearchKnowledge(ctx, cortexdb.KnowledgeSearchRequest{Query: "RF-101 最近点检", EntityNames: []string{"RF-101"}, TopK: 6, RetrievalMode: "ppr"})
+	if err != nil || !strings.Contains(r.Decision.Reason, "from 1 query entities") {
+		t.Errorf("where the walk starts: %v %+v", err, r.Decision)
+	}
+	name := "RF-101 · 点检异常 " + clock(checks[0].Taken)
 	c, _ := kb.Lookup(ctx, "huaduan", name)
 	if c == nil || c.Kind != TCheck || len(c.Links) != 1 || c.Links[0].Name != "RF-101" || c.Links[0].Type != RCheckedOn {
 		t.Fatalf("%s: %+v", name, c)
@@ -112,10 +121,10 @@ func TestEvents(t *testing.T) {
 	if !slices.Contains(c.Detail, Fact{"油温", "75 ℃，超上限 70", true}) || !slices.Contains(c.Detail, Fact{"填写", "张工 " + clock(checks[0].Taken), false}) {
 		t.Errorf("a check's card: %+v", c.Detail)
 	}
-	if a, _ := kb.Lookup(ctx, "huaduan", "RF-101 温度偏高 "+clock(anomalies[0].Since)); a == nil || !slices.Contains(a.Detail, Fact{"平常", "72±3", false}) {
+	if a, _ := kb.Lookup(ctx, "huaduan", "RF-101 · 温度偏高 "+clock(anomalies[0].Since)); a == nil || !slices.Contains(a.Detail, Fact{"平常", "72±3", false}) {
 		t.Errorf("an anomaly's card: %+v", a)
 	}
-	if old, _ := kb.Lookup(ctx, "huaduan", "HP-101 点检异常 "+clock(checks[len(checks)-2].Taken)); old != nil {
+	if old, _ := kb.Lookup(ctx, "huaduan", "HP-101 · 点检异常 "+clock(checks[len(checks)-2].Taken)); old != nil {
 		t.Error("a check 40 days old is kept")
 	}
 
@@ -163,7 +172,7 @@ func TestEvents(t *testing.T) {
 	if p := first("RF-101 读数异常"); !strings.Contains(p.Text, "恢复正常") || !strings.Contains(p.Text, "+5.5σ") {
 		t.Errorf("an ended hint: %+v", p)
 	}
-	if gone, _ := kb.Lookup(ctx, "huaduan", "RF-101 指令 stop "+clock(now.Add(-time.Hour))); gone != nil {
+	if gone, _ := kb.Lookup(ctx, "huaduan", "RF-101 · 指令 stop "+clock(now.Add(-time.Hour))); gone != nil {
 		t.Errorf("a command no longer kept: %+v", gone)
 	}
 	if st, _ := kb.Stats(ctx, "huaduan"); st.Kinds[TCommand] != 1 || st.Kinds[TCheck] != perMachine+1 || st.Events != perMachine+5 {

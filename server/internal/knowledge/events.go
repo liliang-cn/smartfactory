@@ -241,9 +241,13 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 	}
 	used := map[string]int{}
 	var out []item
-	// add makes the node called name (made unique) of kind, linked to the station, with its
-	// passage, one line about it (desc) and its card (detail).
-	add := func(id, kind string, st station, name, desc, text string, at time.Time, detail []Fact) {
+	// add makes the node of kind called after its station and what it was ("RF-101 · 最近点检",
+	// made unique), linked to the station, with its passage, one line about it (desc) and its card
+	// (detail). The " · " keeps a question from naming it: CortexDB matches the words of a question
+	// against the names in the graph, joining "RF-101" and "最近点检" with a space, and a node that
+	// matched would take the station's place as where the walk starts.
+	add := func(id, kind string, st station, what, desc, text string, at time.Time, detail []Fact) {
+		name := st.name + " · " + what
 		if used[name]++; used[name] > 1 {
 			name += fmt.Sprintf(" #%d", used[name])
 		}
@@ -295,7 +299,7 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 			fmt.Fprintf(&b, "备注：%s", c.Note)
 			detail = append(detail, Fact{"备注", c.Note, false})
 		}
-		add("event:check:"+c.ID, TCheck, st, fmt.Sprintf("%s %s异常 %s", st.name, c.Kind, clock(c.Taken)),
+		add("event:check:"+c.ID, TCheck, st, fmt.Sprintf("%s异常 %s", c.Kind, clock(c.Taken)),
 			fmt.Sprintf("%s %s，%s", clock(c.Taken), c.By, strings.Join(bad, "；")), b.String(), c.Taken, detail)
 	}
 
@@ -363,7 +367,7 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 		if at.IsZero() {
 			at = now
 		}
-		add("event:checks:"+strings.ReplaceAll(f.key, "/", ":"), TCheck, f.st, f.st.name+" 最近点检", desc,
+		add("event:checks:"+strings.ReplaceAll(f.key, "/", ":"), TCheck, f.st, "最近点检", desc,
 			fmt.Sprintf("%s 的点检、检验记录：%s。", about(f.st), strings.Join(parts, "；")), at, detail)
 	}
 
@@ -398,7 +402,7 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 			desc = fmt.Sprintf("已恢复，最远 %+.1fσ，平常 %s", a.Peak, normal)
 		}
 		b.WriteString("这是按这台设备自己的读数学出来的提示，不是报警。")
-		add(fmt.Sprint("event:anomaly:", a.ID), TAnomaly, st, fmt.Sprintf("%s %s%s %s", st.name, a.Field, dir, clock(a.Since)), desc, b.String(), a.Since, detail)
+		add(fmt.Sprint("event:anomaly:", a.ID), TAnomaly, st, fmt.Sprintf("%s%s %s", a.Field, dir, clock(a.Since)), desc, b.String(), a.Since, detail)
 	}
 
 	// calibrations in force, and fits of the last days
@@ -458,7 +462,7 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 			label, value, _ := strings.Cut(p, " ")
 			detail = append(detail, Fact{label, value, false})
 		}
-		add("event:calib:"+c.Plant+":"+c.Station, TCalibration, st, st.name+" 校准", desc, b.String(), at, detail)
+		add("event:calib:"+c.Plant+":"+c.Station, TCalibration, st, "校准", desc, b.String(), at, detail)
 	}
 
 	// commands from AI: those waiting, and the latest
@@ -506,7 +510,7 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 			fmt.Fprintf(&b, "当时设备：%s。", c.Context)
 			detail = append(detail, Fact{"当时设备", c.Context, false})
 		}
-		add("event:command:"+c.Key, TCommand, st, fmt.Sprintf("%s 指令 %s %s", st.name, c.Cmd, clock(c.At)), status+"："+c.Who, b.String(), c.At, detail)
+		add("event:command:"+c.Key, TCommand, st, fmt.Sprintf("指令 %s %s", c.Cmd, clock(c.At)), status+"："+c.Who, b.String(), c.At, detail)
 	}
 	return out
 }
