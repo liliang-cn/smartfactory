@@ -938,8 +938,8 @@ export const ChecksOverview = z.object({
   /** every station some form is for, with its rounds */
   machines: z.array(CheckMachine),
   kinds: z.record(str, str), twinFields: z.record(str, str),
-  /** the caller may fill forms in / set them up */
-  operator: z.boolean(), admin: z.boolean(), now: time,
+  /** the caller's name, whether they may fill forms in, set them up */
+  who: str, operator: z.boolean(), admin: z.boolean(), now: time,
 }).meta({ description: 'GET /api/checks/{company} — members and above' });
 /** One answer as it was kept and judged. */
 export const CheckValue = z.object({

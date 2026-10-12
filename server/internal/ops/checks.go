@@ -49,7 +49,8 @@ type ChecksOverview struct {
 	// Kinds name the forms' kinds; TwinFields the machine fields a number may stand for.
 	Kinds      map[string]string `json:"kinds"`
 	TwinFields map[string]string `json:"twinFields"`
-	// Operator: the caller may fill forms in; Admin: set them up.
+	// Who is the caller; Operator: they may fill forms in; Admin: set them up.
+	Who      string    `json:"who"`
 	Operator bool      `json:"operator"`
 	Admin    bool      `json:"admin"`
 	Now      time.Time `json:"now"`
@@ -68,7 +69,7 @@ func (o *Ops) ChecksOverview(who auth.Who, company string) (*ChecksOverview, err
 		return nil, err
 	}
 	return &ChecksOverview{Forms: forms, Machines: ms, Kinds: checks.Kinds, TwinFields: checks.TwinFields,
-		Operator: who.Can(company, auth.Operator), Admin: who.Can(company, auth.Admin), Now: o.Checks.Now()}, nil
+		Who: who.Name, Operator: who.Can(company, auth.Operator), Admin: who.Can(company, auth.Admin), Now: o.Checks.Now()}, nil
 }
 
 // CheckTemplates are forms to start one from.

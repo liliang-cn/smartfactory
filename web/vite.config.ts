@@ -3,12 +3,17 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-/** The console is its own page: /admin and everything under it get admin.html (the server does the same). */
+/**
+ * The console is its own page: /admin and everything under it get admin.html; and so is the phone
+ * page for forms filled in by hand, /check (the server does the same).
+ */
 const consolePage: Plugin = {
   name: 'sf-console',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      if (req.url && /^\/admin(\/[^.]*)?(\?.*)?$/.test(req.url)) req.url = `/admin.html${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`;
+      const query = req.url?.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+      if (req.url && /^\/admin(\/[^.]*)?(\?.*)?$/.test(req.url)) req.url = `/admin.html${query}`;
+      else if (req.url && /^\/check(\?.*)?$/.test(req.url)) req.url = `/check.html${query}`;
       next();
     });
   },
@@ -25,6 +30,6 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1600,
-    rollupOptions: { input: { main: path.resolve(import.meta.dirname, 'index.html'), admin: path.resolve(import.meta.dirname, 'admin.html') } },
+    rollupOptions: { input: { main: path.resolve(import.meta.dirname, 'index.html'), admin: path.resolve(import.meta.dirname, 'admin.html'), check: path.resolve(import.meta.dirname, 'check.html') } },
   },
 });
