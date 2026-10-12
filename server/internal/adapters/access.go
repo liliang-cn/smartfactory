@@ -92,7 +92,9 @@ func (a *access) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) bool 
 		}
 		return a.device(cl, d, cred)
 	}
-	if len(a.users) == 0 && loopbackRemote(cl.Net.Remote) {
+	// a client on this machine, unless it takes a device's name as its client id: it would
+	// take over that device's session
+	if len(a.users) == 0 && loopbackRemote(cl.Net.Remote) && (a.reg == nil || !a.reg.Known(cl.ID)) {
 		a.set(cl, &ident{kind: local})
 		return true
 	}

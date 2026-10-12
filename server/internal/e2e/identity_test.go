@@ -93,6 +93,9 @@ func TestDeviceIdentity(t *testing.T) {
 	if _, err := connect("anon", "", ""); err != nil {
 		t.Fatalf("a client on this machine is refused while the broker has no shared users: %v", err)
 	}
+	if _, err := connect("rf-line1", "", ""); err == nil {
+		t.Fatal("a client on this machine took a device's name without its token")
+	}
 
 	var lost atomic.Bool
 	cmds := make(chan string, 4)
