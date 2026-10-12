@@ -446,6 +446,12 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			assistants.Checks = manual
 		}
 	}
+	// what happens to the machines (checks, reading hints, calibrations, AI commands), in each
+	// company's knowledge base
+	if kb != nil {
+		kb.Watch(knowledge.Sources{Checks: manual, Hints: hints, Calib: calibration, Guard: cmds, Audit: trail})
+		go kb.RunEvents(ctx)
+	}
 	ms := mcptools.New(hub, eng, version, trail, cmds)
 	var mq *ops.MQTT
 	if broker != nil {

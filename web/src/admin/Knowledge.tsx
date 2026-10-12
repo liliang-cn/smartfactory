@@ -1,5 +1,5 @@
-// 知识: a company's knowledge base — its process as a graph, its production orders and its
-// documents linked to them — to look through, ask, and rebuild.
+// 知识: a company's knowledge base — its process as a graph, its production orders, what recently
+// happened at its machines and its documents linked to them — to look through, ask, and rebuild.
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowUpIcon, BookOpenTextIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon, WorkflowIcon } from 'lucide-react';
@@ -17,13 +17,19 @@ const REL: Record<string, [string, string]> = {
   has_plant: ['有工厂', '属于公司'], has_line: ['有产线', '在工厂'], makes: ['生产', '由这条线生产'],
   has_station: ['有工位', '在产线'], is_a: ['是', '这种设备的工位'], feeds: ['下游', '上游'], supplies: ['供应', '供应商'], sold_to: ['卖给', '买它'],
   for_customer: ['客户', '工单'], of_product: ['产品', '工单'], runs_on: ['产线', '工单'],
+  checked_on: ['工位', '点检'], seen_on: ['工位', '读数异常'], calibrates: ['工位', '校准'], targets: ['工位', 'AI 指令'],
 };
 const relLabel = (type: string, out: boolean) => REL[type]?.[out ? 0 : 1] ?? type;
+const EVENTS: api.EntityKind[] = ['check', 'anomaly', 'calibration', 'command'];
 
 const FROM: Record<api.Passage['from'], { label: string; tone: string }> = {
   doc: { label: '文档', tone: 'bg-success-soft text-success' },
   process: { label: '工艺', tone: 'bg-brand-soft text-primary' },
   order: { label: '工单', tone: 'bg-danger-soft text-destructive' },
+  check: { label: '点检', tone: 'bg-warning-soft text-warning' },
+  anomaly: { label: '读数异常', tone: 'bg-warning-soft text-warning' },
+  calibration: { label: '校准', tone: 'bg-maint-soft text-maint' },
+  command: { label: 'AI 指令', tone: 'bg-maint-soft text-maint' },
 };
 
 const STATUS: Record<api.Order['status'], string> = { queued: '排队', running: '生产中', done: '已完成', cancelled: '已撤回' };
@@ -94,14 +100,40 @@ function EntityCard({ company, name, onPick }: { company: string; name: string; 
         </span>
       </div>
       {e.kind === 'order' && <OrderCard company={company} no={e.name} />}
+      {e.detail && e.detail.length > 0 && (
+        <dl className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-2 gap-y-1 rounded-xl border p-3 text-[12.5px]">
+          {e.detail.map((d, i) => (
+            <div key={i} className="contents">
+              <dt className="text-muted-foreground">{d.label}</dt>
+              <dd className={cn('break-words', d.bad && 'font-bold text-destructive')}>{d.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       <dl className="grid gap-2">
         {[...groups].map(([k, ls]) => (
           <div key={k} className="grid grid-cols-[72px_minmax(0,1fr)] items-start gap-2">
             <dt className="pt-0.5 text-[12px] font-bold text-muted-foreground">{k}</dt>
-            <dd className="flex flex-wrap gap-1.5">
-              {ls.slice(0, 24).map((l) => <Chip key={l.name + l.type} name={l.name} kind={l.kind as api.EntityKind} onPick={onPick} />)}
-              {ls.length > 24 && <span className="text-[12px] text-muted-foreground">等 {ls.length} 个</span>}
-            </dd>
+            {EVENTS.includes(ls[0].kind as api.EntityKind) ? (
+              // what happened at a station: the latest first, each with what it was
+              <dd className="grid gap-1">
+                {ls.slice(0, 8).map((l) => (
+                  <button key={l.name} type="button" onClick={() => onPick(l.name)} className="grid rounded-lg px-2 py-1 text-left hover:bg-surface">
+                    <span className="flex items-center gap-1.5 text-[12.5px] font-bold">
+                      <span className="size-2 shrink-0 rounded-full" style={{ background: KIND[l.kind as api.EntityKind].color }} />
+                      <span className="truncate">{l.name}</span>
+                    </span>
+                    {l.title && <span className="truncate pl-3.5 text-[12px] text-muted-foreground">{l.title}</span>}
+                  </button>
+                ))}
+                {ls.length > 8 && <span className="px-2 text-[12px] text-muted-foreground">等 {ls.length} 条</span>}
+              </dd>
+            ) : (
+              <dd className="flex flex-wrap gap-1.5">
+                {ls.slice(0, 24).map((l) => <Chip key={l.name + l.type} name={l.name} kind={l.kind as api.EntityKind} onPick={onPick} />)}
+                {ls.length > 24 && <span className="text-[12px] text-muted-foreground">等 {ls.length} 个</span>}
+              </dd>
+            )}
           </div>
         ))}
       </dl>
@@ -185,7 +217,8 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
 
   if (error) return <section className="rounded-[18px] bg-card p-5 shadow-float"><p className="text-[13px] text-destructive">{error}</p></section>;
   const k = st?.kinds ?? {};
-  const counts: [api.EntityKind, number][] = (['plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order'] as const).map((x) => [x, k[x] ?? 0]);
+  const counts: [api.EntityKind, number][] = (['plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command'] as const)
+    .map((x) => [x, k[x] ?? 0]);
   return (
     <div className="grid gap-5">
       <section className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-[18px] bg-card px-5 py-4 shadow-float">
@@ -198,7 +231,7 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
         ))}
         <span className="h-5 w-px bg-border max-sm:hidden" />
         <span className="text-[12.5px] text-muted-foreground">
-          {st ? <>工艺 <b className="text-foreground tabular-nums">{st.process}</b> 段，{st.orders > 0 && <>工单 <b className="text-foreground tabular-nums">{st.orders}</b> 张，</>}文档 <b className="text-foreground tabular-nums">{st.docs}</b> 段（资料库 {st.library} 篇{st.library > st.indexed ? `，${st.library - st.indexed} 篇还没入库` : ''}）</> : ' '}
+          {st ? <>工艺 <b className="text-foreground tabular-nums">{st.process}</b> 段，{st.orders > 0 && <>工单 <b className="text-foreground tabular-nums">{st.orders}</b> 张，</>}{st.events > 0 && <>设备记录 <b className="text-foreground tabular-nums">{st.events}</b> 条，</>}文档 <b className="text-foreground tabular-nums">{st.docs}</b> 段（资料库 {st.library} 篇{st.library > st.indexed ? `，${st.library - st.indexed} 篇还没入库` : ''}）</> : ' '}
         </span>
         <div className="ml-auto flex items-center gap-2">
           {admin && <Button variant="outline" size="sm" className="rounded-lg font-bold" disabled={rebuilding === 'busy'} onClick={() => setRebuilding('ask')}><RefreshCwIcon className={cn(rebuilding === 'busy' && 'animate-spin')} />重建</Button>}

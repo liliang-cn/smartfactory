@@ -24,6 +24,14 @@ type Service struct {
 	Every, Keep time.Duration
 	// Now is the clock (tests set it).
 	Now func() time.Time
+	// Changed is told the company whose machines were fitted, or calibrated or reverted (nil: no one).
+	Changed func(company string)
+}
+
+func (s *Service) changed(company string) {
+	if s.Changed != nil {
+		s.Changed(company)
+	}
 }
 
 func New(st *Store, eng *engine.Engine, readings *series.Store, log *slog.Logger) *Service {
@@ -179,6 +187,17 @@ func appliedValue(p engine.Params, name string) *float64 {
 
 // Status is every machine of the company with what calibration knows of it.
 func (s *Service) Status(company string) ([]Machine, error) {
+	return s.status(company, true)
+}
+
+// Calibrations are the company's machines that were fitted or have a calibration in force, without
+// how their models have been doing (Status reads a day of residuals for that).
+func (s *Service) Calibrations(company string) ([]Machine, error) {
+	all, err := s.status(company, false)
+	return slices.DeleteFunc(all, func(m Machine) bool { return m.FittedAt == nil && m.AppliedAt == nil }), err
+}
+
+func (s *Service) status(company string, full bool) ([]Machine, error) {
 	mps := s.Eng.MachineParams(company)
 	if mps == nil {
 		return nil, fmt.Errorf("没有公司 %s", company)
@@ -191,12 +210,14 @@ func (s *Service) Status(company string) ([]Machine, error) {
 	if err != nil {
 		return nil, err
 	}
-	sums, err := s.Store.summaries(company, s.Now().Add(-24*time.Hour))
-	if err != nil {
-		return nil, err
+	sums := map[string][]Summary{}
+	if full {
+		if sums, err = s.Store.summaries(company, s.Now().Add(-24*time.Hour)); err != nil {
+			return nil, err
+		}
 	}
 	stored := map[string]bool{}
-	if s.Series != nil {
+	if full && s.Series != nil {
 		as, err := s.Series.Assets(company)
 		if err != nil {
 			return nil, err
@@ -302,6 +323,7 @@ func (s *Service) Fit(ctx context.Context, company string, names []string, hours
 			return nil, err
 		}
 	}
+	s.changed(company)
 	all, err := s.Status(company)
 	if err != nil {
 		return nil, err
@@ -473,6 +495,7 @@ func (s *Service) Apply(company string, names []string, by string) ([]Outcome, e
 		}
 		out = append(out, Outcome{Machine: k, OK: true, Params: n})
 	}
+	defer s.changed(company)
 	return out, s.Push(company)
 }
 
@@ -498,6 +521,7 @@ func (s *Service) Revert(company string, names []string) ([]Outcome, error) {
 			out = append(out, Outcome{Machine: key(mp.Plant, mp.Asset), Error: "没有在用的校准"})
 		}
 	}
+	defer s.changed(company)
 	return out, s.Push(company)
 }
 

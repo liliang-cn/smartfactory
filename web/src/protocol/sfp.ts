@@ -703,26 +703,34 @@ export const SaveTemplate = z.object({
 
 // ---------- knowledge base (/api/knowledge/{company}) ----------
 
-/** What a thing in the graph is: the process, and the production orders from the ERP. */
-export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order']);
+/**
+ * What a thing in the graph is: the process, the production orders from the ERP, and what recently happened to a machine —
+ * check (a form out of spec, or a station's latest checks) · anomaly (a hint that a reading is unusual) · calibration · command (one an AI sent)
+ */
+export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command']);
 /**
  * has_plant · has_line · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to ·
- * for_customer (order → customer) · of_product (order → product) · runs_on (order → line)
+ * for_customer (order → customer) · of_product (order → product) · runs_on (order → line) ·
+ * checked_on (check → station) · seen_on (anomaly → station) · calibrates (calibration → station) · targets (command → station)
  */
-export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on']);
+export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on',
+  'checked_on', 'seen_on', 'calibrates', 'targets']);
 
 export const KnowledgeOverview = z.object({
   kinds: z.record(str, num),
   relations: z.record(str, num),
-  /** passages from documents, from the process, and one per production order kept */
-  docs: num, process: num, orders: num,
+  /** passages from documents, from the process, one per production order kept, and one per thing that happened to a machine */
+  docs: num, process: num, orders: num, events: num,
   /** documents in the library, and how many are in the knowledge base */
   library: num, indexed: num,
 }).meta({ description: 'GET /api/knowledge/{company} — members and above' });
 
 export const Passage = z.object({
-  /** doc: a passage of a library document (doc, part locate it) · process: the company's process · order: a production order */
-  from: z.enum(['doc', 'process', 'order']),
+  /**
+   * doc: a passage of a library document (doc, part locate it) · process: the company's process · order: a production order ·
+   * check · anomaly · calibration · command: what happened to a machine
+   */
+  from: z.enum(['doc', 'process', 'order', 'check', 'anomaly', 'calibration', 'command']),
   title: str, doc: str.optional(), part: num, text: str, entities: z.array(str).optional(),
 });
 export const KnowledgeAnswer = z.object({
@@ -732,9 +740,12 @@ export const KnowledgeAnswer = z.object({
   entities: z.array(str).optional(),
 }).meta({ description: 'GET /api/knowledge/{company}/search?q=&limit=' });
 
+/** title: what happened, in a line, for a check, an anomaly, a calibration or a command */
 const Link = z.object({ type: str, out: z.boolean(), name: str, kind: str, title: str.optional() });
+/** one line of what happened (a value on a form, a σ, a parameter, who decided); bad: out of spec, overdue, refused */
+const Fact = z.object({ label: str, value: str, bad: z.boolean().optional() });
 export const EntityAnswer = z.object({
-  entity: z.object({ name: str, kind: EntityKind, links: z.array(Link), mentions: z.array(str) }).optional(),
+  entity: z.object({ name: str, kind: EntityKind, links: z.array(Link), mentions: z.array(str), detail: z.array(Fact).optional() }).optional(),
   /** when nothing has exactly that name: things whose names contain it */
   candidates: z.array(Link),
 }).meta({ description: 'GET /api/knowledge/{company}/entity?name=' });

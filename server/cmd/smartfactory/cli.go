@@ -809,6 +809,7 @@ func cliKB(ctx context.Context, args []string) error {
 			Docs      int            `json:"docs"`
 			Process   int            `json:"process"`
 			Orders    int            `json:"orders"`
+			Events    int            `json:"events"`
 			Library   int            `json:"library"`
 			Indexed   int            `json:"indexed"`
 		}
@@ -826,7 +827,10 @@ func cliKB(ctx context.Context, args []string) error {
 		if st.Orders > 0 {
 			fmt.Printf("工单：%d 张，连到客户 %d、产品 %d、产线 %d\n", st.Orders, st.Relations["for_customer"], st.Relations["of_product"], st.Relations["runs_on"])
 		}
-		fmt.Printf("段落：工艺 %d，工单 %d，文档 %d（资料库 %d 篇，已入库 %d 篇）\n", st.Process, st.Orders, st.Docs, st.Library, st.Indexed)
+		if st.Events > 0 {
+			fmt.Printf("设备记录（30 天内）：点检 %d、读数异常 %d、校准 %d、AI 指令 %d\n", st.Kinds["check"], st.Kinds["anomaly"], st.Kinds["calibration"], st.Kinds["command"])
+		}
+		fmt.Printf("段落：工艺 %d，工单 %d，设备记录 %d，文档 %d（资料库 %d 篇，已入库 %d 篇）\n", st.Process, st.Orders, st.Events, st.Docs, st.Library, st.Indexed)
 	case "search":
 		if arg == "" {
 			return errors.New(`smartfactory kb <company> search "问题"`)
@@ -857,6 +861,8 @@ func cliKB(ctx context.Context, args []string) error {
 				tag = green("文档")
 			case "order":
 				tag = red("工单")
+			case "check", "anomaly", "calibration", "command":
+				tag = red(kindLabel[p.From])
 			}
 			fmt.Printf("\n%d. %s %s\n", i+1, tag, bold(p.Title))
 			fmt.Println(indent(strings.TrimSpace(p.Text), "   "))
@@ -869,10 +875,14 @@ func cliKB(ctx context.Context, args []string) error {
 			Entity *struct {
 				Name, Kind string
 				Links      []struct {
-					Type, Name, Kind string
-					Out              bool
+					Type, Name, Kind, Title string
+					Out                     bool
 				}
 				Mentions []string
+				Detail   []struct {
+					Label, Value string
+					Bad          bool
+				}
 			}
 			Candidates []struct{ Name, Kind string }
 		}
@@ -896,8 +906,15 @@ func cliKB(ctx context.Context, args []string) error {
 		}
 		e := a.Entity
 		fmt.Printf("%s %s\n", bold(e.Name), dim(kindLabel[e.Kind]))
+		for _, d := range e.Detail {
+			v := d.Value
+			if d.Bad {
+				v = red(v)
+			}
+			fmt.Printf("  %s %s\n", dim(d.Label), v)
+		}
 		for _, l := range e.Links {
-			fmt.Printf("  %s %s %s\n", relLabel(l.Type, l.Out), l.Name, dim(kindLabel[l.Kind]))
+			fmt.Printf("  %s %s %s %s\n", relLabel(l.Type, l.Out), l.Name, dim(kindLabel[l.Kind]), dim(l.Title))
 		}
 		if len(e.Mentions) > 0 {
 			fmt.Println(dim("  提到它的段落："))
@@ -986,6 +1003,7 @@ func cliKB(ctx context.Context, args []string) error {
 
 var kindLabel = map[string]string{
 	"company": "公司", "plant": "工厂", "line": "产线", "station": "工位", "machine": "设备", "product": "产品", "supplier": "供应商", "customer": "客户", "order": "工单",
+	"check": "点检", "anomaly": "读数异常", "calibration": "校准", "command": "AI 指令",
 }
 
 // relLabel reads a relation from the thing's side: "IH-101 feeds HP-101" is 下游 from IH-101.
@@ -995,6 +1013,7 @@ func relLabel(typ string, out bool) string {
 		"has_station": {"有工位", "在产线"}, "is_a": {"是", "这种设备的工位"}, "feeds": {"下游", "上游"},
 		"supplies": {"供应", "供应商"}, "sold_to": {"卖给", "买"},
 		"for_customer": {"客户", "工单"}, "of_product": {"产品", "工单"}, "runs_on": {"产线", "工单"},
+		"checked_on": {"工位", "点检"}, "seen_on": {"工位", "读数异常"}, "calibrates": {"工位", "校准"}, "targets": {"工位", "AI 指令"},
 	}
 	l, ok := labels[typ]
 	if !ok {

@@ -111,6 +111,9 @@ type Guard struct {
 	Log   *slog.Logger
 	// Now is the clock (tests set it).
 	Now func() time.Time
+	// Changed is told the company an AI's command went to, or whose request was decided or
+	// lapsed (nil: no one).
+	Changed func(company string)
 
 	db      *sql.DB
 	mu      sync.Mutex
@@ -234,6 +237,9 @@ func (g *Guard) remember(company, plantAsset string) {
 
 // Send judges a command and carries it out when it may go: the twin first, then the equipment.
 func (g *Guard) Send(o Origin, c Command) Verdict {
+	if o.AI {
+		defer g.changed(c.Company)
+	}
 	real := g.Real(c.Company, c.Plant, c.Asset)
 	if !real {
 		v := g.exec(o, c, "")
@@ -485,7 +491,14 @@ func (g *Guard) decide(r *Request, status, by, result string) (*Request, error) 
 	}
 	r.Status, r.DecidedBy, r.DecidedAt, r.Result = status, by, &now, result
 	g.notify(*r)
+	g.changed(r.Company)
 	return r, nil
+}
+
+func (g *Guard) changed(company string) {
+	if g.Changed != nil {
+		g.Changed(company)
+	}
 }
 
 // lapse lets every request past its time expire.
@@ -514,6 +527,7 @@ func (g *Guard) lapse() {
 		c := Command{Company: r.Company, Plant: r.Plant, Asset: r.Asset, Cmd: r.Cmd, Arg: r.Arg}
 		g.record(auth.Who{Name: "指令把关"}, "guard", c, "command.expired", Verdict{Outcome: Refused, Msg: r.Result, Request: &r}, r.Who+" 发起")
 		g.notify(r)
+		g.changed(r.Company)
 	}
 }
 

@@ -163,6 +163,8 @@ type Detector struct {
 	Log   *slog.Logger
 	// Now is the clock for what is not a reading's own time (tests set it).
 	Now func() time.Time
+	// Changed is told the company a hint began or ended in, once it is kept (nil: no one).
+	Changed func(company string)
 
 	store    *Store
 	skip     map[string]bool
@@ -671,6 +673,9 @@ func (d *Detector) Reset(company, plant, asset string) (bool, error) {
 			}
 		}
 	}
+	if len(ended) > 0 && d.Changed != nil {
+		d.Changed(company)
+	}
 	return true, nil
 }
 
@@ -752,6 +757,8 @@ func (d *Detector) record(e event) {
 	}
 	if err != nil {
 		d.Log.Error("anomaly: keep hint", "err", err)
+	} else if d.Changed != nil {
+		d.Changed(a.Company)
 	}
 }
 
