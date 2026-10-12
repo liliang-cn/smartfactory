@@ -37,7 +37,7 @@ import (
 var cliCommands = map[string]func(ctx context.Context, args []string) error{
 	"login": cliLogin, "logout": cliLogout, "whoami": cliWhoami,
 	"company": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
-	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "activity": cliActivity, "agent": cliAgent,
+	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "device": cliDevice, "activity": cliActivity, "agent": cliAgent,
 }
 
 // ---- output ----

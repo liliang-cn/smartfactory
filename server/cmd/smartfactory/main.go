@@ -9,7 +9,7 @@
 //	smartfactory version
 //
 // and, against a running server, the console's commands (cli.go): login, company, industries,
-// tokens, kb, orders, activity, agent.
+// tokens, kb, orders, calib, guard, device, activity, agent.
 package main
 
 import (

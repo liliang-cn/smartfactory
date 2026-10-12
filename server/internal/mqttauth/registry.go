@@ -81,10 +81,10 @@ type Registry struct {
 	dirty    map[string]bool
 	reserved map[string]bool
 	// every name a device was ever registered under
-	names map[string]bool
-	ca    *CA
-	onAdd    func()
-	onDrop   func(name string)
+	names  map[string]bool
+	ca     *CA
+	onAdd  func()
+	onDrop func(name string)
 }
 
 func Open(dir string) (*Registry, error) {
