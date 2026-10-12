@@ -142,11 +142,11 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				n, _ := m["limit"].(float64)
 				return o.Activity(ctx, who, s(m, "company"), 0, max(10, min(int(n), 100)))
 			}},
-		{"knowledge_search", "在一家公司的知识库里搜：文档段落、工艺说明（含每个工位的上下游）和生产工单。", obj(map[string]any{"company": str("公司 id"), "query": str("问题")}, "company", "query"),
+		{"knowledge_search", "在一家公司的知识库里搜：文档段落、工艺说明（含每个工位的上下游）、生产工单，和设备最近 30 天的点检超标、读数异常、校准、AI 指令。", obj(map[string]any{"company": str("公司 id"), "query": str("问题")}, "company", "query"),
 			func(m map[string]any) (any, error) {
 				return o.KnowledgeSearch(ctx, who, s(m, "company"), s(m, "query"), 6)
 			}},
-		{"knowledge_entity", "知识图谱里一样东西（工位编号、设备名、产线、产品、供应商、客户、工单号）和它的关系。", obj(map[string]any{"company": str("公司 id"), "name": str("名字")}, "company", "name"),
+		{"knowledge_entity", "知识图谱里一样东西（工位编号、设备名、产线、产品、供应商、客户、工单号）和它的关系；工位还列出它最近的点检、读数异常、校准、AI 指令，查其中一条可得详情。", obj(map[string]any{"company": str("公司 id"), "name": str("名字")}, "company", "name"),
 			func(m map[string]any) (any, error) { return o.KnowledgeEntity(ctx, who, s(m, "company"), s(m, "name")) }},
 		{"list_orders", "一家公司的生产工单（来自 ERP）：在做的、排队的（按将要生产的顺序）、完成的和撤回的，含产线、完成数、交期、客户。", obj(map[string]any{
 			"company": str("公司 id"), "status": str("queued、running、done、cancelled，逗号分隔，可省"), "q": str("按工单号、料号、客户、产线找，可省"),
