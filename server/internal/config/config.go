@@ -62,6 +62,29 @@ type Series struct {
 	// Limits override the plausible range and the fastest change of a field; a reading outside
 	// them is kept, flagged, and not given to the twin.
 	Limits []Limit `json:"limits"`
+	// Anomaly notices readings that are plausible but unusual for their machine.
+	Anomaly Anomaly `json:"anomaly"`
+}
+
+// Anomaly learns each measured machine's normal per field and state, and hints at a reading
+// that stays K standard deviations away from it for Sustain, or an average that drifts off it.
+// Zero values take the defaults: K 3, Sustain 1m, Warmup 24h and 100 readings, Span 200000.
+type Anomaly struct {
+	// Off stops it: nothing is learned or hinted at.
+	Off bool `json:"off,omitempty"`
+	// K is how many standard deviations from the normal count as unusual.
+	K float64 `json:"k,omitempty"`
+	// Sustain is how long a reading must stay unusual before it is a hint (and back to normal
+	// before the hint ends).
+	Sustain Duration `json:"sustain"`
+	// Warmup is how long a machine's field is learned in a state before it is judged in it: a
+	// day, so the normal has seen a day's swings (the hall warming in the afternoon).
+	Warmup Duration `json:"warmup"`
+	// Span is how many readings the normal follows once warmed up: longer takes a slow drift
+	// for normal less, shorter adapts sooner to a machine that changed.
+	Span int `json:"span,omitempty"`
+	// Skip are fields never judged, besides counters and positions.
+	Skip []string `json:"skip,omitempty"`
 }
 
 // Limit applies to the fields of the assets it matches ("" or "*" matches any; a trailing *
