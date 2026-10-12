@@ -17,6 +17,8 @@ import { ago } from './Accounts';
 import { Panel } from './Panel';
 
 const span = (s: number) => (s >= 86400 ? `${+(s / 86400).toFixed(1)} 天` : s >= 3600 ? `${+(s / 3600).toFixed(1)} 小时` : s >= 60 ? `${Math.round(s / 60)} 分钟` : `${Math.round(s)} 秒`);
+/** a field read since the server started (its last reading is not the zero time) */
+const read = (f: { at: string }) => Date.parse(f.at) > 0;
 const when = (iso: string) => new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function HintRow({ a }: { a: api.Anomaly }) {
@@ -48,7 +50,9 @@ function MachineRow({ m, admin, onReset }: { m: api.AnomalyReport['machines'][nu
           <ChevronDownIcon className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
           <span className="grid min-w-0 leading-tight">
             <b className="font-mono text-[14px]">{m.asset}<span className="ml-2 font-sans text-[12.5px] font-semibold text-muted-foreground">{m.plant} · {stateLabel(m.state)}</span></b>
-            <small className="truncate text-[12px] text-muted-foreground">{m.fields.map((f) => fieldLabel(f.field)).join('、')} · 来自 {m.source}{last ? ` · ${ago(new Date(last).toISOString())}` : ''}</small>
+            <small className="truncate text-[12px] text-muted-foreground">
+              {m.fields.map((f) => fieldLabel(f.field)).join('、')}{m.source ? ` · 来自 ${m.source}` : ''}{last > 0 ? ` · ${ago(new Date(last).toISOString())}` : ' · 重启后还没收到读数'}
+            </small>
           </span>
         </button>
         <span className="flex items-center gap-1.5 text-[12px]">
@@ -72,7 +76,7 @@ function MachineRow({ m, admin, onReset }: { m: api.AnomalyReport['machines'][nu
                   <TableCell className="text-right tabular-nums">{short(b.mean)}±{short(b.sigma)}{!b.warm && <span className="ml-1.5 text-[12px] text-muted-foreground">学了 {Math.round(b.progress * 100)}%</span>}</TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">{b.n.toLocaleString()}</TableCell>
                   <TableCell className={cn('text-right font-bold tabular-nums', f.anomaly ? 'text-warning' : 'text-muted-foreground')}>
-                    {i === 0 ? `${short(f.value)}${f.now?.warm ? `  ${sigma(f.z)}` : ''}` : ''}
+                    {i === 0 && read(f) ? `${short(f.value)}${f.now?.warm ? `  ${sigma(f.z)}` : ''}` : i === 0 ? '—' : ''}
                   </TableCell>
                 </TableRow>
               )))}
@@ -100,7 +104,7 @@ export function AnomalyPanel({ c }: { c: api.Company }) {
   const ended = (rep?.recent ?? []).filter((a) => a.ended).slice(0, 20);
   const s = rep?.settings;
   return (
-    <Panel title={<span className="flex items-center gap-2"><ActivityIcon className="size-4 text-warning" />读数异常</span>}>
+    <Panel title={<span className="flex items-center gap-2"><ActivityIcon className="size-4 text-warning" />读数异常</span>} className="xl:col-span-2">
       {error && <p className="text-[13px] text-destructive">{error}</p>}
       {s && (
         <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">

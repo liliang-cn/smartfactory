@@ -109,7 +109,7 @@ export function MachineHints({ plant, asset, measured }: { plant: string; asset:
                 return (
                   <tr key={f.field} className="border-t first:border-t-0">
                     <td className="py-1 pr-2 font-bold">{fieldLabel(f.field)}</td>
-                    <td className="py-1 pr-2 text-right">{short(f.value)}<span className="ml-0.5 text-muted-foreground">{UNIT[f.field] ?? ''}</span></td>
+                    <td className="py-1 pr-2 text-right">{Date.parse(f.at) > 0 ? <>{short(f.value)}<span className="ml-0.5 text-muted-foreground">{UNIT[f.field] ?? ''}</span></> : '—'}</td>
                     <td className={cn('py-1 pr-2 text-right font-extrabold', off ? 'text-warning' : 'text-muted-foreground')}>{warm ? sigma(f.z) : ''}</td>
                     <td className="py-1 text-right text-muted-foreground">
                       {f.now && f.now.state !== m.state ? `${stateLabel(f.now.state)}时` : ''}
