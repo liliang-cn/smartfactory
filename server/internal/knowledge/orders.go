@@ -228,7 +228,7 @@ func (b *Base) SyncOrders(ctx context.Context, id string) error {
 	for no := range next.Items {
 		keep[no] = true
 	}
-	prune(ctx, c.db, keep)
+	prune(ctx, c.db, map[string]map[string]bool{TOrder: keep})
 	out, _ := json.Marshal(next)
 	return os.WriteFile(b.orderPath(id), out, 0o644)
 }

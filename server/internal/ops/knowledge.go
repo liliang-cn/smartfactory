@@ -115,9 +115,13 @@ func (o *Ops) KnowledgeRebuild(ctx context.Context, who auth.Who, via, company s
 	}
 	o.KB.Forget(company)
 	o.KB.ForgetOrders(company)
+	o.KB.ForgetEvents(company)
 	err := o.KB.SyncProcess(ctx, company)
 	if err == nil {
 		err = o.KB.SyncOrders(ctx, company)
+	}
+	if err == nil {
+		err = o.KB.SyncEvents(ctx, company)
 	}
 	n := 0
 	if err == nil && o.Agents != nil {

@@ -1,7 +1,8 @@
 // Package knowledge is each company's knowledge base: its process as a graph (plants, lines,
 // stations in order, products, machines, suppliers, customers) laid out by the engine, its
-// production orders linked to the customer, product and line of each, and its documents cut into
-// passages and linked to the things in that graph they name. Questions are answered from all of
+// production orders linked to the customer, product and line of each, what recently happened to
+// its machines (checks, reading hints, calibrations, AI commands) linked to the station, and its
+// documents cut into passages and linked to the things in that graph they name. Questions are answered from all of
 // them at once: a passage that names a machine is found from a question that only names the
 // station built from it, a customer's orders from a question that names the customer. It is a
 // CortexDB file per company, without embeddings (BM25 plus a personalized PageRank walk over the
@@ -9,6 +10,7 @@
 package knowledge
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 	"github.com/liliang-cn/cortexdb/v2/pkg/graph"
@@ -43,6 +46,15 @@ type Base struct {
 	omu    sync.Mutex
 	dirty  map[string]bool
 	kick   chan struct{}
+
+	// What happened to a company's machines (events.go); nil keeps none of that kind.
+	Checks       func(company string, since time.Time) ([]CheckInfo, error)
+	Rounds       func(company string) ([]RoundInfo, error)
+	Anomalies    func(company string, since time.Time) ([]AnomalyInfo, error)
+	Calibrations func(company string) ([]CalibInfo, error)
+	Commands     func(company string, since time.Time) ([]CommandInfo, error)
+	edirty       map[string]bool
+	ekick        chan struct{}
 }
 
 type company struct {
@@ -57,7 +69,8 @@ func Open(dir string, eng *engine.Engine, log *slog.Logger) (*Base, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}, dirty: map[string]bool{}, kick: make(chan struct{}, 1)}, nil
+	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}, dirty: map[string]bool{}, kick: make(chan struct{}, 1),
+		edirty: map[string]bool{}, ekick: make(chan struct{}, 1)}, nil
 }
 
 func (b *Base) Close() {
@@ -97,7 +110,7 @@ func (b *Base) Drop(id string) {
 	}
 	b.mu.Unlock()
 	if engine.ValidID.MatchString(id) {
-		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json"} {
+		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json"} {
 			os.Remove(filepath.Join(b.dir, f))
 		}
 	}
@@ -167,6 +180,12 @@ const (
 	TSupplier = "supplier"
 	TCustomer = "customer"
 	TOrder    = "order"
+	// what happened to a machine: a check filled in on it, a hint that a reading is unusual, its
+	// calibration, a command an AI sent it
+	TCheck       = "check"
+	TAnomaly     = "anomaly"
+	TCalibration = "calibration"
+	TCommand     = "command"
 
 	RHasPlant   = "has_plant"
 	RHasLine    = "has_line"
@@ -180,10 +199,16 @@ const (
 	RForCustomer = "for_customer"
 	ROfProduct   = "of_product"
 	RRunsOn      = "runs_on"
+	// each of what happened is linked to the station it happened on
+	RCheckedOn  = "checked_on"
+	RSeenOn     = "seen_on"
+	RCalibrates = "calibrates"
+	RTargets    = "targets"
 )
 
 // relations are the relation types the graph keeps (the rest are CortexDB's own: mentions, …).
-var relations = []string{RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn}
+var relations = []string{RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn,
+	RCheckedOn, RSeenOn, RCalibrates, RTargets}
 
 func (b *Base) model(id string) (*Model, error) {
 	js := b.eng.ProcessModel(id)
@@ -511,12 +536,12 @@ func (b *Base) SyncProcess(ctx context.Context, id string) error {
 // prune removes the nodes CortexDB's own extraction adds beside the ones declared here: the
 // prefixes of codes ("HP" of HP-101, which would tie every press of every plant together) and
 // passage titles read as names ("一厂 曲轴 1 线" beside the line 曲轴 1 线). A walk over the graph
-// leaks through them into everything that shares a prefix. Given the orders to keep, it also
-// removes the order nodes of the others.
-func prune(ctx context.Context, db *cortexdb.DB, keepOrders map[string]bool) {
+// leaks through them into everything that shares a prefix. Given the names to keep of some kinds
+// (orders, checks …), it also removes the nodes of those kinds not among them.
+func prune(ctx context.Context, db *cortexdb.DB, keep map[string]map[string]bool) {
 	types := []string{"entity"}
-	if keepOrders != nil {
-		types = append(types, TOrder)
+	for k := range keep {
+		types = append(types, k)
 	}
 	nodes, err := db.Graph().ListNodes(ctx, &graph.GraphFilter{NodeTypes: types})
 	if err != nil {
@@ -524,12 +549,12 @@ func prune(ctx context.Context, db *cortexdb.DB, keepOrders map[string]bool) {
 	}
 	var ids []string
 	for _, n := range nodes {
-		if n.NodeType == TOrder {
+		if names, ok := keep[n.NodeType]; ok {
 			name, _ := n.Properties["name"].(string)
 			if name == "" {
 				name = n.Content
 			}
-			if keepOrders[name] {
+			if names[name] {
 				continue
 			}
 		}
@@ -677,7 +702,7 @@ func (b *Base) HasDoc(ctx context.Context, company, doc string) bool {
 // Passage is one piece of what the base knows, found for a question.
 type Passage struct {
 	// From: doc (a document in the library) | process (the company's process) | order (a
-	// production order)
+	// production order) | check | anomaly | calibration | command (what happened to a machine)
 	From  string `json:"from"`
 	Title string `json:"title"`
 	// Doc and Part locate a document passage (read_doc reads around it).
@@ -685,6 +710,10 @@ type Passage struct {
 	Part     int      `json:"part"`
 	Text     string   `json:"text"`
 	Entities []string `json:"entities,omitempty"`
+
+	// what happened: the station it happened on, and when (epoch milliseconds)
+	station string
+	at      int64
 }
 
 // Answer is what a search found and how it searched.
@@ -713,10 +742,21 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 	req := cortexdb.KnowledgeSearchRequest{
 		Query: query, EntityNames: names, Keywords: uniq(append(slices.Clone(keywords), found...)), TopK: pool, MaxContextChunks: pool, RetrievalMode: "auto",
 	}
+	asked := askedKinds(query)
 	if len(found) > 0 {
-		// co-occurrence is a statistical guess; the relations written here are facts
+		// co-occurrence is a statistical guess; the relations written here are facts. What
+		// happened to a station is walked to when the question asks about it ("RF-101 的点检"), and
+		// otherwise barely: a station with thirty checks and hints would hand them most of what
+		// the walk brings it, away from its own passage and the documents about it.
+		w := map[string]float64{"co_occurs": 0}
+		for kind, rel := range eventRelation {
+			w[rel] = 0.2
+			if asked[kind] {
+				w[rel] = 4
+			}
+		}
 		req.RetrievalMode = "ppr"
-		req.PPR = &cortexdb.PPRRetrievalOptions{EdgeTypeWeights: map[string]float64{"co_occurs": 0}}
+		req.PPR = &cortexdb.PPRRetrievalOptions{EdgeTypeWeights: w}
 	}
 	r, err := c.db.SearchKnowledge(ctx, req)
 	if err != nil {
@@ -738,6 +778,9 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 		p := Passage{From: "process", Title: titles[ch.DocumentID], Text: ch.Content, Entities: ch.Entities}
 		if m := meta[ch.DocumentID]; m["kind"] == "order" || strings.HasPrefix(ch.DocumentID, "order:") {
 			p.From = "order"
+		} else if _, ok := eventRelation[m["kind"]]; ok {
+			p.From, p.station = m["kind"], m["station"]
+			fmt.Sscan(m["at"], &p.at)
 		} else if m["kind"] == "doc" || strings.HasPrefix(ch.DocumentID, "doc:") {
 			p.From = "doc"
 			p.Doc = m["doc"]
@@ -752,21 +795,32 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 		}
 		out.Passages = append(out.Passages, p)
 	}
-	out.Passages = aboutFirst(out.Passages, found)
+	out.Passages = aboutFirst(out.Passages, found, asked)
 	if len(out.Passages) > k {
 		out.Passages = out.Passages[:k]
 	}
 	return out, nil
 }
 
-// aboutFirst puts first the passages about a thing the question names (its name in the title:
-// the station's own passage, the line's, the order's), then the orders that name one (a line's or
-// a customer's orders), keeping the search's order otherwise.
-func aboutFirst(ps []Passage, named []string) []Passage {
+// aboutFirst puts first what happened to a station the question names of the kinds it asks about
+// (its checks, for "RF-101 的点检"), the latest first; then the passages about a thing the
+// question names (its name in the title: the station's own passage, the line's, the order's), then
+// the orders that name one (a line's or a customer's orders) and what else happened to a station
+// it names, keeping the search's order otherwise.
+func aboutFirst(ps []Passage, named []string, asked map[string]bool) []Passage {
 	if len(named) == 0 {
 		return ps
 	}
 	rank := func(p Passage) int {
+		if _, ok := eventRelation[p.From]; ok {
+			switch {
+			case !slices.Contains(named, p.station):
+				return 2
+			case asked[p.From]:
+				return -1
+			}
+			return 1
+		}
 		for _, n := range named {
 			if strings.HasPrefix(p.Title, n) || strings.HasSuffix(p.Title, " "+n) || p.Title == n {
 				return 0
@@ -782,7 +836,13 @@ func aboutFirst(ps []Passage, named []string) []Passage {
 		return 2
 	}
 	out := slices.Clone(ps)
-	slices.SortStableFunc(out, func(a, b Passage) int { return rank(a) - rank(b) })
+	slices.SortStableFunc(out, func(a, b Passage) int {
+		ra, rb := rank(a), rank(b)
+		if ra != rb || ra != -1 {
+			return ra - rb
+		}
+		return cmp.Compare(b.at, a.at)
+	})
 	return out
 }
 
@@ -842,11 +902,14 @@ type Entity struct {
 	Links []Link `json:"links"`
 	// Mentions are the passages that name it.
 	Mentions []string `json:"mentions"`
+	// Detail is what happened, for a check, an anomaly, a calibration or a command.
+	Detail []Fact `json:"detail,omitempty"`
 }
 
-var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder}
+var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TCheck, TAnomaly, TCalibration, TCommand}
 
-// Lookup is the thing called name (of kind, if given) and its relations.
+// Lookup is the thing called name (of kind, if given) and its relations. What happened to a
+// station comes after the rest, each kind the latest first, with what it was in a line (Title).
 func (b *Base) Lookup(ctx context.Context, company, name string) (*Entity, error) {
 	c, err := b.open(company)
 	if err != nil {
@@ -861,11 +924,14 @@ func (b *Base) Lookup(ctx context.Context, company, name string) (*Entity, error
 		return r.Rows
 	}
 	e := &Entity{Name: name, Links: []Link{}, Mentions: []string{}}
-	for _, row := range q(`MATCH (n {name: $name}) RETURN labels(n)`) {
+	for _, row := range q(`MATCH (n {name: $name}) RETURN labels(n), n.detail`) {
 		for _, l := range row[0].([]any) {
 			if s, _ := l.(string); slices.Contains(kinds, s) {
 				e.Kind = s
 			}
+		}
+		if d, _ := row[1].(string); d != "" {
+			json.Unmarshal([]byte(d), &e.Detail)
 		}
 	}
 	if e.Kind == "" {
@@ -887,11 +953,31 @@ func (b *Base) Lookup(ctx context.Context, company, name string) (*Entity, error
 				}
 				continue
 			}
-			e.Links = append(e.Links, Link{Type: typ, Out: out, Name: other, Kind: kind})
+			l := Link{Type: typ, Out: out, Name: other, Kind: kind}
+			if _, ok := eventRelation[kind]; ok {
+				l.Title, _ = row[3].(string)
+			}
+			e.Links = append(e.Links, l)
 		}
 	}
-	add(q(`MATCH (n {name: $name})-[r]->(m) RETURN type(r), labels(m), m.name`), true)
-	add(q(`MATCH (m)-[r]->(n {name: $name}) RETURN type(r), labels(m), m.name`), false)
+	add(q(`MATCH (n {name: $name})-[r]->(m) RETURN type(r), labels(m), m.name, m.description`), true)
+	add(q(`MATCH (m)-[r]->(n {name: $name}) RETURN type(r), labels(m), m.name, m.description`), false)
+	// the names of what happened end in when (01-02 15:04)
+	event := func(l Link) bool { _, ok := eventRelation[l.Kind]; return ok }
+	slices.SortStableFunc(e.Links, func(a, b Link) int {
+		switch ea, eb := event(a), event(b); {
+		case !ea && !eb:
+			return 0
+		case ea != eb:
+			if ea {
+				return 1
+			}
+			return -1
+		case a.Kind != b.Kind:
+			return strings.Compare(a.Kind, b.Kind)
+		}
+		return strings.Compare(b.Name, a.Name)
+	})
 	return e, nil
 }
 
@@ -955,6 +1041,9 @@ type Stats struct {
 	Process   int            `json:"process"`
 	// Orders are the production orders kept, one passage each.
 	Orders int `json:"orders"`
+	// Events are what recently happened to the machines (checks, hints, calibrations, AI
+	// commands), one passage each.
+	Events int `json:"events"`
 }
 
 func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
@@ -986,7 +1075,8 @@ func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
 	}
 	st.Process = len(ps.IDs)
 	st.Orders = len(b.orderState(company).Items)
-	st.Docs -= st.Process + st.Orders
+	st.Events = len(b.eventState(company).Items)
+	st.Docs -= st.Process + st.Orders + st.Events
 	return st, nil
 }
 
