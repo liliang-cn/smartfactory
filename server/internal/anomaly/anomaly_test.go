@@ -184,6 +184,15 @@ func TestStateSwitch(t *testing.T) {
 	if len(h) != 1 || h[0].State != "idle" || h[0].Z < 10 {
 		t.Fatalf("hints %+v", h)
 	}
+	// running again, as usual: that says nothing of the idle hint, which keeps its numbers
+	r.state("running")
+	r.run("power", 2*time.Minute, 2, flat(120))
+	if h := r.hints(); len(h) != 1 || h[0].Z < 10 {
+		t.Errorf("the idle hint, held against running readings: %+v", h)
+	}
+	if m, _ := r.d.Machine("c", "p", "M1"); m.Fields[0].Now.State != "running" || math.Abs(m.Fields[0].Z) > 4 {
+		t.Errorf("power now %+v, %.1fσ", m.Fields[0].Now, m.Fields[0].Z)
+	}
 }
 
 // Equipment sends a machine's fields in name order, power before state: the power read with a

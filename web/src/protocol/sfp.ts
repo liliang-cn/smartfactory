@@ -910,10 +910,10 @@ export const CommandRequests = z.array(CommandRequest).meta({ description: 'GET 
 export const AnomalyBaseline = z.object({ state: str, n: num, mean: num, sigma: num, warm: z.boolean(), progress: num });
 export const AnomalyField = z.object({
   field: str, value: num, at: time,
-  /** the last reading's distance from the normal of the machine's state now, in σ */
-  z: num,
-  /** the normal of the state it is in (absent until a reading in it); states: every state's, most readings first */
-  now: AnomalyBaseline.optional(), states: z.array(AnomalyBaseline),
+  /** the last reading's distance, in σ, from the normal it was held against: now, that of the state the machine was in (absent until a reading in a state) */
+  z: num, now: AnomalyBaseline.optional(),
+  /** every state's normal, most readings first */
+  states: z.array(AnomalyBaseline),
   anomaly: Anomaly.optional(),
 });
 export const AnomalyMachine = z.object({ plant: str, asset: str, state: str, source: str, fields: z.array(AnomalyField) })

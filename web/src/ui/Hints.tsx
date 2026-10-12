@@ -112,6 +112,7 @@ export function MachineHints({ plant, asset, measured }: { plant: string; asset:
                     <td className="py-1 pr-2 text-right">{short(f.value)}<span className="ml-0.5 text-muted-foreground">{UNIT[f.field] ?? ''}</span></td>
                     <td className={cn('py-1 pr-2 text-right font-extrabold', off ? 'text-warning' : 'text-muted-foreground')}>{warm ? sigma(f.z) : ''}</td>
                     <td className="py-1 text-right text-muted-foreground">
+                      {f.now && f.now.state !== m.state ? `${stateLabel(f.now.state)}时` : ''}
                       {f.now ? (warm ? `平常 ${short(f.now.mean)}±${short(f.now.sigma)}` : `学习中 ${Math.round(f.now.progress * 100)}%`) : '这个状态还没学'}
                     </td>
                   </tr>

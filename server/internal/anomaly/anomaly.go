@@ -382,6 +382,10 @@ func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, a
 		kind = Drift
 	}
 	if h := f.hint; h != nil {
+		if h.State != m.state {
+			// held against another state's normal: it says nothing of this hint
+			return
+		}
 		h.Value, h.Z = x, z
 		if h.Kind == Drift && kind != Level {
 			h.Value, h.Z = s.Short, (s.Short-s.Mean)/sigma
@@ -499,10 +503,9 @@ type Field struct {
 	Field string    `json:"field"`
 	Value float64   `json:"value"`
 	At    time.Time `json:"at"`
-	// Z is the last reading's distance from the normal of the machine's state now, in σ.
-	Z float64 `json:"z"`
-	// Now is the normal of the state the machine is in (absent until a reading in it), States
-	// every state's.
+	// Z is the last reading's distance, in σ, from the normal it was held against: Now, that of
+	// the state the machine was in (absent until a reading in a state). States are every state's.
+	Z       float64    `json:"z"`
 	Now     *Baseline  `json:"now,omitempty"`
 	States  []Baseline `json:"states"`
 	Anomaly *Anomaly   `json:"anomaly,omitempty"`
@@ -536,7 +539,7 @@ func (d *Detector) machineView(k mkey, m *machine) Machine {
 		for st, s := range f.states {
 			b := d.baseline(st, s)
 			x.States = append(x.States, b)
-			if st == m.state && s.N > 0 {
+			if s == f.cur && s.N > 0 {
 				x.Now = &b
 			}
 		}
