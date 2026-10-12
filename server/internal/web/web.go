@@ -73,6 +73,8 @@ type Server struct {
 	Guard *guard.Guard
 	// Series is the readings equipment sent (nil without data).
 	Series *series.Store
+	// History is each company's history database, for those that keep one (the value report).
+	History map[string]ops.PlantHistory
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -144,6 +146,7 @@ func (s *Server) Handler() http.Handler {
 	s.erpRoutes(mux)
 	s.calibRoutes(mux)
 	s.guardRoutes(mux)
+	s.valueRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	mux.Handle("/", s.static())

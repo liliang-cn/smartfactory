@@ -363,6 +363,16 @@ func (o *Ops) Value(ctx context.Context, who auth.Who, company string, p Period)
 	return v, nil
 }
 
+// ValueTool is the report as the assistants ask for it: days back from now, or a first and last
+// day.
+func (o *Ops) ValueTool(ctx context.Context, who auth.Who, company, days, from, to string) (any, error) {
+	p, err := ParsePeriod(days, from, to, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return o.Value(ctx, who, company, p)
+}
+
 func (o *Ops) companyName(id string) string {
 	var list []struct{ ID, Name string }
 	if json.Unmarshal([]byte(o.Engine.List()), &list) == nil {

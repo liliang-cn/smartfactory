@@ -268,10 +268,13 @@ func writeOpError(w http.ResponseWriter, err error) {
 }
 
 // ops is the operations behind the console, built from the server's parts unless given.
+// Operations is what the console does, for callers outside the HTTP API (the MCP tools).
+func (s *Server) Operations() *ops.Ops { return s.ops() }
+
 func (s *Server) ops() *ops.Ops {
 	if s.Ops == nil {
 		s.Ops = &ops.Ops{Engine: s.Engine, Keys: s.Keys, Audit: s.Audit, Agents: s.Agents, KB: s.Knowledge, Hub: s.Hub, Advisors: s.Advisors, Version: s.Version,
-			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard}
+			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard, Consult: s.consult, History: s.History}
 	}
 	return s.Ops
 }

@@ -401,6 +401,23 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 
 命令行：`smartfactory guard <company>`（`set -level guarded -approve start,speed -expire 15`、`set -f settings.json`、`pending`、`requests`、`approve <编号>`、`deny <编号> -reason …`）。工作台助手有 `guard_status`，批准、拒绝要管理员确认。
 
+### 成效 `/api/value/{company}`
+
+一段时间里孪生和它的 AI 给这家公司做了什么，每个数（`ValueFigure`）带 `n`（从多少条记录算的：计数就是它自己，比例是分母，工厂的数是产线小时）和 `basis`（依据）；没有可算的记录时 `value` 是 `null`，页面写「没有数据」，不估。
+
+- **建议**（`suggestions`）：顾问服务的咨询档案（`GET /v1/consult`，用 `advisorToken`）。提出的按提出时间、采纳和否决按决定时间落在这段时间里算；采纳率是这段时间的决定里采纳的比例；决定用时取中位数。`plans` 是这段时间采纳或量过的计划，各自和自己的基线比（`change`、`better`），指标不同不加总。
+- **AI**（`ai`）：工作台助手提出的改动卡片（`agent.propose`）有多少确认（`agent.confirm`）、点了不要（`agent.dismiss`）、没回应；AI（经 MCP、助手）的设备指令直接执行的、等人批准的（指令把关的请求）、批准、拒绝、被规则拒绝、过期、还在等。
+- **校准**（`calibration`）：在用校准的设备、这段时间应用和拟合的，`fields` 是在用校准的设备拟合期的回放误差（模板 → 拟合），没有在用的就是这段时间拟合过的，并在 `note` 里说明。
+- **工单**（`orders`）：ERP 下达的工单，收到、完工、按期、延期、按期完工率（只算有交期的）、现在已过交期的。
+- **工厂**（`plant`）：历史库（`history` 里配的 Postgres）逐小时的记录。有设备实测的小时就只算实测的（`source: measured`），没有就用仿真（或部分实测）的并标 `simulated`，说明不代表真实工厂。`weeks` 从周一起，截到这段时间；`compare` 是第一条采纳的计划前后各 N 整天（N 不超过这段时间的天数和采纳以来的天数，采纳当天不算），只说明同时发生，不证明是计划带来的。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `GET /api/value/{company}?days=30` | `ValueReport` | 往前 `days` 天（默认 30，1～366）；或 `from=YYYY-MM-DD&to=YYYY-MM-DD`（两天都含）；成员以上 |
+| `GET /api/value/{company}?…&format=csv` | CSV | 同一份报告的表格（UTF-8 带 BOM，表格软件直接打开） |
+
+命令行：`smartfactory value <company>`（`-days 7`、`-from 2026-09-01 -to 2026-09-30`、`-csv 成效.csv`）。工作台助手有 `value_report`，MCP 也有 `value_report`（成员以上）。
+
 ## 6. MCP `POST /mcp`
 
 - 协议：Model Context Protocol，Streamable HTTP，无状态，用 JSON 响应。
@@ -419,6 +436,7 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `send_command` | 操作设备，取值同 2.5；真实设备的指令先过指令把关：`status` 是 `sent`、`waiting`（等人批准，带 `request`）或 `refused`（带 `reason`）；记入审计日志 | 操作员 |
 | `command_request` | 一条等人批准的指令现在怎样了，`wait` 秒内等结果（最多 120） | 操作员 |
 | `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
+| `value_report` | 一段时间里这套系统带来了什么（`days`，或 `from`、`to`），同 `GET /api/value/{company}` | 成员 |
 | `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
 | `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |
 | `create_industry` | 新建或替换行业包，带校验；行业包是所有公司共用的 | 管理所有公司的管理员 |
