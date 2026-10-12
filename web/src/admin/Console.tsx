@@ -1,16 +1,18 @@
 // The console (/admin): where administrators build what the twin shows — customers with their
 // plants and lines, the industry packs they are built from, who may do what, and what was done.
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
-import { Building2Icon, ExternalLinkIcon, KeyRoundIcon, LayersIcon, LogOutIcon, MenuIcon, ScrollTextIcon, SparklesIcon, LayoutTemplateIcon, type LucideIcon } from 'lucide-react';
+import { ExternalLinkIcon, LogOutIcon, MenuIcon, SparklesIcon, type LucideIcon } from 'lucide-react';
 import { Kbd } from '@/components/ui/kbd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import * as api from './api';
-import { go, match, usePath } from './router';
+import { go, match, query, usePath } from './router';
+import { SECTIONS, tabHref } from './sections';
 import { AgentPanel, useAgent } from './AgentPanel';
 
 // pages load on first visit
@@ -26,13 +28,9 @@ interface Ctx { ov: api.Overview; reload(): Promise<void> }
 const ConsoleCtx = createContext<Ctx | null>(null);
 export const useConsole = () => useContext(ConsoleCtx)!;
 
-const NAV: { path: string; label: string; icon: LucideIcon; also?: string[] }[] = [
-  { path: '/admin', label: '公司', icon: Building2Icon, also: ['/admin/customers', '/admin/new'] },
-  { path: '/admin/templates', label: '模板', icon: LayoutTemplateIcon },
-  { path: '/admin/industries', label: '行业包', icon: LayersIcon },
-  { path: '/admin/accounts', label: '账号', icon: KeyRoundIcon },
-  { path: '/admin/activity', label: '操作记录', icon: ScrollTextIcon },
-];
+/** The one company this server runs (a company's own installation), or undefined where it runs several. */
+export const ownCompany = (ov: api.Overview) =>
+  ov.single || ov.runs?.length === 1 ? ov.companies.find((c) => c.id === (ov.runs?.[0] ?? c.id)) : undefined;
 
 function Mark({ className }: { className?: string }) {
   return (
@@ -72,33 +70,76 @@ function SignIn({ problem, onDone }: { problem?: string; onDone(): void }) {
   );
 }
 
+const item = 'flex h-9 items-center gap-2.5 rounded-xl px-3 text-[13.5px] font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground';
+const itemHere = 'bg-brand-soft text-primary hover:bg-brand-soft hover:text-primary';
+
+function Item({ to, here, icon: Icon, label, onPick }: { to: string; here: boolean; icon: LucideIcon; label: string; onPick?: () => void }) {
+  return (
+    <a href={to} aria-current={here ? 'page' : undefined} onClick={(e) => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(to); onPick?.(); }}
+      className={cn(item, here && itemHere)}>
+      <Icon className="size-[17px]" />{label}
+    </a>
+  );
+}
+
 function Nav({ path, onPick }: { path: string; onPick?: () => void }) {
   const { ov } = useConsole();
-  const here = (n: (typeof NAV)[number]) => {
-    const p = path.split('?')[0].replace(/\/+$/, '') || '/admin';
-    return p === n.path || (n.also ?? []).some((a) => p.startsWith(a)) || (n.path !== '/admin' && p.startsWith(n.path));
-  };
+  const p = path.split('?')[0].replace(/\/+$/, '') || '/admin';
+  // the company being looked at: this server's own on the home page, else the one in the path
+  const m = match(p, '/admin/customers/:id') ?? match(p, '/admin/customers/:id/edit');
+  const own = ownCompany(ov);
+  const home = !!own && p === '/admin';
+  const company = home ? own : ov.companies.find((c) => c.id === m?.id);
+  const tab = query(path).get('tab') ?? 'scene';
   return (
-    <nav className="grid gap-0.5" aria-label="工作台">
-      {NAV.map((n) => (
-        <a key={n.path} href={n.path} aria-current={here(n) ? 'page' : undefined}
-          onClick={(e) => { e.preventDefault(); go(n.path); onPick?.(); }}
-          className={cn('flex h-10 items-center gap-2.5 rounded-xl px-3 text-[14px] font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground',
-            here(n) && 'bg-brand-soft text-primary hover:bg-brand-soft hover:text-primary')}>
-          <n.icon className="size-[18px]" />{n.path === '/admin' && ov.single ? '工厂' : n.label}
-        </a>
-      ))}
+    <nav className="grid gap-3" aria-label="工作台">
+      {!own && ov.companies.length > 1 && (
+        <Select value={company?.id ?? ''} onValueChange={(id) => { go(`/admin/customers/${encodeURIComponent(id)}`); onPick?.(); }}>
+          <SelectTrigger className="h-10 w-full rounded-xl font-bold" aria-label="公司"><SelectValue placeholder="选一家公司" /></SelectTrigger>
+          <SelectContent>{ov.companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+        </Select>
+      )}
+      {company && (
+        <>
+          {(own || ov.companies.length === 1) && (
+            <div className="flex items-center gap-2 px-3">
+              <span className="grid h-6 min-w-7 place-items-center rounded-md bg-primary px-1 text-[11px] font-extrabold text-primary-foreground">{company.short}</span>
+              <b className="truncate text-[14px] font-extrabold">{company.name}</b>
+            </div>
+          )}
+          {SECTIONS.map((g) => (
+            <div key={g.group} className="grid gap-0.5">
+              <span className="px-3 pb-1 text-[11.5px] font-bold text-muted-foreground/70">{g.group}</span>
+              {g.tabs.map((t) => (
+                <Item key={t.id} to={tabHref(company.id, home, t.id)} here={tab === t.id} icon={t.icon} label={t.label} onPick={onPick} />
+              ))}
+            </div>
+          ))}
+        </>
+      )}
     </nav>
   );
 }
 
+function AskButton() {
+  return (
+    <button type="button" onClick={() => useAgent.getState().setOpen(true)}
+      className="flex h-10 items-center gap-2.5 rounded-xl border bg-card px-3 text-[13.5px] font-bold transition-colors hover:border-primary/40 hover:bg-brand-soft">
+      <SparklesIcon className="size-[17px] text-primary" />问工作台助手
+      <Kbd className="ml-auto">⌘J</Kbd>
+    </button>
+  );
+}
+
 function MeCard({ me, onSignOut }: { me: api.Me; onSignOut(): void }) {
+  const { ov } = useConsole();
+  const role = { admin: '管理员', operator: '操作员', member: '成员' }[me.role as string] ?? me.role;
   return (
     <div className="flex items-center gap-2.5 rounded-2xl bg-surface p-2.5">
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 font-extrabold text-white">{[...me.name][0]}</span>
       <span className="grid min-w-0 flex-1 leading-tight">
         <b className="truncate text-[13.5px]">{me.name}</b>
-        <small className="truncate text-[11.5px] text-muted-foreground">{me.everywhere ? '所有公司的管理员' : `${me.companies.join('、')} 的管理员`}</small>
+        <small className="truncate text-[11.5px] text-muted-foreground">{ownCompany(ov) ? role : me.everywhere ? `所有公司的${role}` : `${me.companies.join('、')} 的${role}`}</small>
       </span>
       <Button variant="ghost" size="icon-sm" className="rounded-lg text-muted-foreground" title="退出" aria-label="退出" onClick={onSignOut}>
         <LogOutIcon className="size-4" />
@@ -161,7 +202,7 @@ export default function Console() {
     <ConsoleCtx.Provider value={{ ov, reload }}>
       <TooltipProvider delayDuration={300}>
         <div className="min-h-dvh bg-stage lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-          <aside className="sticky top-0 hidden h-dvh flex-col gap-5 border-r bg-card p-4 lg:flex">
+          <aside className="sticky top-0 hidden h-dvh flex-col gap-4 border-r bg-card p-4 lg:flex">
             <a href="/admin" onClick={(e) => { e.preventDefault(); go('/admin'); }} className="flex items-center gap-2.5 px-1.5 pt-1">
               <Mark className="size-8" />
               <span className="grid leading-tight">
@@ -169,13 +210,9 @@ export default function Console() {
                 <small className="text-[12px] text-muted-foreground">工作台</small>
               </span>
             </a>
-            <Nav path={path} />
-            <button type="button" onClick={() => useAgent.getState().setOpen(true)}
-              className="group flex h-11 items-center gap-2.5 rounded-xl bg-foreground px-3 text-[14px] font-bold text-background transition-opacity hover:opacity-90">
-              <SparklesIcon className="size-[18px]" />工作台助手
-              <Kbd className="ml-auto bg-background/15 text-background/80">⌘J</Kbd>
-            </button>
-            <div className="mt-auto grid gap-2">
+            <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:thin]"><Nav path={path} /></div>
+            <div className="grid gap-2">
+              <AskButton />
               <a href="/" className="flex h-9 items-center gap-2 rounded-xl px-3 text-[13px] font-bold text-muted-foreground hover:bg-surface hover:text-foreground">
                 <ExternalLinkIcon className="size-4" />打开孪生
               </a>
@@ -194,8 +231,8 @@ export default function Console() {
             <SheetContent side="left" className="w-[280px] gap-5 p-4">
               <SheetTitle className="flex items-center gap-2.5 px-1.5 pt-1 text-[15.5px] font-extrabold"><Mark className="size-8" />SmartFactory 工作台</SheetTitle>
               <SheetDescription className="sr-only">工作台导航</SheetDescription>
-              <Nav path={path} onPick={() => setMenu(false)} />
-              <div className="mt-auto grid gap-2">
+              <div className="min-h-0 flex-1 overflow-y-auto"><Nav path={path} onPick={() => setMenu(false)} /></div>
+              <div className="grid gap-2">
                 <a href="/" className="flex h-9 items-center gap-2 rounded-xl px-3 text-[13px] font-bold text-muted-foreground hover:bg-surface"><ExternalLinkIcon className="size-4" />打开孪生</a>
                 <MeCard me={ov.me} onSignOut={signOut} />
               </div>

@@ -1,13 +1,14 @@
 // 公司: every company this server runs (one, on a company's own installation), each with its first plant drawn as a plan.
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { PlusIcon, RadioTowerIcon, SearchIcon, SparklesIcon, TrendingUpIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type * as api from './api';
 import { Blueprint } from './Blueprint';
-import { link, PageHead, useConsole } from './Console';
+import { link, ownCompany, PageHead, useConsole } from './Console';
 import { useCompany } from './layouts';
+import { go } from './router';
 
 const Customer = lazy(() => import('./Customer'));
 const Gallery = lazy(() => import('./Templates').then((m) => ({ default: m.TemplateGallery })));
@@ -68,11 +69,19 @@ function Card({ c, industry }: { c: api.Company; industry?: api.IndustrySummary 
   );
 }
 
+function Redirect({ to }: { to: string }) {
+  useEffect(() => { go(to, true); }, [to]);
+  return null;
+}
+
 export default function Customers() {
   const { ov } = useConsole();
   // a self-hosted instance: its one factory, or, before there is one, where to start it from
+  const own = ownCompany(ov);
+  if (own) return <Suspense fallback={null}><Customer id={own.id} home /></Suspense>;
+  // several companies on one server (the demo): the console is still one company's, picked in the sidebar
+  if (!ov.single && ov.companies.length) return <Redirect to={`/admin/customers/${encodeURIComponent(ov.companies[0].id)}`} />;
   if (ov.single) {
-    if (ov.companies.length) return <Suspense fallback={null}><Customer id={ov.companies[0].id} home /></Suspense>;
     return (
       <>
         <PageHead title="建你的工厂" sub="这台服务器还没有工厂。从一个模板起步，或者把工厂描述给 AI，之后都能改">

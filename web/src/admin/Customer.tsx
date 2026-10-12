@@ -3,9 +3,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  BookOpenTextIcon, BotIcon, BoxIcon, ClipboardCheckIcon, ClipboardListIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, KeyRoundIcon, NotebookPenIcon,
-  PencilIcon, PlugZapIcon, ScrollTextIcon, ShieldCheckIcon, SlidersHorizontalIcon, Trash2Icon, TrendingUpIcon,
+  BookOpenTextIcon, CopyIcon, ExternalLinkIcon, FileJsonIcon, HeadsetIcon, NotebookPenIcon, PencilIcon, Trash2Icon, TrendingUpIcon,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -29,23 +29,13 @@ import { Panel } from './Panel';
 import { Badge, totals } from './Customers';
 import { forget, useCompany } from './layouts';
 import { go, query, usePath } from './router';
+import { SECTIONS, tabHref } from './sections';
 
 const KnowledgeBase = lazy(() => import('./Knowledge'));
 
-const TABS = [
-  { id: 'scene', label: '场景', icon: BoxIcon },
-  { id: 'orders', label: '工单', icon: ClipboardListIcon },
-  { id: 'ai', label: '助手', icon: BotIcon },
-  { id: 'knowledge', label: '知识', icon: BookOpenTextIcon },
-  { id: 'connect', label: '接入', icon: PlugZapIcon },
-  { id: 'calib', label: '校准', icon: SlidersHorizontalIcon },
-  { id: 'guard', label: '指令', icon: ShieldCheckIcon },
-  { id: 'checks', label: '点检', icon: ClipboardCheckIcon },
-  { id: 'value', label: '成效', icon: TrendingUpIcon },
-  { id: 'accounts', label: '账号', icon: KeyRoundIcon },
-  { id: 'activity', label: '记录', icon: ScrollTextIcon },
-] as const;
-type Tab = (typeof TABS)[number]['id'];
+const TABS = SECTIONS.flatMap((g): readonly { id: string; label: string; icon: LucideIcon }[] => g.tabs);
+type Tab = (typeof SECTIONS)[number]['tabs'][number]['id'];
+
 
 const fmtDay = (iso: string) => {
   const d = new Date(iso);
@@ -235,18 +225,16 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
   return (
     <>
       <PageHead
-        back={home ? undefined : { to: '/admin', label: '公司' }}
         title={<span className="flex items-center gap-3"><Badge text={c.short} className="h-10 min-w-11 text-[14px]" />{c.name}</span>}
         sub={`${industry?.name ?? c.industry}，${t.plants} 个工厂，${t.lines} 条产线，${t.machines} 台设备${c.builtin ? '，随应用内置' : ''}`}
       >
         <Button asChild variant="outline" className="h-10 rounded-xl font-bold"><a href={`/?company=${encodeURIComponent(c.id)}`}>打开孪生<ExternalLinkIcon /></a></Button>
         {!c.builtin && <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => go(`/admin/customers/${encodeURIComponent(c.id)}/edit`)}><PencilIcon />改场景</Button>}
-        {ov.me.everywhere && !ov.runs && <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => go(`/admin/new?from=${encodeURIComponent(c.id)}`)}><CopyIcon />照它新建</Button>}
         {!c.builtin && <Button variant="ghost" size="icon" className="size-10 rounded-xl text-muted-foreground hover:bg-danger-soft hover:text-destructive" aria-label="删除" title="删除" onClick={() => setRemoving(true)}><Trash2Icon /></Button>}
       </PageHead>
       <Remove c={c} open={removing} onOpenChange={setRemoving} />
-      <Tabs value={tab} onValueChange={(v) => go(`${home ? '/admin' : `/admin/customers/${encodeURIComponent(c.id)}`}${v === 'scene' ? '' : `?tab=${v}`}`, true)}>
-        <TabsList variant="line" className="mb-5 h-10 w-full justify-start gap-1 overflow-x-auto border-b px-0 [scrollbar-width:none] max-sm:mb-3">
+      <Tabs value={tab} onValueChange={(v) => go(tabHref(c.id, home, v), true)}>
+        <TabsList variant="line" className="mb-5 h-10 w-full lg:hidden justify-start gap-1 overflow-x-auto border-b px-0 [scrollbar-width:none] max-sm:mb-3">
           {TABS.map((x) => (
             <TabsTrigger key={x.id} value={x.id} className="h-10 flex-none gap-1.5 px-3 text-[13.5px] font-bold data-active:text-primary">
               <x.icon />{x.label}
@@ -268,7 +256,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="checks"><ChecksPanel c={c} /></TabsContent>
         <TabsContent value="value"><ValuePanel c={c} /></TabsContent>
         <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
-        <TabsContent value="activity"><ActivityList company={c.id} /></TabsContent>
+        <TabsContent value="activity"><ActivityList company={home ? undefined : c.id} /></TabsContent>
       </Tabs>
     </>
   );
