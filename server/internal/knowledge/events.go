@@ -553,13 +553,10 @@ func (b *Base) SyncEvents(ctx context.Context, id string) error {
 	if b.Checks == nil && b.Rounds == nil && b.Anomalies == nil && b.Calibrations == nil && b.Commands == nil {
 		return nil
 	}
-	m, err := b.model(id)
-	if err != nil {
-		return err
-	}
 	now := time.Now()
 	since := now.Add(-keepEventDays * 24 * time.Hour)
 	var ev events
+	var err error
 	failed := map[string]bool{}
 	note := func(kind string, err error) {
 		if err != nil {
@@ -586,6 +583,14 @@ func (b *Base) SyncEvents(ctx context.Context, id string) error {
 	if b.Commands != nil {
 		ev.commands, err = b.Commands(id, since)
 		note(TCommand, err)
+	}
+	if len(ev.checks)+len(ev.rounds)+len(ev.anomalies)+len(ev.calibs)+len(ev.commands) == 0 && len(b.eventState(id).Items) == 0 {
+		// nothing happened and nothing was written: not even the process is read
+		return nil
+	}
+	m, err := b.model(id)
+	if err != nil {
+		return err
 	}
 	return b.writeEvents(ctx, id, eventItems(m, ev, now), failed)
 }
