@@ -791,7 +791,8 @@ var orderNo = regexp.MustCompile(`[A-Za-z]{1,6}-[A-Za-z0-9][A-Za-z0-9-]*`)
 
 // Recognize is the things in the company's graph a question names: whole names (the longest
 // first, each part of the question used once), a product, customer or supplier by the end of its
-// name ("法兰" for 风电法兰), and order numbers.
+// name ("法兰" for 风电法兰), station and part numbers however they are written, and order
+// numbers.
 func (b *Base) Recognize(company, query string) []string {
 	var out []string
 	rest := query
@@ -812,6 +813,13 @@ func (b *Base) Recognize(company, query string) []string {
 				out = append(out, v[0])
 				break
 			}
+		}
+	}
+	// station and part numbers however they are written: "ih101" is IH-101
+	key := norm(rest)
+	for _, t := range b.linkTerms(company) {
+		if t.id && !slices.Contains(out, t.name) && wholeIn(key, t.key) {
+			out = append(out, t.name)
 		}
 	}
 	orders := b.orderState(company).Items
@@ -947,6 +955,59 @@ func (b *Base) Find(ctx context.Context, company, q, kind string, limit int) ([]
 	return out, nil
 }
 
+// Mentioning is the passages that name the thing called name: documents' first, then the
+// process's, then orders', up to limit; total is how many there are.
+func (b *Base) Mentioning(ctx context.Context, company, name string, limit int) (ps []Passage, total int, err error) {
+	c, err := b.open(company)
+	if err != nil {
+		return nil, 0, err
+	}
+	r, err := c.db.QueryCypher(ctx, cortexdb.CypherQueryRequest{
+		Query:  `MATCH (m:chunk)-[:mentions]->(n {name: $name}) RETURN m.document_id, m.title, m.content`,
+		Params: map[string]any{"name": name}, MaxRows: 2000,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	ps = []Passage{}
+	seen := map[string]bool{}
+	for _, row := range r.Rows {
+		id, _ := row[0].(string)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		p := Passage{From: "process", Text: fmt.Sprint(row[2])}
+		p.Title, _ = row[1].(string)
+		switch {
+		case strings.HasPrefix(id, "doc:"):
+			p.From = "doc"
+			if i := strings.LastIndexByte(id, ':'); i > len("doc:") {
+				p.Doc = id[len("doc:"):i]
+				fmt.Sscan(id[i+1:], &p.Part)
+			}
+		case strings.HasPrefix(id, "order:"):
+			p.From = "order"
+		}
+		ps = append(ps, p)
+	}
+	from := map[string]int{"doc": 0, "process": 1, "order": 2}
+	slices.SortStableFunc(ps, func(a, b Passage) int {
+		if d := from[a.From] - from[b.From]; d != 0 {
+			return d
+		}
+		if a.Doc != b.Doc {
+			return strings.Compare(a.Doc, b.Doc)
+		}
+		return a.Part - b.Part
+	})
+	total = len(ps)
+	if limit > 0 && len(ps) > limit {
+		ps = ps[:limit]
+	}
+	return ps, total, nil
+}
+
 // Stats counts the things and relations in a company's graph, and its passages.
 type Stats struct {
 	Kinds     map[string]int `json:"kinds"`
@@ -1070,6 +1131,69 @@ func (b *Base) Graph(ctx context.Context, company string) (Graph, error) {
 		g.Edges = append(g.Edges, GraphEdge{From: from, To: to, Type: typ})
 	}
 	return g, nil
+}
+
+// Part of a graph: Around keeps what is within hops relations of center (either way), nearest
+// first, or, with center "", every thing; with kinds, only things of those kinds (the walk goes
+// through them only; the center is kept whatever it is). At most limit things and edges
+// relations among them; more says how many of each were left out.
+func (g Graph) Around(center string, hops int, kinds []string, limit, edges int) (sub Graph, moreNodes, moreEdges int) {
+	keep := func(n GraphNode) bool { return len(kinds) == 0 || slices.Contains(kinds, n.Kind) || n.Name == center }
+	byName := map[string]GraphNode{}
+	for _, n := range g.Nodes {
+		byName[n.Name] = n
+	}
+	sub = Graph{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
+	in := map[string]bool{}
+	var found []GraphNode
+	if center == "" {
+		for _, n := range g.Nodes {
+			if keep(n) {
+				found = append(found, n)
+			}
+		}
+	} else if c, ok := byName[center]; ok {
+		next := map[string][]string{}
+		for _, e := range g.Edges {
+			next[e.From] = append(next[e.From], e.To)
+			next[e.To] = append(next[e.To], e.From)
+		}
+		found = []GraphNode{c}
+		in[center] = true
+		ring := []string{center}
+		for range hops {
+			var out []string
+			for _, name := range ring {
+				for _, o := range next[name] {
+					if n, ok := byName[o]; ok && !in[o] && keep(n) {
+						in[o] = true
+						found = append(found, n)
+						out = append(out, o)
+					}
+				}
+			}
+			ring = out
+		}
+		clear(in)
+	}
+	for i, n := range found {
+		if i >= limit {
+			moreNodes = len(found) - limit
+			break
+		}
+		in[n.Name] = true
+		sub.Nodes = append(sub.Nodes, n)
+	}
+	for _, e := range g.Edges {
+		if in[e.From] && in[e.To] {
+			if len(sub.Edges) >= edges {
+				moreEdges++
+				continue
+			}
+			sub.Edges = append(sub.Edges, e)
+		}
+	}
+	return sub, moreNodes, moreEdges
 }
 
 // Forget makes the next SyncProcess write the company's process even if it has not changed.

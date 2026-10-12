@@ -201,7 +201,8 @@ func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log, cmds
 		Instructions: "SmartFactory is a 3D digital twin platform for factories and other sites (venues, campsites …). Companies contain plants, plants contain lines of machines (assets). New scenes can be created with scene_guide → create_industry → create_company. " +
 			"Use list_sites first. The simulation runs on the server continuously; KPIs, alarms and machine state are current. " +
 			"Values read over MQTT / Modbus TCP / OPC UA from real equipment are in read_tags and are marked 'live' on assets. " +
-			"send_command acts on the twin (every viewer sees it) and is forwarded to devices through the protocol adapters.",
+			"send_command acts on the twin (every viewer sees it) and is forwarded to devices through the protocol adapters. " +
+			"Questions about documents, the process (what feeds what, which machine, who supplies or buys) and orders: knowledge_search, knowledge_entity, knowledge_graph, read_doc, when the server keeps a knowledge base.",
 	})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_sites", Description: "List companies and their plants in the twin, with how many live protocol values each has."},

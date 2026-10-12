@@ -321,17 +321,17 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 - **工单**：ERP 的生产工单，每张是一个 `order` 节点，`for_customer` 连客户、`of_product` 连产品、`runs_on` 连产线，另有一段写状态、进度、交期。工单变化几秒内写进去，在做的进度每分钟更新；排队和在做的全留，完成的留最近 300 张、90 天以内，撤回的删掉。
 - **资料**：资料库的文档按标题切段，每段和它提到的工位、设备、产线、产品、供应商、客户、工单连起来。
 
-搜索先从问题里认出公司自己的名字：工位、设备、产线、产品（"法兰"认作风电法兰）、客户、工单号，从它们出发沿图走（personalized PageRank，只走写进去的关系，不走统计出来的共现）；讲到这些东西本身的段落排在前面，其次是提到它们的工单。所以问"远岳动力的工单到哪了"先给这个客户的工单，问"HP-101 的上游"先给 HP-101 那一段，问"IH-101 的始锻温度"能找到只写了"中频感应加热炉"的工艺卡。没认出名字时按词找。CortexDB 自己从文本里抽出的名字（编号前缀、段落标题）写入后删掉，免得把不相干的工位连在一起。该公司成员以上可读，管理员可重建。
+搜索先从问题里认出公司自己的名字：工位、设备、产线、产品（"法兰"认作风电法兰）、客户、工单号，编号不论怎么写（`ih101`、`IH 101` 都是 IH-101），从它们出发沿图走（personalized PageRank，只走写进去的关系，不走统计出来的共现）；讲到这些东西本身的段落排在前面，其次是提到它们的工单。所以问"远岳动力的工单到哪了"先给这个客户的工单，问"HP-101 的上游"先给 HP-101 那一段，问"IH-101 的始锻温度"能找到只写了"中频感应加热炉"的工艺卡。没认出名字时按词找。CortexDB 自己从文本里抽出的名字（编号前缀、段落标题）写入后删掉，免得把不相干的工位连在一起。该公司成员以上可读，管理员可重建。
 
 | 方法 路径 | 响应 | 说明 |
 |---|---|---|
 | `GET /api/knowledge/{company}` | `KnowledgeOverview` | 各类节点、关系的数量，工艺段落、工单、文档段落数，资料库有几篇、入库了几篇 |
 | `GET /api/knowledge/{company}/search?q=&limit=` | `KnowledgeAnswer` | 最相关的段落：`from` 是 `doc`（带文档 id 和段号）、`process` 或 `order`；`mode` 是 `lexical` 或 `ppr` |
-| `GET /api/knowledge/{company}/entity?name=` | `EntityAnswer` | 一样东西和它的全部关系、提到它的段落；没有同名的时给出候选 |
+| `GET /api/knowledge/{company}/entity?name=` | `EntityAnswer` | 一样东西和它的全部关系、提到它的段落；编号写法不同也认（`rf101` 是 RF-101）；不止一样（几个厂都有的工位号）或没有同名的时给出候选 |
 | `GET /api/knowledge/{company}/graph` | `KnowledgeGraph` | 整张图（工艺和工单，节点带被提到的次数），供绘制 |
 | `POST /api/knowledge/{company}/rebuild` | `{docs}` | 重写工艺图和工单、重新入库全部文档；管理员 |
 
-助手的 `search_docs` 在有知识库时搜的就是它（文档、工艺、工单一起），另有 `process_graph` 查图里一样东西的关系。
+助手的 `search_docs` 在有知识库时搜的就是它（文档、工艺、工单一起），另有 `process_graph` 查图里一样东西的关系。MCP 有 `knowledge_search`、`knowledge_entity`、`knowledge_graph`、`read_doc`（见第 6 节）。
 
 ### 生产工单（ERP）`/api/erp/{company}/orders`、`/api/admin/erp/{company}`
 
@@ -485,6 +485,10 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `check_results` | 最近填的记录，每项的值、是否超差或异常、谁记的、什么时候记的 | 成员 |
 | `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
 | `value_report` | 一段时间里这套系统带来了什么（`days`，或 `from`、`to`），同 `GET /api/value/{company}` | 成员 |
+| `knowledge_search` | 搜知识库（文档、工艺、工单），同 `GET /api/knowledge/{company}/search`，可另给 `names`、`keywords`；每段带 `cite`，长段截断 | 成员 |
+| `knowledge_entity` | 图里一样东西两个方向的关系和提到它的段落（截短，`passagesTotal` 是总数）；不止一样或没有同名时给 `candidates` | 成员 |
+| `knowledge_graph` | 只给公司：各类数量和入库情况；`around`：一样东西周围 `hops`（最多 3）跳的子图；`kinds`：只要这几类。最多 200 个节点、400 条关系，超出的数在 `nodesLeftOut`、`edgesLeftOut` | 成员 |
+| `read_doc` | 按段读资料库的一篇文档（`from`、`count`，最多 40 段），`next` 是接着读的段号 | 成员 |
 | `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
 | `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |
 | `create_industry` | 新建或替换行业包，带校验；行业包是所有公司共用的 | 管理所有公司的管理员 |
