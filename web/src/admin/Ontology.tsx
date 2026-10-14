@@ -50,7 +50,7 @@ function Fact({ f, me, onPick }: { f: api.OntFact; me: string; onPick(name: stri
   return (
     <li className="grid gap-1">
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px]">
-        {mine ? <span className="text-muted-foreground">{f.relation}</span> : null}
+        {mine && f.relation ? <span className="text-muted-foreground">{f.relation}</span> : null}
         <Name name={other} inferred={f.inferred} onPick={onPick} />
         {!mine ? <span className="text-muted-foreground">{f.relation} 它</span> : null}
         {f.inferred && (
