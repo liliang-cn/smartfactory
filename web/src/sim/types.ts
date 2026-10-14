@@ -24,11 +24,13 @@ export interface TypeSpec {
   pRun?: number;
   vib?: number;
   tau?: number;
+  /** °C a fully worn machine runs above a healthy one (default 18) */
+  wear?: number;
   faults?: string[];
 }
 
 /** Spec of a machine that has thermal/power telemetry. */
-export type MachineSpec = Required<Omit<TypeSpec, 'tau'>> & { tau?: number };
+export type MachineSpec = Required<Omit<TypeSpec, 'tau' | 'wear'>> & { tau?: number; wear?: number };
 export type Measure = MeasureCfg;
 
 // ---------- live state ----------

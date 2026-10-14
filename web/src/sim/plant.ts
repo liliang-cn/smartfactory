@@ -25,11 +25,17 @@ const BUILTIN: Partial<Record<AssetType, TypeSpec>> = {
 };
 
 const machineSpec = (m: MachineCfg): MachineSpec => ({
-  label: m.label, idleRise: m.thermal.idle, runRise: m.thermal.run, warn: m.thermal.warn, trip: m.thermal.trip, tau: m.thermal.tau,
+  label: m.label, idleRise: m.thermal.idle, runRise: m.thermal.run, warn: m.thermal.warn, trip: m.thermal.trip, tau: m.thermal.tau, wear: m.thermal.wear,
   pIdle: m.power.idle, pRun: m.power.run, vib: m.vibration, faults: m.faults,
 });
 
 export const isMachineSpec = (s: TypeSpec | undefined): s is MachineSpec => s?.runRise !== undefined;
+
+/**
+ * A machine that runs below ambient (a fridge, a cold room): it does not trip on temperature, and
+ * a broken one is repaired without waiting for it to cool (stopped, it only warms up).
+ */
+const cools = (s: TypeSpec | undefined) => (s?.runRise ?? 0) < 0;
 
 const HIST_LEN = 240;
 /** How long a value from equipment stays authoritative after it arrives. */
@@ -237,6 +243,8 @@ export class PlantSim {
   private seq = 0;
   /** night shift now, and the hour of the week the calendar was last checked */
   private night = false;
+  /** outside opening hours: lines take in nothing new */
+  private closed = false;
   private calHour = -1;
 
   wall() { return this.epoch + this.elapsed * 1000; }
@@ -245,6 +253,8 @@ export class PlantSim {
     this.elapsed += dt;
     if (this.follower) {
       this.clock += dt;
+      // the server's lines take in nothing outside opening hours: neither does the local copy
+      this.closed = this.shut(Math.floor(this.clock / 3600) % 24);
       return;
     }
     const local = this.wall() + 8 * 3600_000;
@@ -257,12 +267,20 @@ export class PlantSim {
     }
   }
 
+  /** Whether hour h of the day is outside the opening hours (never, when there are none). */
+  private shut(h: number) {
+    const o = this.layout.calendar?.open;
+    if (!o || o.from === o.to % 24) return false;
+    return !(o.from < o.to ? h >= o.from && h < o.to : h >= o.from || h < o.to);
+  }
+
   /** Once an hour: night shift or not, and whether a line's weekly planned maintenance starts now. */
   private calendar(local: number) {
     const cal = this.layout.calendar;
     const h = Math.floor(local / 3_600_000) % 24;
     const n = cal?.night;
     this.night = !!n && (n.from < n.to ? h >= n.from && h < n.to : h >= n.from || h < n.to);
+    this.closed = this.shut(h);
     const pm = cal?.pm;
     if (!pm || h !== pm.start) return;
     const day = new Date(local).getUTCDay();
@@ -686,7 +704,7 @@ export class PlantSim {
     // Release raw parts from the infeed buffer onto the belt.
     line.spawnT -= dt;
     const last = P[P.length - 1];
-    if (v > 0 && line.infeed.stock > 0 && line.spawnT <= 0 && (line.job || this.follower) && (!last || last.s > line.gap + 0.05)) {
+    if (v > 0 && !this.closed && line.infeed.stock > 0 && line.spawnT <= 0 && (line.job || this.follower) && (!last || last.s > line.gap + 0.05)) {
       if (!this.follower && (!line.lot || line.lot.left <= 0)) this.newLot(line);
       const lot = line.lot;
       if (lot) lot.left--;
@@ -1120,7 +1138,7 @@ export class PlantSim {
     const running = a.state === 'running';
     const on = this.ready(a);
     let target = AMBIENT;
-    if (on) target += (running ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * 18;
+    if (on) target += (running ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * (s.wear ?? 18);
     const k = ema(dt, s.tau ?? 40);
     a.temp += (target - a.temp) * k;
     // the model without its noise: what it predicts, to hold against what was measured
@@ -1138,7 +1156,7 @@ export class PlantSim {
       const mRun = ds !== undefined ? ds === 'running' : running;
       const mOn = ds !== undefined ? ds === 'running' || ds === 'idle' || ds === 'blocked' : on;
       let mTarget = AMBIENT;
-      if (mOn) mTarget += (mRun ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * 18;
+      if (mOn) mTarget += (mRun ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * (s.wear ?? 18);
       const mPower = mOn ? s.pIdle + (mRun ? s.pRun * a.speed : 0) : ds === 'maint' ? 0 : 0.1;
       const mVib = mRun ? s.vib * (0.7 + 0.3 * a.speed) * (1 + (1 - a.health) * 2.5) : mOn ? s.vib * 0.06 : 0;
       // the model keeps its own temperature alongside, from where the machine first reported
@@ -1179,7 +1197,7 @@ export class PlantSim {
 
     if (on && a.temp > s.warn) this.raise(a, 'temp', 2, `温度高 ${a.temp.toFixed(0)}°C，报警值 ${s.warn}°C`);
     else if (a.temp < s.warn - 2) this.clear(a, 'temp');
-    if (!a.fault && a.temp > s.trip) this.trip(a, `温度超限 ${a.temp.toFixed(0)}°C，自动停机`);
+    if (!a.fault && a.temp > s.trip && !cools(s)) this.trip(a, `温度超限 ${a.temp.toFixed(0)}°C，自动停机`);
 
     if (a.health < 0.35) this.raise(a, 'health', 3, `健康度 ${(a.health * 100).toFixed(0)}%，建议安排维护`);
     else if (a.health > 0.4) this.clear(a, 'health');
@@ -1344,7 +1362,7 @@ export class PlantSim {
     if (a.fault) {
       const rt = a.calib?.repair ?? a.machine?.upkeep.repair ?? [1, 3];
       a.repairAt ??= this.elapsed + rand(rt[0] * 60, rt[1] * 60);
-      const hot = a.spec.trip !== undefined && a.temp > a.spec.trip - 4;
+      const hot = a.spec.trip !== undefined && a.temp > a.spec.trip - 4 && !cools(a.spec);
       if (this.elapsed >= a.repairAt && !hot) {
         const short = a.fault.text.startsWith('短停：');
         a.fault = null;
@@ -1450,7 +1468,7 @@ export class PlantSim {
         return { ok: true, msg: `${id} 速度 ${Math.round(a.speed * 100)}%` };
       case 'reset':
         if (!a.fault) return { ok: false, msg: `${id} 没有需要复位的故障` };
-        if (a.spec?.trip && a.temp > a.spec.trip - 4) {
+        if (a.spec?.trip && a.temp > a.spec.trip - 4 && !cools(a.spec)) {
           return { ok: false, msg: `${id} 温度 ${a.temp.toFixed(0)}°C 仍偏高，冷却到 ${a.spec.trip - 4}°C 以下再复位` };
         }
         if (a.type === 'agv' && a.battery < 10) a.battery = 40; // swapped battery
