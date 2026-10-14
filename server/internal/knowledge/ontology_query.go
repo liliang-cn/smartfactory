@@ -215,7 +215,7 @@ func constraintText(c OntConstraint) string {
 		if c.For != nil {
 			hold = time.Duration(*c.For * float64(time.Second))
 		}
-		return fmt.Sprintf("每台%s的%s要 %s，超出 %s 就报警", c.Class, anomalyField(c.Field), limits(c), hold)
+		return fmt.Sprintf("每台%s的%s要 %s，超出 %s 就报警", c.Class, anomalyField(c.Field), limits(c), seconds(hold))
 	}
 	t := fmt.Sprintf("每个%s都要有「%s」", c.Class, c.Requires)
 	if c.ValueClass != "" {

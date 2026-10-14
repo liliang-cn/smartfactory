@@ -389,6 +389,18 @@ func fnumber(x float64) string {
 	return strconv.FormatFloat(math.Round(x*1000)/1000, 'f', -1, 64)
 }
 
+// seconds is a duration as people say it: 5 秒, 3 分 20 秒.
+func seconds(d time.Duration) string {
+	s := int(d.Round(time.Second) / time.Second)
+	switch {
+	case s < 60:
+		return fmt.Sprintf("%d 秒", s)
+	case s%60 == 0:
+		return fmt.Sprintf("%d 分钟", s/60)
+	}
+	return fmt.Sprintf("%d 分 %d 秒", s/60, s%60)
+}
+
 // limits is a constraint's range as people write it: ≤ 4, 30～45, ≥ 2.
 func limits(c OntConstraint) string {
 	switch {
@@ -439,7 +451,7 @@ func (l *Live) fire(w *watch) {
 	w.rec = r.Seq
 	w.mu.Unlock()
 	l.Audit.RecordWith(ontologyWho, "ontology", k.company, "ontology.violation", k.plant+"/"+k.asset, text,
-		fmt.Sprintf("约束「%s」：%s的%s要求 %s，超出 %s 以上", w.c.ID, w.c.Class, anomaly.FieldLabel(k.field), limits(w.c), w.hold), nil)
+		fmt.Sprintf("约束「%s」：%s的%s要求 %s，超出 %s 以上", w.c.ID, w.c.Class, anomaly.FieldLabel(k.field), limits(w.c), seconds(w.hold)), nil)
 	if l.Changed != nil {
 		l.Changed(k.company)
 	}
@@ -476,7 +488,7 @@ func (l *Live) end(w *watch, why string) {
 	}
 	context := fmt.Sprintf("约束「%s」", w.c.ID)
 	if !since.IsZero() {
-		context += fmt.Sprintf("，持续 %s，最远 %s", now.Sub(since).Round(time.Second), fnumber(worst))
+		context += fmt.Sprintf("，持续 %s，最远 %s", seconds(now.Sub(since)), fnumber(worst))
 	}
 	l.Audit.RecordWith(ontologyWho, "ontology", k.company, "ontology.violation.end", k.plant+"/"+k.asset, detail, context, nil)
 	if l.Changed != nil {
