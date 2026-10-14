@@ -120,6 +120,25 @@
             "hours",
             "start"
           ]
+        },
+        "open": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "to": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 24
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
         }
       }
     },
@@ -773,6 +792,10 @@
               },
               "tau": {
                 "type": "number"
+              },
+              "wear": {
+                "type": "number",
+                "minimum": 0
               }
             },
             "required": [
@@ -1453,7 +1476,8 @@
           ]
         }
       }
-    }
+    },
+    "ontology": {}
   },
   "required": [
     "id",
