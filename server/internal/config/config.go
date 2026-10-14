@@ -67,23 +67,36 @@ type Series struct {
 }
 
 // Anomaly learns each measured machine's normal per field and state, and hints at a reading
-// that stays K standard deviations away from it for Sustain, or an average that drifts off it.
-// Zero values take the defaults: K 3, Sustain 1m, Warmup 24h and 100 readings, Span 200000.
+// that stays K standard deviations away from it for Sustain, or an average that stays DriftK
+// away for DriftSustain. Zero values take the defaults: K 3, Sustain 1m, DriftK 2, DriftSustain
+// 30m, Clear 5m, Cooldown 30m, Warmup 24h and 100 readings, Span 200000, MaxOpen 15, MaxPerHour 20.
 type Anomaly struct {
 	// Off stops it: nothing is learned or hinted at.
 	Off bool `json:"off,omitempty"`
 	// K is how many standard deviations from the normal count as unusual.
 	K float64 `json:"k,omitempty"`
-	// Sustain is how long a reading must stay unusual before it is a hint (and back to normal
-	// before the hint ends).
+	// Sustain is how long a reading must stay unusual before it is a hint.
 	Sustain Duration `json:"sustain"`
+	// DriftK and DriftSustain: the average of the last ten minutes that far off the normal (in its
+	// standard deviations) for that long is a drift.
+	DriftK       float64  `json:"driftK,omitempty"`
+	DriftSustain Duration `json:"driftSustain"`
+	// Clear is how long a field must be back to normal before its hint ends; Cooldown how long
+	// the same kind of hint then waits on that field, unless it is much worse.
+	Clear    Duration `json:"clear"`
+	Cooldown Duration `json:"cooldown"`
 	// Warmup is how long a machine's field is learned in a state before it is judged in it: a
 	// day, so the normal has seen a day's swings (the hall warming in the afternoon).
 	Warmup Duration `json:"warmup"`
 	// Span is how many readings the normal follows once warmed up: longer takes a slow drift
 	// for normal less, shorter adapts sooner to a machine that changed.
 	Span int `json:"span,omitempty"`
-	// Skip are fields never judged, besides counters and positions.
+	// MaxOpen hints open at once, or MaxPerHour begun within an hour, and a company's new hints
+	// wait: past that its normals are off, not its machines.
+	MaxOpen    int `json:"maxOpen,omitempty"`
+	MaxPerHour int `json:"maxPerHour,omitempty"`
+	// Skip are fields never judged, besides counters, positions, set-points, stock and measured
+	// parts; a trailing * (or .) makes a prefix, e.g. "inv.*".
 	Skip []string `json:"skip,omitempty"`
 }
 
