@@ -49,7 +49,7 @@ function buildStation(a: Asset, plant: PlantLayout): ModelHandle {
     const update = model.update.bind(model);
     model.update = (as, dt, t, sim) => {
       update(as, dt, t, sim);
-      const heat = as.spec?.trip ? Math.max(0, Math.min(1, (as.temp - 22) / (as.spec.trip - 22))) : 0;
+      const heat = as.spec?.trip && as.spec.trip > 22 ? Math.max(0, Math.min(1, (as.temp - 22) / (as.spec.trip - 22))) : 0;
       animateParts(extra, dt, t, as.state === 'running', as.progress, heat, as.speed);
     };
   }
@@ -80,7 +80,8 @@ export function applyTint(model: ModelHandle, a: Asset, mode: ViewMode, t: numbe
     const base = mat.userData.base as THREE.Color;
     mat.emissive.setRGB(0, 0, 0);
     if (mode === 'heat' && a.spec?.trip) {
-      ramp((a.temp - 22) / (a.spec.trip - 22), mat.color);
+      // a fridge (trip below ambient) is at the cold end of the ramp
+      ramp(a.spec.trip > 22 ? (a.temp - 22) / (a.spec.trip - 22) : 0, mat.color);
     } else if (mode === 'util' && a.spec?.runRise !== undefined) {
       ramp(a.util, mat.color);
     } else if (mode !== 'live') {

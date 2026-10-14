@@ -1215,8 +1215,15 @@ export const AnomalyReport = z.object({
   /** the last 30 days', newest first, ended and current */
   recent: z.array(Anomaly),
   machines: z.array(AnomalyMachine),
-  /** k σ for sustain seconds is a hint; a field is learned for warmup seconds in a state first; the normal then follows span readings */
-  settings: z.object({ k: num, sustain: num, warmup: num, span: num }),
+  /**
+   * k σ for sustain seconds, or the ten-minute average driftK σ off for driftSustain seconds, is a
+   * hint (a slow field waits longer); it ends once back for clear seconds, and the same kind then
+   * waits cooldown seconds; a field is learned for warmup seconds in a state first; the normal then
+   * follows span readings
+   */
+  settings: z.object({ k: num, driftK: num, sustain: num, driftSustain: num, clear: num, cooldown: num, warmup: num, span: num }),
+  /** hints open now and begun in the last hour; past maxOpen or maxPerHour new ones wait (paused), heldBack counts them */
+  valve: z.object({ open: num, lastHour: num, maxOpen: num, maxPerHour: num, paused: z.boolean(), heldBack: num }),
   /** the caller may reset a machine's normal */
   admin: z.boolean(),
 }).meta({ description: 'GET /api/anomalies/{company} — members and above; MCP list_anomalies' });

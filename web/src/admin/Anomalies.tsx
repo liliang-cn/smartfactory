@@ -108,7 +108,14 @@ export function AnomalyPanel({ c }: { c: api.Company }) {
       {error && <p className="text-[13px] text-destructive">{error}</p>}
       {s && (
         <p className="mb-3 text-[12.5px] leading-relaxed text-muted-foreground">
-          每台接了真实数据的设备，按它自己在各个状态下的读数学平常值（每个状态先学 {span(s.warmup)}）。读数偏离平常 {s.k} 个标准差持续 {span(s.sustain)}，或近期平均慢慢偏离，就提示一次。只是提示，设备照常运行；仿真的设备不会有。
+          每台接了真实数据的设备，按它自己在各个状态下的读数学平常值（每个状态先学 {span(s.warmup)}）。读数偏离平常 {s.k} 个标准差持续 {span(s.sustain)}，或近十分钟平均偏离 {s.driftK} 个标准差持续 {span(s.driftSustain)}，就提示一次；温度这类变得慢的读数等得更久。恢复 {span(s.clear)} 才算结束，结束后 {span(s.cooldown)} 内同样的不再提示。只是提示，设备照常运行；仿真的设备不会有。
+        </p>
+      )}
+      {rep && (
+        <p className={cn('mb-3 rounded-lg px-2.5 py-1.5 text-[12.5px] tabular-nums', rep.valve.paused ? 'bg-warning-soft text-warning' : 'bg-surface text-muted-foreground')}>
+          {rep.valve.paused
+            ? `提示太多，新的先压着：开着 ${rep.valve.open} 条（上限 ${rep.valve.maxOpen}），近一小时新增 ${rep.valve.lastHour} 条（上限 ${rep.valve.maxPerHour}），已压下 ${rep.valve.heldBack} 条。多半是平常值不对了，可以让这些设备重新学习。`
+            : `开着 ${rep.valve.open} 条，近一小时新增 ${rep.valve.lastHour} 条${rep.valve.heldBack ? `，曾压下 ${rep.valve.heldBack} 条` : ''}。超过 ${rep.valve.maxOpen} 条或一小时 ${rep.valve.maxPerHour} 条，新的先压着。`}
         </p>
       )}
       {rep && !rep.machines.length && <p className="text-[13px] text-muted-foreground">还没有设备上报实测数据。</p>}

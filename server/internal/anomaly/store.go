@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -31,6 +32,11 @@ func Open(dir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// normals kept before a field's pace was
+	if _, err := db.Exec(`ALTER TABLE baselines ADD COLUMN dvar REAL NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		db.Close()
+		return nil, err
+	}
 	// hints open when the server stopped: what became of them was not watched
 	if _, err := db.Exec(`UPDATE hints SET ended = ? WHERE ended IS NULL`, time.Now().UnixMilli()); err != nil {
 		db.Close()
@@ -47,7 +53,7 @@ type row struct {
 }
 
 func (s *Store) baselines() ([]row, error) {
-	rows, err := s.db.Query(`SELECT company, plant, asset, field, state, n, mean, var, short, svar, first, last FROM baselines`)
+	rows, err := s.db.Query(`SELECT company, plant, asset, field, state, n, mean, var, short, svar, first, last, dvar FROM baselines`)
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +61,12 @@ func (s *Store) baselines() ([]row, error) {
 	var out []row
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.company, &r.plant, &r.asset, &r.field, &r.state, &r.stat.N, &r.stat.Mean, &r.stat.Var, &r.stat.Short, &r.stat.ShortVar, &r.stat.First, &r.stat.Last); err != nil {
+		if err := rows.Scan(&r.company, &r.plant, &r.asset, &r.field, &r.state, &r.stat.N, &r.stat.Mean, &r.stat.Var, &r.stat.Short, &r.stat.MidVar, &r.stat.First, &r.stat.Last, &r.stat.DVar); err != nil {
 			return nil, err
+		}
+		if r.stat.DVar == 0 {
+			// kept before its pace was: what the column held then is another thing
+			r.stat.MidVar = 0
 		}
 		out = append(out, r)
 	}
@@ -72,15 +82,15 @@ func (s *Store) save(rs []row) error {
 		return err
 	}
 	defer tx.Rollback()
-	st, err := tx.Prepare(`INSERT INTO baselines VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET
-		n=excluded.n, mean=excluded.mean, var=excluded.var, short=excluded.short, svar=excluded.svar, first=excluded.first, last=excluded.last`)
+	st, err := tx.Prepare(`INSERT INTO baselines (company, plant, asset, field, state, n, mean, var, short, svar, first, last, dvar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT DO UPDATE SET n=excluded.n, mean=excluded.mean, var=excluded.var, short=excluded.short, svar=excluded.svar, first=excluded.first, last=excluded.last, dvar=excluded.dvar`)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 	for _, r := range rs {
 		x := r.stat
-		if _, err := st.Exec(r.company, r.plant, r.asset, r.field, r.state, x.N, x.Mean, x.Var, x.Short, x.ShortVar, x.First, x.Last); err != nil {
+		if _, err := st.Exec(r.company, r.plant, r.asset, r.field, r.state, x.N, x.Mean, x.Var, x.Short, x.MidVar, x.First, x.Last, x.DVar); err != nil {
 			return err
 		}
 	}

@@ -32,37 +32,63 @@ import (
 const (
 	// Level: readings stayed K σ away from the normal.
 	Level = "level"
-	// Drift: the recent average moved off the normal, by less than K σ of a single reading but
-	// further than that average usually strays.
+	// Drift: the average of the last minutes stayed DriftK σ off the normal for DriftSustain:
+	// a real shift, short of K σ.
 	Drift = "drift"
 )
 
 // Settings are how the detector judges (config.Anomaly with its defaults).
 type Settings struct {
-	K       float64
-	Sustain time.Duration
-	Warmup  time.Duration
+	// K σ held for Sustain is a level hint; DriftK σ of the average over DriftWindow, held for
+	// DriftSustain, a drift hint.
+	K, DriftK             float64
+	Sustain, DriftSustain time.Duration
+	DriftWindow           time.Duration
+	// Clear is how long a field has to be back within before its hint ends; Cooldown how long
+	// after that the same kind of hint waits, unless it is much worse.
+	Clear, Cooldown time.Duration
+	Warmup          time.Duration
 	// MinReadings a field must have in a state, besides Warmup, before it is judged in it.
 	MinReadings int
-	// Span is how many readings the normal averages over; Short how many the recent average does.
-	Span, Short int
-	Skip        []string
+	// Span is how many readings the normal averages over.
+	Span int
+	// Gap is how long a machine can be silent and go on being judged as it was; SettleMax how long
+	// after a gap a field out of range is left to come back before it is judged again.
+	Gap, SettleMax time.Duration
+	// MaxOpen hints open, or MaxPerHour begun in the last hour, and a company's new hints wait:
+	// its normals are off, not its machines.
+	MaxOpen, MaxPerHour int
+	Skip                []string
 }
 
 func SettingsFrom(c config.Anomaly) Settings {
-	s := Settings{K: c.K, Sustain: c.Sustain.Or(time.Minute), Warmup: c.Warmup.Or(24 * time.Hour), MinReadings: 100, Span: c.Span, Short: 20, Skip: c.Skip}
+	s := Settings{K: c.K, DriftK: c.DriftK, Sustain: c.Sustain.Or(time.Minute), DriftSustain: c.DriftSustain.Or(30 * time.Minute), DriftWindow: 10 * time.Minute,
+		Clear: c.Clear.Or(5 * time.Minute), Cooldown: c.Cooldown.Or(30 * time.Minute), Warmup: c.Warmup.Or(24 * time.Hour), MinReadings: 100, Span: c.Span,
+		Gap: time.Minute, SettleMax: 2 * time.Hour, MaxOpen: c.MaxOpen, MaxPerHour: c.MaxPerHour, Skip: c.Skip}
 	if s.K <= 0 {
 		s.K = 3
+	}
+	if s.DriftK <= 0 {
+		s.DriftK = 2
 	}
 	if s.Span <= 0 {
 		s.Span = 200000
 	}
+	if s.MaxOpen <= 0 {
+		s.MaxOpen = 15
+	}
+	if s.MaxPerHour <= 0 {
+		s.MaxPerHour = 20
+	}
 	return s
 }
 
-// skipped are fields that count, place or are set rather than measured: they only grow, jump by
-// design or follow a command.
-var skipped = []string{"mcount", "count", "cycles", "toolUsed", "toolLife", "faultCode", "x", "z", "heading", "battery", "speed", "health", "stock", "avail", "cap"}
+// skipped are fields that count, place, are set or are stock rather than a machine's condition:
+// they only grow, jump by design or follow a command. A measured part (measure, lastMeasure)
+// drifts with the tool by design, and the twin's SPC watches it already. A name ending in "." or
+// "*" is a prefix: inv.punch, cap.punch are a warehouse's stock and capacity.
+var skipped = []string{"mcount", "count", "cycles", "toolUsed", "toolLife", "faultCode", "x", "z", "heading", "battery", "speed", "health", "stock",
+	"avail", "cap", "task", "measure", "lastMeasure", "inv.", "cap."}
 
 // Anomaly is a hint: a machine's field that is unusual for its state.
 type Anomaly struct {
@@ -91,11 +117,17 @@ type Anomaly struct {
 }
 
 // Stat is what a field normally reads in one state: Mean and Var, and Short, the average of the
-// last few readings, with ShortVar, how far that average usually strays from Mean.
+// last DriftWindow (weighted by time, so a source reading once a second and one reading every five
+// average over the same minutes).
 type Stat struct {
-	N               int64
-	Mean, Var       float64
-	Short, ShortVar float64
+	N         int64
+	Mean, Var float64
+	Short     float64
+	// Mid is the average of the last minute (reading noise mostly gone), MidVar how far it strays
+	// from Mean, DVar how fast it moves: the mean of its (change per second)². A temperature moves
+	// slowly and wanders far (a press warming after a stop takes most of an hour), a vibration
+	// jumps about but stays put: √(MidVar/DVar) is how long the field takes to cross its spread.
+	Mid, MidVar, DVar float64
 	// First and Last reading, epoch milliseconds.
 	First, Last int64
 	dirty       bool
@@ -107,14 +139,20 @@ func (s *Stat) sigma() float64 {
 	return math.Max(math.Sqrt(s.Var), math.Max(0.01*math.Abs(s.Mean), 0.05))
 }
 
+// pace is how long the field takes to wander across its spread, from its learned speed.
+func (s *Stat) pace() time.Duration {
+	if s.DVar <= 0 {
+		return 0
+	}
+	return time.Duration(math.Sqrt(s.MidVar/s.DVar) * float64(time.Second))
+}
+
 // learn takes x into the mean with weight a and into the spreads with weight b.
 func (s *Stat) learn(x, a, b float64) {
 	s.N++
 	d := x - s.Mean
 	s.Mean += a * d
 	s.Var = (1 - b) * (s.Var + b*d*d)
-	e := s.Short - s.Mean
-	s.ShortVar += b * (e*e - s.ShortVar)
 	s.dirty = true
 }
 
@@ -126,7 +164,11 @@ type machine struct {
 	// readings cannot be told apart and are let pass
 	stated bool
 	// since: when it changed to its state
-	since  time.Time
+	since time.Time
+	// seen: its last reading; epoch counts its gaps (silent past Gap, back from another source, or
+	// first heard since the server started), after each of which its fields settle again
+	seen   time.Time
+	epoch  uint32
 	fields map[string]*field
 }
 
@@ -137,18 +179,64 @@ type field struct {
 	at     time.Time
 	track
 	hint *Anomaly
+	// a hint of each kind that ended: until when another waits, and how far it went
+	cool [2]cooldown
+	// the machine's epoch it settled in
+	epoch uint32
 	// as they were before the last reading, to take it back
 	before      Stat
 	beforeTrack track
 	beforeHint  Anomaly
 }
 
-// track is how a field is judged: the last reading and how far it was; since when (and for how
-// many readings in a row) it has been beyond K σ, its average beyond its line, and back within.
+type cooldown struct {
+	until time.Time
+	peak  float64
+}
+
+// track is how a field is judged: the last reading and how far it and the average were; since
+// when (and for how many readings in a row) it has been beyond K σ, its average beyond DriftK, and
+// back within; whether it is settling after a gap, and whether its run was held back.
 type track struct {
-	value, z                      float64
+	value, z, zd                  float64
+	peak, peakD                   float64
 	outSince, driftSince, inSince time.Time
 	outN, driftN                  int
+	settling                      bool
+	settleSince                   time.Time
+	held                          bool
+	// midFrom: when the minute average last started over; lastOut: the last reading out
+	midFrom, lastOut time.Time
+}
+
+// valve keeps count of a company's hints: open now, begun in each of the last 60 minutes, and
+// whether new ones are held back.
+type valve struct {
+	open       int
+	minutes    [60]uint16
+	stamps     [60]int64
+	paused     bool
+	suppressed int
+}
+
+func (v *valve) begun(at time.Time) {
+	m := at.UnixMilli() / 60000
+	i := m % 60
+	if v.stamps[i] != m {
+		v.stamps[i], v.minutes[i] = m, 0
+	}
+	v.minutes[i]++
+}
+
+func (v *valve) lastHour(at time.Time) int {
+	m := at.UnixMilli() / 60000
+	n := 0
+	for i, s := range v.stamps {
+		if s > m-60 && s <= m {
+			n += int(v.minutes[i])
+		}
+	}
+	return n
 }
 
 type event struct {
@@ -166,15 +254,17 @@ type Detector struct {
 	// Changed is told the company a hint began or ended in, once it is kept (nil: no one).
 	Changed func(company string)
 
-	store    *Store
-	skip     map[string]bool
-	mu       sync.Mutex
-	machines map[mkey]*machine
-	nextID   int64
-	events   chan event
-	dropped  atomic.Uint64
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
+	store     *Store
+	skip      map[string]bool
+	prefixes  []string
+	mu        sync.Mutex
+	machines  map[mkey]*machine
+	companies map[string]*valve
+	nextID    int64
+	events    chan event
+	dropped   atomic.Uint64
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 // New is a detector keeping its normals and hints in st (nil: nothing kept), loaded from it.
@@ -182,9 +272,16 @@ func New(st *Store, set Settings, trail *audit.Log, log *slog.Logger) (*Detector
 	if log == nil {
 		log = slog.Default()
 	}
-	d := &Detector{Set: set, Audit: trail, Log: log, Now: time.Now, store: st, skip: map[string]bool{}, machines: map[mkey]*machine{}, events: make(chan event, 1024)}
+	d := &Detector{Set: set, Audit: trail, Log: log, Now: time.Now, store: st, skip: map[string]bool{}, machines: map[mkey]*machine{}, companies: map[string]*valve{},
+		events: make(chan event, 1024)}
 	for _, f := range append(slices.Clone(skipped), set.Skip...) {
-		d.skip[f] = true
+		if p, ok := strings.CutSuffix(f, "*"); ok {
+			d.prefixes = append(d.prefixes, p)
+		} else if strings.HasSuffix(f, ".") {
+			d.prefixes = append(d.prefixes, f)
+		} else {
+			d.skip[f] = true
+		}
 	}
 	if st != nil {
 		rows, err := st.baselines()
@@ -192,6 +289,10 @@ func New(st *Store, set Settings, trail *audit.Log, log *slog.Logger) (*Detector
 			return nil, err
 		}
 		for _, r := range rows {
+			if d.skipped(r.field) {
+				// learned before it was left out (stock, a measured part)
+				continue
+			}
 			s := r.stat
 			m := d.machineOf(mkey{r.company, r.plant, r.asset})
 			m.stated = m.stated || r.state != ""
@@ -220,6 +321,39 @@ func (d *Detector) fieldOf(m *machine, name string) *field {
 		m.fields[name] = f
 	}
 	return f
+}
+
+// skipped says whether a field is never judged.
+func (d *Detector) skipped(f string) bool {
+	if d.skip[f] {
+		return true
+	}
+	for _, p := range d.prefixes {
+		if strings.HasPrefix(f, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Detector) valveOf(company string) *valve {
+	v := d.companies[company]
+	if v == nil {
+		v = &valve{}
+		d.companies[company] = v
+	}
+	return v
+}
+
+// see notes a reading of the machine: one after a gap, or from another source, starts an epoch.
+func (d *Detector) see(m *machine, t tags.Tag, at time.Time) {
+	if m.seen.IsZero() || at.Sub(m.seen) > d.Set.Gap || (m.source != "" && t.Source != m.source) {
+		m.epoch++
+	}
+	if at.After(m.seen) {
+		m.seen = at
+	}
+	m.source = t.Source
 }
 
 func number(v any) (float64, bool) {
@@ -255,6 +389,7 @@ func (d *Detector) Add(t tags.Tag) {
 		d.mu.Lock()
 		m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
 		m.stated = true
+		d.see(m, t, at)
 		if s != m.state {
 			d.switchState(m, s, at)
 		}
@@ -262,16 +397,16 @@ func (d *Detector) Add(t tags.Tag) {
 		return
 	}
 	x, ok := number(t.Value)
-	if !ok || math.IsNaN(x) || math.IsInf(x, 0) || d.skip[t.Field] {
+	if !ok || math.IsNaN(x) || math.IsInf(x, 0) || d.skipped(t.Field) {
 		return
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	m := d.machineOf(mkey{t.Company, t.Plant, t.Asset})
+	d.see(m, t, at)
 	if (m.stated && m.state == "") || at.Sub(m.since) < settle {
 		return
 	}
-	m.source = t.Source
 	f := d.fieldOf(m, t.Field)
 	s := f.states[m.state]
 	if s == nil {
@@ -285,6 +420,10 @@ func (d *Detector) Add(t tags.Tag) {
 // heater still drawing, are neither the old state's normal nor the new one's.
 const settle = 5 * time.Second
 
+// longState is how long a machine has to have been in a state for its fields to settle again
+// when it leaves it: a press idle for a minute is still warm, one stopped for half an hour is not.
+const longState = 5 * time.Minute
+
 // sameReport is how close readings are that came in one report: the hub stamps each field of a
 // message as it publishes it, a few microseconds apart.
 const sameReport = 250 * time.Millisecond
@@ -295,6 +434,10 @@ const sameReport = 250 * time.Millisecond
 // normal, and out of the field's hint (an idle machine's power is not a running one's 39 σ low).
 func (d *Detector) switchState(m *machine, s string, at time.Time) {
 	old := m.state
+	if !m.since.IsZero() && at.Sub(m.since) >= longState {
+		// after a long stop (or a long run) a temperature takes its time to arrive: settle again
+		m.epoch++
+	}
 	m.state, m.since = s, at
 	for _, f := range m.fields {
 		if gap := at.Sub(f.at); f.cur == nil || gap < 0 || gap > sameReport || f.cur.N != f.before.N+1 {
@@ -323,38 +466,61 @@ func (d *Detector) switchState(m *machine, s string, at time.Time) {
 // of the ordinary counting a tenth. So what was normal stays the yardstick for days, and something
 // new (a cold start never seen) still becomes normal in time.
 //
-// Two tests against it: a reading further than K σ from Mean (a step, an excursion that lasts),
-// and the average of the last Short readings (an EWMA) further than K+1 times how far that average
-// usually strays from Mean (a slow drift: the average moves with it, the normal hardly does, and
-// noise mostly averages out). How far the average strays is learned too, so a field that wanders
-// slowly by nature (a temperature warming up) is not drifting. Either has to hold for Sustain and
-// three readings in a row to be a hint (an excursion holds the drift test's count, or the average
-// it leaves behind would be one), and both have to be back within for Sustain to end it.
+// Two tests against it, both in σ of the normal: a reading further than K (a step, an excursion)
+// held for Sustain, and the average of the last DriftWindow further than DriftK held for
+// DriftSustain (a real shift short of K; a signal that wanders by nature crosses DriftK now and
+// then but does not stay there for half an hour). A slow field (a temperature) is held to its own
+// pace: both wait at least twice the time it takes to cross its spread, and its average has to go
+// where its minute average seldom does. A run, once begun, goes on while it stays a little less
+// out (K-1, the drift line less half), so noise near the line does not break it. A hint ends once
+// back within for Clear; the same kind then waits Cooldown unless it is much worse.
+//
+// After a gap (the server restarted, the equipment came back) a machine has moved on: a cooled
+// press reads cold while "running". Each field is left out, neither learned nor judged, until its
+// reading is back near its normal, or for SettleMax at most.
 func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, at time.Time) {
 	set := d.Set
 	f.before, f.beforeTrack = *s, f.track
 	if f.hint != nil {
 		f.beforeHint = *f.hint
 	}
-	if f.cur != s {
-		// another state: its own normal, and the evidence so far was against the other one
-		s.Short, f.cur = x, s
-		f.outSince, f.driftSince, f.inSince = time.Time{}, time.Time{}, time.Time{}
-		f.outN, f.driftN = 0, 0
-	}
 	ms := at.UnixMilli()
+	if f.cur != s || f.epoch != m.epoch {
+		// another state or another epoch: the evidence so far was against what is past
+		s.Short, s.Mid, f.cur, f.midFrom = x, x, s, at
+		f.outSince, f.driftSince, f.inSince = time.Time{}, time.Time{}, time.Time{}
+		f.outN, f.driftN, f.held = 0, 0, false
+		if f.epoch != m.epoch {
+			f.epoch, f.settling, f.settleSince = m.epoch, true, at
+		}
+	}
+	var step, dt float64
+	if f.cur == s && ms > s.Last {
+		dt = float64(ms-s.Last) / 1000
+		s.Short += math.Min(1, dt/set.DriftWindow.Seconds()) * (x - s.Short)
+		step = math.Min(1, dt/60) * (x - s.Mid)
+		s.Mid += step
+	}
 	warm := s.N >= int64(set.MinReadings) && ms-s.First >= set.Warmup.Milliseconds()
 	sigma := s.sigma()
 	z := (x - s.Mean) / sigma
-	lam := 2 / float64(set.Short+1)
-	s.Short += lam * (x - s.Short)
-	spread := math.Max(math.Sqrt(s.ShortVar), sigma*math.Sqrt(lam/(2-lam)))
-	// a run, once begun, goes on while it stays a σ less out: noise near the line does not break
-	// it. The average's own noise is slow (each value carries the last ones): its line is one
-	// further out, or it would cross it every few hundred readings.
+	zd := (s.Short - s.Mean) / sigma
+	f.value, f.z, f.zd, f.at = x, z, zd, at
+	if f.settling {
+		if warm && math.Abs(z) > set.K-1 && at.Sub(f.settleSince) < set.SettleMax {
+			s.Last = ms
+			return
+		}
+		f.settling = false
+		s.Short, s.Mid, f.midFrom = x, x, at
+		zd = z
+	}
 	hold := func(v, k float64, n int) bool { return warm && (math.Abs(v) > k || (n > 0 && math.Abs(v) > k-1)) }
 	level := hold(z, set.K, f.outN)
-	drift := hold((s.Short-s.Mean)/spread, set.K+1, f.driftN)
+	// a slow field's average strays as far as its readings do: for it the line is where its own
+	// minute average seldom goes (K of its spread), so a drift is never just a slow level
+	line := math.Max(set.DriftK, set.K*math.Sqrt(s.MidVar)/sigma)
+	drift := warm && (math.Abs(zd) > line || (f.driftN > 0 && math.Abs(zd) > line-0.5))
 	a := 1 / float64(set.Span)
 	switch {
 	case !warm:
@@ -365,37 +531,61 @@ func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, a
 	default:
 		s.learn(x, a, a/10)
 	}
+	// the pace, from ordinary readings once the minute average has caught up and the mean has
+	// something to go by; both parts learned alike from zero, so their ratio is right from the
+	// start. Once warm only near the normal, and ten times slower: a field drifting off is not a
+	// field that has become slow.
+	if w := f.pacing(warm, zd, (s.Mid-s.Mean)/sigma, at); w > 0 && dt > 0 && dt <= 60 && !level && !drift && at.Sub(f.midFrom) >= 2*time.Minute && s.N >= int64(set.MinReadings) {
+		s.DVar += w * (step*step/(dt*dt) - s.DVar)
+		e := s.Mid - s.Mean
+		s.MidVar += w * (e*e - s.MidVar)
+	}
 	s.Last = ms
-	f.value, f.z, f.at = x, z, at
 
+	if level || drift {
+		f.lastOut = at
+	}
 	if level {
 		if f.outN == 0 {
-			f.outSince = at
+			f.outSince, f.peak = at, 0
 		}
 		f.outN++
+		if math.Abs(z) > math.Abs(f.peak) {
+			f.peak = z
+		}
 	} else {
 		f.outN = 0
 	}
-	if drift && !level {
+	if drift {
 		if f.driftN == 0 {
-			f.driftSince = at
+			f.driftSince, f.peakD = at, 0
 		}
 		f.driftN++
-	} else if !level {
+		if math.Abs(zd) > math.Abs(f.peakD) {
+			f.peakD = zd
+		}
+	} else {
 		f.driftN = 0
 	}
-	// back within: no run of three readings out (a lone reading out does not count)
-	if f.outN >= 3 || f.driftN >= 3 || !warm {
+	// back within: no run of three readings out (a lone reading out does not count). A level hint
+	// asks only that its readings be back: the average a spike leaves behind is no reason to keep it.
+	out := f.outN >= 3 || f.driftN >= 3
+	if h := f.hint; h != nil && h.Kind == Level {
+		out = f.outN >= 3
+	}
+	if out || !warm {
 		f.inSince = time.Time{}
 	} else if f.inSince.IsZero() {
 		f.inSince = at
 	}
-	sustained := func(n int, since time.Time) bool { return n >= 3 && at.Sub(since) >= set.Sustain }
+	// a field that takes long to wander takes as long to come back: a press still cold half an
+	// hour after a stop is how it warms up, not a hint. Both tests wait twice its pace at least.
+	pace := min(2*s.pace(), set.SettleMax)
 	kind := ""
 	switch {
-	case sustained(f.outN, f.outSince):
+	case f.outN >= 3 && at.Sub(f.outSince) >= max(set.Sustain, pace):
 		kind = Level
-	case sustained(f.driftN, f.driftSince):
+	case f.driftN >= 3 && at.Sub(f.driftSince) >= max(set.DriftSustain, pace):
 		kind = Drift
 	}
 	if h := f.hint; h != nil {
@@ -405,7 +595,7 @@ func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, a
 		}
 		h.Value, h.Z = x, z
 		if h.Kind == Drift && kind != Level {
-			h.Value, h.Z = s.Short, (s.Short-s.Mean)/sigma
+			h.Value, h.Z = s.Short, zd
 		}
 		if math.Abs(h.Z) > math.Abs(h.Peak) {
 			h.Peak = h.Z
@@ -415,27 +605,89 @@ func (d *Detector) judge(t tags.Tag, m *machine, f *field, s *Stat, x float64, a
 			h.Kind = Level
 			h.Text = Describe(*h)
 		}
-		if !f.inSince.IsZero() && at.Sub(f.inSince) >= set.Sustain {
+		if !f.inSince.IsZero() && at.Sub(f.inSince) >= set.Clear {
 			end := at
 			h.Ended = &end
 			f.hint = nil
+			f.cool[kindIndex(h.Kind)] = cooldown{until: at.Add(set.Cooldown), peak: math.Abs(h.Peak)}
+			d.valveOf(h.Company).open--
 			d.emit(event{ended: true, a: *h})
 		}
 		return
 	}
 	if kind == "" {
+		f.held = false
+		return
+	}
+	now := math.Abs(z)
+	if kind == Drift {
+		now = math.Abs(zd)
+	}
+	// the same kind just ended: a run begun before the cooldown is over waits, unless it is much
+	// worse than the last; one begun after it has had the full Sustain (a drift half an hour) to
+	// show it is new
+	since := f.outSince
+	if kind == Drift {
+		since = f.driftSince
+	}
+	if c := f.cool[kindIndex(kind)]; since.Before(c.until) && now < math.Max(1.5*c.peak, c.peak+2) {
+		return
+	}
+	v := d.valveOf(t.Company)
+	if !d.letThrough(v, t.Company, at) {
+		if !f.held {
+			f.held = true
+			v.suppressed++
+		}
 		return
 	}
 	d.nextID++
 	h := &Anomaly{ID: d.nextID, Company: t.Company, Plant: t.Plant, Asset: t.Asset, Field: t.Field, State: m.state, Kind: kind,
 		Since: f.outSince, Value: x, Z: z, Mean: s.Mean, Sigma: sigma, Source: t.Source}
+	h.Peak = f.peak
 	if kind == Drift {
-		h.Since, h.Value, h.Z = f.driftSince, s.Short, (s.Short-s.Mean)/sigma
+		h.Since, h.Value, h.Z, h.Peak = f.driftSince, s.Short, zd, f.peakD
 	}
-	h.Peak = h.Z
 	h.Text = Describe(*h)
-	f.hint = h
+	f.hint, f.held = h, false
+	v.open++
+	v.begun(at)
 	d.emit(event{a: *h})
+}
+
+// pacing is the weight a reading has in a field's pace: once warm, only a quiet field's (no hint,
+// nothing out for ten minutes, its averages near the normal) and ten times less.
+func (f *field) pacing(warm bool, zd, zm float64, at time.Time) float64 {
+	switch {
+	case !warm:
+		return 1.0 / 2000
+	case f.hint == nil && at.Sub(f.lastOut) >= 10*time.Minute && math.Abs(zd) < 1 && math.Abs(zm) < 2:
+		return 1.0 / 20000
+	}
+	return 0
+}
+
+func kindIndex(kind string) int {
+	if kind == Drift {
+		return 1
+	}
+	return 0
+}
+
+// letThrough says whether a company may have another hint. MaxOpen open or MaxPerHour begun in
+// the last hour means its normals are off (learned through a bad day, a fleet that changed), not
+// all its machines: new hints wait, said once in the log, until both are down to half.
+func (d *Detector) letThrough(v *valve, company string, at time.Time) bool {
+	hour := v.lastHour(at)
+	switch {
+	case !v.paused && (v.open >= d.Set.MaxOpen || hour >= d.Set.MaxPerHour):
+		v.paused = true
+		d.Log.Warn("anomaly: too many hints, new ones wait until there are fewer; the normals may need learning again", "company", company, "open", v.open, "lastHour", hour)
+	case v.paused && v.open < d.Set.MaxOpen/2 && hour < d.Set.MaxPerHour/2:
+		v.paused = false
+		d.Log.Info("anomaly: hints let through again", "company", company, "open", v.open, "lastHour", hour, "heldBack", v.suppressed)
+	}
+	return !v.paused
 }
 
 func (d *Detector) emit(e event) {
@@ -609,19 +861,35 @@ func (d *Detector) Machines(company string) []Machine {
 	return out
 }
 
-// Report is a company's hints now, those of the last 30 days, its measured machines' normals and
-// how they are judged.
+// Report is a company's hints now, those of the last 30 days, its measured machines' normals,
+// how they are judged and whether new hints are held back.
 type Report struct {
 	Current  []Anomaly `json:"current"`
 	Recent   []Anomaly `json:"recent"`
 	Machines []Machine `json:"machines"`
 	Settings struct {
-		K float64 `json:"k"`
-		// Sustain and Warmup in seconds; Span in readings.
-		Sustain float64 `json:"sustain"`
-		Warmup  float64 `json:"warmup"`
-		Span    int     `json:"span"`
+		K      float64 `json:"k"`
+		DriftK float64 `json:"driftK"`
+		// Sustain, DriftSustain, Clear, Cooldown and Warmup in seconds; Span in readings.
+		Sustain      float64 `json:"sustain"`
+		DriftSustain float64 `json:"driftSustain"`
+		Clear        float64 `json:"clear"`
+		Cooldown     float64 `json:"cooldown"`
+		Warmup       float64 `json:"warmup"`
+		Span         int     `json:"span"`
 	} `json:"settings"`
+	Valve Valve `json:"valve"`
+}
+
+// Valve is how many hints a company has: open now and begun in the last hour, against the limits
+// past which new ones wait; and how many waited.
+type Valve struct {
+	Open       int  `json:"open"`
+	LastHour   int  `json:"lastHour"`
+	MaxOpen    int  `json:"maxOpen"`
+	MaxPerHour int  `json:"maxPerHour"`
+	Paused     bool `json:"paused"`
+	HeldBack   int  `json:"heldBack"`
 }
 
 func (d *Detector) Report(company string) (*Report, error) {
@@ -630,7 +898,13 @@ func (d *Detector) Report(company string) (*Report, error) {
 		return nil, err
 	}
 	r := &Report{Current: d.Current(company), Recent: recent, Machines: d.Machines(company)}
-	r.Settings.K, r.Settings.Sustain, r.Settings.Warmup, r.Settings.Span = d.Set.K, d.Set.Sustain.Seconds(), d.Set.Warmup.Seconds(), d.Set.Span
+	set := d.Set
+	r.Settings.K, r.Settings.DriftK, r.Settings.Sustain, r.Settings.DriftSustain = set.K, set.DriftK, set.Sustain.Seconds(), set.DriftSustain.Seconds()
+	r.Settings.Clear, r.Settings.Cooldown, r.Settings.Warmup, r.Settings.Span = set.Clear.Seconds(), set.Cooldown.Seconds(), set.Warmup.Seconds(), set.Span
+	d.mu.Lock()
+	v := d.valveOf(company)
+	r.Valve = Valve{Open: v.open, LastHour: v.lastHour(d.Now()), MaxOpen: set.MaxOpen, MaxPerHour: set.MaxPerHour, Paused: v.paused, HeldBack: v.suppressed}
+	d.mu.Unlock()
 	return r, nil
 }
 
@@ -657,6 +931,7 @@ func (d *Detector) Reset(company, plant, asset string) (bool, error) {
 				ended = append(ended, *f.hint)
 			}
 		}
+		d.valveOf(company).open -= len(ended)
 		delete(d.machines, k)
 	}
 	d.mu.Unlock()

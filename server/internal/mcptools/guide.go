@@ -26,6 +26,7 @@ const guide = `# 用配置搭一个新的数字孪生场景
 - industry.unit：单元量词（组、桌、位、辆）。qualityLabel：比如 "顾客满意度"。
 - industry.terms：看板用词 {oee: "营地运营效率", throughput: "每小时接待", power: "实时用电", line: "个营区", vehicle: "送餐车",
   order: {title: "接待跟踪", tab: "预订", prefix: "BK", steps: [下达, 齐套, 进行中, 完成, 检验, 交付 六个阶段名]}}。
+- industry.calendar.open: {from: 11, to: 1}：营业时间（可以跨午夜），之外不再进新的单元，已经在线上的走完，设备照常开着。
 - 用 measure 表达评分（例如结账时的满意度 1–5 分，lo: 4 以下算投诉被剔除）。
 
 ## 库存与容量（帐篷 20 顶在用 18 这种）
@@ -69,6 +70,7 @@ machines.<key> = {
   cycle（秒）, makes?, thermal: {idle, run, warn, trip}, power: {idle, run}（kW）, vibration, faults: [故障描述...], measure?, rejectRate?
 }
 - thermal.idle / run 是相对 22°C 环境的**温升**；warn / trip 是**绝对温度**，且必须 warn ≥ 22 + run + 6、trip > warn。
+- 冷柜、冷库、速冻隧道这类制冷设备 idle / run 写负数（2°C 的冷藏柜：idle -20）：不会因温度跳停，停机或故障时往环境温度回升。thermal.wear 是完全磨损时多出的温度（默认 18，制冷设备写 2–4）。
 - 原型（archetype）与默认尺寸：
   - frame [2,2,2]：**空底座，外观全靠 parts**——天幕、桌椅、烤炉、帐篷、柜台都用它。
   - manual [2.9,3.2,2.6]：工作台 + 操作员（operators 1–4 人）——接待、备菜、服务员岗位。
