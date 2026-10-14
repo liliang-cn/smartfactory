@@ -1,0 +1,2066 @@
+{
+  "$schema": "../schema/industry.json",
+  "id": "chuanchuan-store",
+  "name": "串串香·门店",
+  "unit": "桌",
+  "qualityLabel": "好评率",
+  "flow": "walk",
+  "terms": {
+    "oee": "门店运营效率",
+    "throughput": "每小时接待",
+    "power": "实时用电",
+    "line": "个区",
+    "vehicle": "传菜车",
+    "order": {
+      "title": "市别接待跟踪",
+      "tab": "市别",
+      "prefix": "SB",
+      "steps": [
+        "开市",
+        "备台",
+        "接待中",
+        "收市",
+        "盘点",
+        "交班"
+      ]
+    }
+  },
+  "products": {
+    "diners": {
+      "name": "一桌客人",
+      "weight": 1.8,
+      "input": 1.8,
+      "price": 210,
+      "suppliers": [
+        {
+          "name": "签语中央厨房",
+          "share": 1,
+          "bad": 0.02,
+          "factor": 3,
+          "price": 35000,
+          "lead": 1,
+          "late": 0.05
+        }
+      ],
+      "customers": [
+        {
+          "name": "堂食散客",
+          "share": 0.75,
+          "transit": 0.1
+        },
+        {
+          "name": "预订团餐",
+          "share": 0.25,
+          "transit": 0.1
+        }
+      ],
+      "stages": {
+        "arrive": {
+          "parts": [
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                -0.38,
+                0,
+                0.1
+              ],
+              "color": "#e8553f"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                -0.38,
+                0.97,
+                0.1
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                -0.38,
+                1.06,
+                0.08
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0,
+                0,
+                -0.12
+              ],
+              "color": "#3f7be8"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0,
+                0.97,
+                -0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0,
+                1.06,
+                -0.14
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0.38,
+                0,
+                0.12
+              ],
+              "color": "#f2b84b"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0.38,
+                0.97,
+                0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0.38,
+                1.06,
+                0.1
+              ],
+              "color": "#3a2a22"
+            }
+          ]
+        },
+        "picked": {
+          "parts": [
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                -0.38,
+                0,
+                0.1
+              ],
+              "color": "#e8553f"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                -0.38,
+                0.97,
+                0.1
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                -0.38,
+                1.06,
+                0.08
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0,
+                0,
+                -0.12
+              ],
+              "color": "#3f7be8"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0,
+                0.97,
+                -0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0,
+                1.06,
+                -0.14
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0.38,
+                0,
+                0.12
+              ],
+              "color": "#f2b84b"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0.38,
+                0.97,
+                0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0.38,
+                1.06,
+                0.1
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.32,
+                0.12,
+                0.22
+              ],
+              "at": [
+                0,
+                0.48,
+                0.12
+              ],
+              "color": "#7cc49a",
+              "round": 0.03
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.05,
+                0.06
+              ],
+              "at": [
+                -0.08,
+                0.6,
+                0.1
+              ],
+              "color": "#c0444c",
+              "round": 0.015
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.05,
+                0.06
+              ],
+              "at": [
+                0.02,
+                0.6,
+                0.15
+              ],
+              "color": "#7cc46a",
+              "round": 0.015
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.08,
+                0.05,
+                0.06
+              ],
+              "at": [
+                0.1,
+                0.6,
+                0.08
+              ],
+              "color": "#f0dcb4",
+              "round": 0.015
+            }
+          ]
+        },
+        "eaten": {
+          "parts": [
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                -0.38,
+                0,
+                0.1
+              ],
+              "color": "#e8553f"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                -0.38,
+                0.97,
+                0.1
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                -0.38,
+                1.06,
+                0.08
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0,
+                0,
+                -0.12
+              ],
+              "color": "#3f7be8"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0,
+                0.97,
+                -0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0,
+                1.06,
+                -0.14
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0.38,
+                0,
+                0.12
+              ],
+              "color": "#f2b84b"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0.38,
+                0.97,
+                0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0.38,
+                1.06,
+                0.1
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.07,
+                0.26
+              ],
+              "at": [
+                0,
+                0.42,
+                0.14
+              ],
+              "color": "#c79a68"
+            },
+            {
+              "shape": "cylinder",
+              "size": [
+                0.055,
+                0.16
+              ],
+              "at": [
+                0,
+                0.68,
+                0.14
+              ],
+              "color": "#e8cf9a"
+            }
+          ]
+        },
+        "paid": {
+          "parts": [
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                -0.38,
+                0,
+                0.1
+              ],
+              "color": "#e8553f"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                -0.38,
+                0.97,
+                0.1
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                -0.38,
+                1.06,
+                0.08
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0,
+                0,
+                -0.12
+              ],
+              "color": "#3f7be8"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0,
+                0.97,
+                -0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0,
+                1.06,
+                -0.14
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "capsule",
+              "size": [
+                0.17,
+                0.6
+              ],
+              "at": [
+                0.38,
+                0,
+                0.12
+              ],
+              "color": "#f2b84b"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.13
+              ],
+              "at": [
+                0.38,
+                0.97,
+                0.12
+              ],
+              "color": "#f2c9a0"
+            },
+            {
+              "shape": "sphere",
+              "size": [
+                0.115
+              ],
+              "at": [
+                0.38,
+                1.06,
+                0.1
+              ],
+              "color": "#3a2a22"
+            },
+            {
+              "shape": "box",
+              "size": [
+                0.18,
+                0.2,
+                0.1
+              ],
+              "at": [
+                0.38,
+                0.28,
+                0.32
+              ],
+              "color": "#e2412b",
+              "round": 0.03
+            }
+          ]
+        }
+      }
+    }
+  },
+  "machines": {
+    "display-fridge": {
+      "label": "冷藏展柜",
+      "code": "LG",
+      "look": {
+        "archetype": "frame",
+        "style": "plain",
+        "size": [
+          3.2,
+          3.0,
+          2.3
+        ],
+        "color": "#f3f5f8",
+        "accent": "#e2412b",
+        "parts": [
+          {
+            "shape": "box",
+            "size": [
+              2.8,
+              0.3,
+              0.7
+            ],
+            "at": [
+              0,
+              0,
+              -1.13
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.8,
+              1.75,
+              0.05
+            ],
+            "at": [
+              0,
+              0.3,
+              -1.46
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.06,
+              1.75,
+              0.7
+            ],
+            "at": [
+              -1.4,
+              0.3,
+              -1.13
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.06,
+              1.75,
+              0.7
+            ],
+            "at": [
+              1.4,
+              0.3,
+              -1.13
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.8,
+              0.18,
+              0.7
+            ],
+            "at": [
+              0,
+              2.05,
+              -1.13
+            ],
+            "color": "#e2412b",
+            "round": 0.03
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.4,
+              0.1,
+              0.02
+            ],
+            "at": [
+              0,
+              2.09,
+              -0.77
+            ],
+            "color": "white",
+            "glow": "#ffffff"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.7,
+              0.02,
+              0.05
+            ],
+            "at": [
+              0,
+              1.97,
+              -1.2
+            ],
+            "color": "white",
+            "glow": "#cfefff"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.74,
+              0.03,
+              0.6
+            ],
+            "at": [
+              0,
+              0.8,
+              -1.15
+            ],
+            "color": "#dfe6ee"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.74,
+              0.03,
+              0.6
+            ],
+            "at": [
+              0,
+              1.3,
+              -1.15
+            ],
+            "color": "#dfe6ee"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              -0.85,
+              0.3,
+              -1.12
+            ],
+            "color": "#c0444c",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              0,
+              0.3,
+              -1.12
+            ],
+            "color": "#f0dcb4",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              0.85,
+              0.3,
+              -1.12
+            ],
+            "color": "#7cc46a",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              -0.85,
+              0.83,
+              -1.12
+            ],
+            "color": "#8e2a1e",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              0,
+              0.83,
+              -1.12
+            ],
+            "color": "#f4b7a6",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              0.85,
+              0.83,
+              -1.12
+            ],
+            "color": "#f2c94c",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              -0.85,
+              1.33,
+              -1.12
+            ],
+            "color": "#e8e0cf",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              0,
+              1.33,
+              -1.12
+            ],
+            "color": "#3f6b3a",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.7,
+              0.06,
+              0.4
+            ],
+            "at": [
+              0.85,
+              1.33,
+              -1.12
+            ],
+            "color": "#d9534f",
+            "round": 0.02
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.74,
+              1.7,
+              0.03
+            ],
+            "at": [
+              0,
+              0.32,
+              -0.79
+            ],
+            "color": "glass"
+          }
+        ]
+      },
+      "cycle": 150,
+      "makes": "picked",
+      "thermal": {
+        "idle": -20.5,
+        "run": -20,
+        "warn": 8,
+        "trip": 12,
+        "tau": 900,
+        "wear": 3
+      },
+      "power": {
+        "idle": 0.6,
+        "run": 0.9
+      },
+      "vibration": 0.4,
+      "faults": [
+        "压缩机停机",
+        "蒸发器结霜",
+        "柜门密封条老化"
+      ],
+      "take": {
+        "skewers": 3,
+        "maodu": 1
+      },
+      "upkeep": {
+        "mtbf": 50,
+        "repair": [
+          15,
+          45
+        ],
+        "pm": 800,
+        "pmTime": [
+          20,
+          40
+        ]
+      }
+    },
+    "sauce-bar": {
+      "label": "调料台",
+      "code": "TL",
+      "look": {
+        "archetype": "frame",
+        "style": "plain",
+        "size": [
+          2.6,
+          3.0,
+          1.8
+        ],
+        "color": "#f3f5f8",
+        "accent": "#e2412b",
+        "parts": [
+          {
+            "shape": "box",
+            "size": [
+              2.2,
+              0.9,
+              0.6
+            ],
+            "at": [
+              0,
+              0,
+              -1.1
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.24,
+              0.04,
+              0.64
+            ],
+            "at": [
+              0,
+              0.9,
+              -1.1
+            ],
+            "color": "#e2412b"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.07
+            ],
+            "at": [
+              -0.85,
+              0.94,
+              -1.05
+            ],
+            "color": "#c8261b"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.07
+            ],
+            "at": [
+              -0.51,
+              0.94,
+              -1.05
+            ],
+            "color": "#d9b07a"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.07
+            ],
+            "at": [
+              -0.17,
+              0.94,
+              -1.05
+            ],
+            "color": "#4f9b3a"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.07
+            ],
+            "at": [
+              0.17,
+              0.94,
+              -1.05
+            ],
+            "color": "#f4f1e6"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.07
+            ],
+            "at": [
+              0.51,
+              0.94,
+              -1.05
+            ],
+            "color": "#a87a3f"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.07
+            ],
+            "at": [
+              0.85,
+              0.94,
+              -1.05
+            ],
+            "color": "#3b2a1e"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.1,
+              0.4,
+              0.02
+            ],
+            "at": [
+              0,
+              1.05,
+              -0.8
+            ],
+            "color": "glass"
+          }
+        ]
+      },
+      "cycle": 60,
+      "thermal": {
+        "idle": 0,
+        "run": 1,
+        "warn": 35,
+        "trip": 45
+      },
+      "power": {
+        "idle": 0.05,
+        "run": 0.1
+      },
+      "vibration": 0.05,
+      "faults": [
+        "香油用完待补",
+        "调料盆打翻"
+      ],
+      "upkeep": {
+        "mtbf": 600,
+        "repair": [
+          3,
+          10
+        ],
+        "pm": 1000,
+        "pmTime": [
+          10,
+          20
+        ],
+        "stops": {
+          "perHour": 0.5,
+          "secs": [
+            30,
+            120
+          ],
+          "reasons": [
+            "补蒜泥香菜",
+            "换干碟料"
+          ]
+        }
+      }
+    },
+    "table-zone": {
+      "label": "餐桌区（8 桌）",
+      "code": "CZ",
+      "look": {
+        "archetype": "frame",
+        "style": "plain",
+        "size": [
+          4.4,
+          3.4,
+          1.8
+        ],
+        "color": "#ecdfc6",
+        "accent": "#e2412b",
+        "parts": [
+          {
+            "shape": "box",
+            "size": [
+              1.1,
+              0.05,
+              0.75
+            ],
+            "at": [
+              -1.05,
+              0.72,
+              -1.25
+            ],
+            "color": "#c79a68",
+            "round": 0.02
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.06,
+              0.72
+            ],
+            "at": [
+              -1.05,
+              0,
+              -1.25
+            ],
+            "color": "#58627a"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.36,
+              0.04,
+              0.36
+            ],
+            "at": [
+              -1.05,
+              0.77,
+              -1.25
+            ],
+            "color": "#28314b"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.18,
+              0.1
+            ],
+            "at": [
+              -1.05,
+              0.81,
+              -1.25
+            ],
+            "color": "#d0d5dd",
+            "metal": 0.6
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.165,
+              0.02
+            ],
+            "at": [
+              -1.05,
+              0.9,
+              -1.25
+            ],
+            "color": "#d9361e",
+            "anim": {
+              "type": "heat"
+            }
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.006,
+              0.26
+            ],
+            "at": [
+              -1.1,
+              0.86,
+              -1.22
+            ],
+            "rotate": [
+              12,
+              0,
+              0
+            ],
+            "color": "#d9b779"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.006,
+              0.26
+            ],
+            "at": [
+              -0.99,
+              0.86,
+              -1.3
+            ],
+            "rotate": [
+              -10,
+              0,
+              8
+            ],
+            "color": "#d9b779"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.16,
+              0.45
+            ],
+            "at": [
+              -1.8,
+              0,
+              -1.25
+            ],
+            "color": "#e2412b"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.16,
+              0.45
+            ],
+            "at": [
+              -0.3,
+              0,
+              -1.25
+            ],
+            "color": "#e2412b"
+          },
+          {
+            "shape": "sphere",
+            "size": [
+              0.17
+            ],
+            "at": [
+              -1.05,
+              1.9,
+              -1.25
+            ],
+            "color": "#e2412b",
+            "glow": "#ff6a4a"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.03,
+              0.12
+            ],
+            "at": [
+              -1.05,
+              1.78,
+              -1.25
+            ],
+            "color": "#f2c94c"
+          },
+          {
+            "shape": "box",
+            "size": [
+              1.1,
+              0.05,
+              0.75
+            ],
+            "at": [
+              1.05,
+              0.72,
+              -1.25
+            ],
+            "color": "#c79a68",
+            "round": 0.02
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.06,
+              0.72
+            ],
+            "at": [
+              1.05,
+              0,
+              -1.25
+            ],
+            "color": "#58627a"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.36,
+              0.04,
+              0.36
+            ],
+            "at": [
+              1.05,
+              0.77,
+              -1.25
+            ],
+            "color": "#28314b"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.18,
+              0.1
+            ],
+            "at": [
+              1.05,
+              0.81,
+              -1.25
+            ],
+            "color": "#d0d5dd",
+            "metal": 0.6
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.165,
+              0.02
+            ],
+            "at": [
+              1.05,
+              0.9,
+              -1.25
+            ],
+            "color": "#d9361e",
+            "anim": {
+              "type": "heat"
+            }
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.006,
+              0.26
+            ],
+            "at": [
+              1.0,
+              0.86,
+              -1.22
+            ],
+            "rotate": [
+              12,
+              0,
+              0
+            ],
+            "color": "#d9b779"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.006,
+              0.26
+            ],
+            "at": [
+              1.11,
+              0.86,
+              -1.3
+            ],
+            "rotate": [
+              -10,
+              0,
+              8
+            ],
+            "color": "#d9b779"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.16,
+              0.45
+            ],
+            "at": [
+              0.3,
+              0,
+              -1.25
+            ],
+            "color": "#e2412b"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.16,
+              0.45
+            ],
+            "at": [
+              1.8,
+              0,
+              -1.25
+            ],
+            "color": "#e2412b"
+          },
+          {
+            "shape": "sphere",
+            "size": [
+              0.17
+            ],
+            "at": [
+              1.05,
+              1.9,
+              -1.25
+            ],
+            "color": "#e2412b",
+            "glow": "#ff6a4a"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.03,
+              0.12
+            ],
+            "at": [
+              1.05,
+              1.78,
+              -1.25
+            ],
+            "color": "#f2c94c"
+          }
+        ]
+      },
+      "cycle": 300,
+      "makes": "eaten",
+      "thermal": {
+        "idle": 10,
+        "run": 55,
+        "warn": 85,
+        "trip": 95,
+        "tau": 120
+      },
+      "power": {
+        "idle": 2,
+        "run": 16
+      },
+      "vibration": 0.2,
+      "faults": [
+        "电磁炉过热保护",
+        "桌边插座跳闸"
+      ],
+      "take": {
+        "potBase": 1
+      },
+      "upkeep": {
+        "mtbf": 120,
+        "repair": [
+          5,
+          20
+        ],
+        "pm": 600,
+        "pmTime": [
+          20,
+          40
+        ],
+        "stops": {
+          "perHour": 0.6,
+          "secs": [
+            60,
+            240
+          ],
+          "reasons": [
+            "等加汤",
+            "顾客加菜",
+            "等收台"
+          ]
+        }
+      }
+    },
+    "checkout": {
+      "label": "数签结账",
+      "code": "JZ",
+      "look": {
+        "archetype": "manual",
+        "style": "plain",
+        "operators": 1,
+        "size": [
+          2.4,
+          3.0,
+          2.2
+        ],
+        "color": "#f4f6f9",
+        "accent": "#e2412b",
+        "parts": [
+          {
+            "shape": "cylinder",
+            "size": [
+              0.1,
+              0.25
+            ],
+            "at": [
+              -0.5,
+              0.96,
+              -1.37
+            ],
+            "color": "#c79a68"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.08,
+              0.18
+            ],
+            "at": [
+              -0.5,
+              1.21,
+              -1.37
+            ],
+            "color": "#e8cf9a"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.3,
+              0.04,
+              0.22
+            ],
+            "at": [
+              0.4,
+              0.96,
+              -1.37
+            ],
+            "color": "#28314b"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.28,
+              0.2,
+              0.02
+            ],
+            "at": [
+              0.4,
+              1.0,
+              -1.45
+            ],
+            "color": "#28314b",
+            "glow": "#7fd1ff"
+          }
+        ]
+      },
+      "cycle": 90,
+      "thermal": {
+        "idle": 0,
+        "run": 1,
+        "warn": 35,
+        "trip": 45
+      },
+      "power": {
+        "idle": 0.1,
+        "run": 0.3
+      },
+      "vibration": 0.05,
+      "faults": [
+        "收银机断网",
+        "扫码枪失灵"
+      ],
+      "measure": {
+        "label": "顾客评分",
+        "unit": "分",
+        "target": 4.6,
+        "lo": 4.0,
+        "sigma": 0.28,
+        "drift": -1,
+        "digits": 1,
+        "defects": {
+          "lo": "差评"
+        },
+        "wear": {
+          "shift": 1,
+          "spread": 0.5
+        }
+      },
+      "give": [
+        "tableware"
+      ],
+      "upkeep": {
+        "mtbf": 800,
+        "repair": [
+          5,
+          15
+        ],
+        "pm": 1000,
+        "pmTime": [
+          10,
+          20
+        ],
+        "stops": {
+          "perHour": 0.4,
+          "secs": [
+            30,
+            120
+          ],
+          "reasons": [
+            "签数对不上重数",
+            "顾客开发票"
+          ]
+        }
+      }
+    },
+    "bowl-cabinet": {
+      "label": "消毒碗柜",
+      "code": "XD",
+      "look": {
+        "archetype": "frame",
+        "style": "plain",
+        "size": [
+          2.4,
+          3.0,
+          2.1
+        ],
+        "color": "#f3f5f8",
+        "accent": "#e2412b",
+        "parts": [
+          {
+            "shape": "box",
+            "size": [
+              0.05,
+              1.9,
+              0.6
+            ],
+            "at": [
+              -0.98,
+              0,
+              -1.15
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              0.05,
+              1.9,
+              0.6
+            ],
+            "at": [
+              0.98,
+              0,
+              -1.15
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.0,
+              0.05,
+              0.6
+            ],
+            "at": [
+              0,
+              0,
+              -1.15
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.0,
+              0.05,
+              0.6
+            ],
+            "at": [
+              0,
+              0.6,
+              -1.15
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.0,
+              0.05,
+              0.6
+            ],
+            "at": [
+              0,
+              1.2,
+              -1.15
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.0,
+              0.05,
+              0.6
+            ],
+            "at": [
+              0,
+              1.85,
+              -1.15
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.0,
+              1.9,
+              0.04
+            ],
+            "at": [
+              0,
+              0,
+              -1.43
+            ],
+            "color": "#f4f6f9"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              -0.5,
+              0.05,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              -0.5,
+              0.65,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              -0.5,
+              1.25,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              0,
+              0.05,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              0,
+              0.65,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              0,
+              1.25,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              0.5,
+              0.05,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              0.5,
+              0.65,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "cylinder",
+            "size": [
+              0.09,
+              0.22
+            ],
+            "at": [
+              0.5,
+              1.25,
+              -1.15
+            ],
+            "color": "white"
+          },
+          {
+            "shape": "box",
+            "size": [
+              1.9,
+              0.04,
+              0.03
+            ],
+            "at": [
+              0,
+              1.8,
+              -0.88
+            ],
+            "color": "#ff8a3d",
+            "glow": "#ff8a3d"
+          },
+          {
+            "shape": "box",
+            "size": [
+              2.0,
+              0.2,
+              0.62
+            ],
+            "at": [
+              0,
+              1.9,
+              -1.15
+            ],
+            "color": "#e2412b",
+            "round": 0.03
+          }
+        ]
+      },
+      "cycle": 40,
+      "thermal": {
+        "idle": 25,
+        "run": 28,
+        "warn": 60,
+        "trip": 70,
+        "tau": 600
+      },
+      "power": {
+        "idle": 0.3,
+        "run": 0.6
+      },
+      "vibration": 0.1,
+      "faults": [
+        "加热管断路",
+        "门控开关失灵"
+      ],
+      "take": {
+        "tableware": 3
+      },
+      "upkeep": {
+        "mtbf": 800,
+        "repair": [
+          10,
+          30
+        ],
+        "pm": 1000,
+        "pmTime": [
+          20,
+          40
+        ]
+      }
+    }
+  },
+  "routes": {
+    "dining": [
+      "bowl-cabinet",
+      "display-fridge",
+      "sauce-bar",
+      "table-zone",
+      "checkout"
+    ]
+  },
+  "inventory": {
+    "skewers": {
+      "label": "串（份）",
+      "unit": "份",
+      "kind": "consume",
+      "capacity": 1500,
+      "refill": 1500,
+      "low": 0.12
+    },
+    "maodu": {
+      "label": "毛肚",
+      "unit": "份",
+      "kind": "consume",
+      "capacity": 500,
+      "refill": 500,
+      "low": 0.12
+    },
+    "potBase": {
+      "label": "锅底块",
+      "unit": "块",
+      "kind": "consume",
+      "capacity": 500,
+      "refill": 500,
+      "low": 0.12
+    },
+    "tableware": {
+      "label": "餐具",
+      "unit": "套",
+      "kind": "lend",
+      "capacity": 150,
+      "low": 0.1
+    }
+  },
+  "calendar": {
+    "open": {
+      "from": 11,
+      "to": 1
+    },
+    "night": {
+      "from": 22,
+      "to": 1,
+      "stops": 1.3,
+      "flaws": 1.3
+    }
+  },
+  "pace": 0.15,
+  "ontology": {
+    "classes": {
+      "存放设备": {
+        "sub": [
+          "设备"
+        ]
+      },
+      "冷链设备": {
+        "sub": [
+          "存放设备"
+        ]
+      },
+      "冷藏设备": {
+        "sub": [
+          "冷链设备"
+        ],
+        "note": "0–4 ℃"
+      },
+      "加热设备": {
+        "sub": [
+          "设备"
+        ]
+      },
+      "消毒设备": {
+        "sub": [
+          "设备"
+        ]
+      },
+      "自助台": {
+        "sub": [
+          "设备"
+        ],
+        "note": "客人自己动手的台位"
+      },
+      "收银台": {
+        "sub": [
+          "设备"
+        ]
+      },
+      "堂食顾客": {
+        "sub": [
+          "客户"
+        ],
+        "note": "一桌客人"
+      }
+    },
+    "relations": {},
+    "rules": [],
+    "individuals": {},
+    "bind": {
+      "products": {
+        "diners": "堂食顾客"
+      },
+      "machines": {
+        "bowl-cabinet": "消毒设备",
+        "display-fridge": "冷藏设备",
+        "sauce-bar": "自助台",
+        "table-zone": "加热设备",
+        "checkout": "收银台"
+      },
+      "individuals": {}
+    },
+    "constraints": [
+      {
+        "id": "chilled-temp",
+        "class": "冷藏设备",
+        "field": "temp",
+        "min": 0,
+        "max": 4,
+        "say": "{name} 温度 {value} ℃，冷藏要求 0–4 ℃"
+      }
+    ]
+  }
+}
