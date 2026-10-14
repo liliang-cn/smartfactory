@@ -289,6 +289,10 @@ func New(st *Store, set Settings, trail *audit.Log, log *slog.Logger) (*Detector
 			return nil, err
 		}
 		for _, r := range rows {
+			if d.skipped(r.field) {
+				// learned before it was left out (stock, a measured part)
+				continue
+			}
 			s := r.stat
 			m := d.machineOf(mkey{r.company, r.plant, r.asset})
 			m.stated = m.stated || r.state != ""
