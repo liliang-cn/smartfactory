@@ -222,9 +222,15 @@ export const Machine = z.object({
   cycle: z.number().positive().default(8),
   /** product stage after this machine; packers default to `packed` when the product has it */
   makes: z.string().optional(),
-  /** body temperature rise over ambient (°C) idle / running, alarm and trip limits */
+  /**
+   * body temperature rise over ambient (°C) idle / running, alarm and trip limits. A machine that
+   * cools (a fridge, a cold room, a freezer tunnel) has negative rises: it never trips on
+   * temperature, and while it is stopped or broken down it warms towards ambient.
+   */
   thermal: z.object({
     idle: z.number(), run: z.number(), warn: z.number(), trip: z.number(), tau: z.number().optional(),
+    /** °C a fully worn machine runs above a healthy one (default 18; a few degrees for refrigeration) */
+    wear: z.number().min(0).optional(),
   }).default({ idle: 4, run: 20, warn: 55, trip: 66 }),
   /** kW */
   power: z.object({ idle: z.number(), run: z.number() }).default({ idle: 1, run: 5 }),
@@ -343,6 +349,11 @@ export const Industry = z.object({
   calendar: z.object({
     night: z.object({ from: z.number().min(0).max(23), to: z.number().min(0).max(24), stops: z.number().min(1).default(1), flaws: z.number().min(1).default(1) }).optional(),
     pm: z.object({ hours: z.number().positive(), start: z.number().min(0).max(23) }).optional(),
+    /**
+     * opening hours (a shop) or the shift a kitchen works, e.g. {from: 11, to: 1}: outside them
+     * lines take in no new units and finish what they have; machines stay on (fridges keep cold)
+     */
+    open: z.object({ from: z.number().min(0).max(23), to: z.number().min(0).max(24) }).optional(),
   }).default({}),
   /**
    * how far real cycles run over the nominal one: each unit takes cycle × (1 + |N(0, pace)|), so
@@ -360,6 +371,8 @@ export const Industry = z.object({
   inventory: z.record(z.string(), InventoryItem).default({}),
   /** reusable routings, referenced by lines as `route` */
   routes: z.record(z.string(), z.array(Step).min(1)).default({}),
+  /** classes, relations, rules and individuals of the trade, bound to products and machines */
+  ontology: z.unknown().optional(),
 });
 export type IndustryCfg = z.infer<typeof Industry>;
 
@@ -420,5 +433,7 @@ export const Company = z.object({
     gas: z.number().min(0).default(0),
   }).optional(),
   plants: z.array(PlantCfg).min(1),
+  /** the company's own additions to its industry packs' ontology */
+  ontology: z.unknown().optional(),
 });
 export type CompanyCfg = z.infer<typeof Company>;

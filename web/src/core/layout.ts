@@ -311,8 +311,11 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     const z = zCursor + back;
     zCursor = z + front;
     const bottleneck = Math.max(...stations.map((s) => s.cycle));
-    // a work order is about a day's output at 85 % (two wind-turbine shafts, 1 450 crankshafts)
-    const day = (3600 / bottleneck) * 24 * 0.85;
+    // a work order is about a day's output at 85 % (two wind-turbine shafts, 1 450 crankshafts),
+    // a day being the opening hours where the site keeps them
+    const open = industry.calendar?.open;
+    const hours = open && open.from !== open.to % 24 ? (open.to - open.from + 24) % 24 : 24;
+    const day = (3600 / bottleneck) * hours * 0.85;
     const qty = day >= 100 ? Math.round(day / 50) * 50 : Math.max(1, Math.round(day));
     lines.push({
       id: `L${n}`, no: n, name, note: cfg.note, z, x0, x1, beltY, beltW, speed, gap,

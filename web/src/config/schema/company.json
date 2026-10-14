@@ -425,7 +425,8 @@
           "lines"
         ]
       }
-    }
+    },
+    "ontology": {}
   },
   "required": [
     "id",

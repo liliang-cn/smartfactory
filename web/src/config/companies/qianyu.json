@@ -1,0 +1,184 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "qianyu",
+  "name": "签语串串香",
+  "short": "签语",
+  "industry": "chuanchuan",
+  "plants": [
+    {
+      "id": "kitchen",
+      "name": "中央厨房",
+      "badge": "央厨",
+      "hall": "加工车间",
+      "sub": "锅底炒制、穿串和虾滑，4 条线",
+      "warehouse": "原料冷库与干货库",
+      "finishedGoods": "冷链发货区",
+      "carriers": [
+        "蓉城冷链",
+        "签语自有配送"
+      ],
+      "freight": [
+        {
+          "carrier": "签语自有配送",
+          "share": 0.8,
+          "late": 0.05,
+          "truck": 3
+        },
+        {
+          "carrier": "蓉城冷链",
+          "share": 0.2,
+          "late": 0.1,
+          "truck": 5
+        }
+      ],
+      "lines": [
+        {
+          "name": "锅底熬制线",
+          "note": "牛油锅底",
+          "product": "tallow-base",
+          "route": "pot-base",
+          "order": {
+            "qty": 120
+          }
+        },
+        {
+          "name": "荤串线",
+          "note": "腌制穿串",
+          "product": "beef-skewer",
+          "route": "beef-skewer",
+          "order": {
+            "qty": 300
+          }
+        },
+        {
+          "name": "素串线",
+          "note": "切片穿串",
+          "product": "lotus-skewer",
+          "route": "veg-skewer",
+          "order": {
+            "qty": 400
+          }
+        },
+        {
+          "name": "虾滑线",
+          "note": "速冻",
+          "product": "shrimp-paste",
+          "route": "shrimp-paste",
+          "order": {
+            "qty": 200
+          }
+        }
+      ]
+    },
+    {
+      "id": "chunxi",
+      "name": "春熙路店",
+      "badge": "春熙",
+      "hall": "前厅",
+      "sub": "堂食，大厅两个区共 16 桌",
+      "industry": "chuanchuan-store",
+      "warehouse": "后厨备货间",
+      "finishedGoods": "外卖出餐口",
+      "carriers": [
+        "签语自有配送",
+        "外卖骑手"
+      ],
+      "freight": [
+        {
+          "carrier": "外卖骑手",
+          "share": 1,
+          "late": 0.08,
+          "truck": 0.5
+        }
+      ],
+      "lines": [
+        {
+          "name": "大厅 A 区",
+          "note": "8 桌",
+          "product": "diners",
+          "route": "dining",
+          "order": {
+            "qty": 30
+          }
+        },
+        {
+          "name": "大厅 B 区",
+          "note": "8 桌",
+          "product": "diners",
+          "route": "dining",
+          "order": {
+            "qty": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "yulin",
+      "name": "玉林路店",
+      "badge": "玉林",
+      "hall": "前厅",
+      "sub": "社区小店，大厅 8 桌",
+      "industry": "chuanchuan-store",
+      "warehouse": "后厨备货间",
+      "finishedGoods": "外卖出餐口",
+      "carriers": [
+        "签语自有配送",
+        "外卖骑手"
+      ],
+      "freight": [
+        {
+          "carrier": "外卖骑手",
+          "share": 1,
+          "late": 0.08,
+          "truck": 0.5
+        }
+      ],
+      "lines": [
+        {
+          "name": "大厅",
+          "note": "8 桌",
+          "product": "diners",
+          "route": "dining",
+          "order": {
+            "qty": 30
+          }
+        }
+      ]
+    }
+  ],
+  "tariff": {
+    "power": [
+      {
+        "from": 0,
+        "to": 7,
+        "price": 0.36
+      },
+      {
+        "from": 7,
+        "to": 10,
+        "price": 0.68
+      },
+      {
+        "from": 10,
+        "to": 12,
+        "price": 1.02
+      },
+      {
+        "from": 12,
+        "to": 17,
+        "price": 0.68
+      },
+      {
+        "from": 17,
+        "to": 22,
+        "price": 1.02
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "price": 0.36
+      }
+    ],
+    "gas": 3.2
+  }
+}
