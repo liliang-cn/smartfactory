@@ -222,6 +222,10 @@ func (o *Ops) KnowledgeTools() mcptools.Knowledge {
 		},
 		Mentions: o.KnowledgeMentions,
 		Graph:    o.KnowledgeGraph,
+
+		Ontology:          o.Ontology,
+		OntologyInstances: o.OntologyInstances,
+		OntologyThing:     o.OntologyThing,
 	}
 	if o.Agents != nil {
 		k.ReadDoc = func(ctx context.Context, who auth.Who, company, doc string, from, n int) (string, int, []mcptools.DocPart, error) {

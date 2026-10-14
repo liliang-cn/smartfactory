@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -233,6 +234,35 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/knowledge/{company}/graph", func(w http.ResponseWriter, r *http.Request) {
 		v, err := o.KnowledgeGraph(r.Context(), s.caller(r), r.PathValue("company"))
+		answer(w, v, err)
+	})
+	// its ontology: classes, relations, rules, constraints; the things of a class; one with why
+	mux.HandleFunc("GET /api/knowledge/{company}/ontology", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.Ontology(r.Context(), s.caller(r), r.PathValue("company"))
+		answer(w, v, err)
+	})
+	mux.HandleFunc("GET /api/knowledge/{company}/ontology/instances", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		v, err := o.OntologyInstances(r.Context(), s.caller(r), r.PathValue("company"), q.Get("class"), q.Get("relation"), q.Get("value"), cmp.Or(limit, 100))
+		answer(w, v, err)
+	})
+	mux.HandleFunc("GET /api/knowledge/{company}/ontology/thing", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.OntologyThing(r.Context(), s.caller(r), r.PathValue("company"), r.URL.Query().Get("name"))
+		answer(w, v, err)
+	})
+	mux.HandleFunc("GET /api/knowledge/{company}/ontology/graph", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.OntologyGraph(r.Context(), s.caller(r), r.PathValue("company"))
+		answer(w, v, err)
+	})
+	mux.HandleFunc("POST /api/knowledge/{company}/ontology/sparql", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Query string `json:"query"`
+		}
+		if !read(w, r, &in) {
+			return
+		}
+		v, err := o.OntologySPARQL(r.Context(), s.caller(r), r.PathValue("company"), in.Query)
 		answer(w, v, err)
 	})
 	mux.HandleFunc("POST /api/knowledge/{company}/rebuild", func(w http.ResponseWriter, r *http.Request) {

@@ -22,6 +22,12 @@ export type Passage = z.infer<typeof P.Passage>;
 export type EntityAnswer = z.infer<typeof P.EntityAnswer>;
 export type KnowledgeGraph = z.infer<typeof P.KnowledgeGraph>;
 export type EntityKind = z.infer<typeof P.EntityKind>;
+export type Ontology = z.infer<typeof P.Ontology>;
+export type OntologyInstances = z.infer<typeof P.OntologyInstances>;
+export type OntologyThing = z.infer<typeof P.OntologyThing>;
+export type OntologyGraph = z.infer<typeof P.OntologyGraph>;
+export type OntFact = NonNullable<OntologyThing['facts']>[number];
+export type SPARQLAnswer = z.infer<typeof P.SPARQLAnswer>;
 export type TemplateSummary = z.infer<typeof P.TemplateSummary>;
 export type Template = z.infer<typeof P.Template>;
 export type SaveTemplate = z.infer<typeof P.SaveTemplate>;
@@ -134,6 +140,12 @@ export const knowledgeSearch = (c: string, q: string) => call<KnowledgeAnswer>('
 export const knowledgeEntity = (c: string, name: string) => call<EntityAnswer>('GET', `${kbPath(c)}/entity?name=${encodeURIComponent(name)}`);
 export const knowledgeGraph = (c: string) => call<KnowledgeGraph>('GET', `${kbPath(c)}/graph`);
 export const rebuildKnowledge = (c: string) => call<{ docs: number }>('POST', `${kbPath(c)}/rebuild`);
+export const ontology = (c: string) => call<Ontology>('GET', `${kbPath(c)}/ontology`);
+export const ontologyInstances = (c: string, cls: string, relation = '', value = '') =>
+  call<OntologyInstances>('GET', `${kbPath(c)}/ontology/instances?class=${encodeURIComponent(cls)}&relation=${encodeURIComponent(relation)}&value=${encodeURIComponent(value)}&limit=200`);
+export const ontologyThing = (c: string, name: string) => call<OntologyThing>('GET', `${kbPath(c)}/ontology/thing?name=${encodeURIComponent(name)}`);
+export const ontologyGraph = (c: string) => call<OntologyGraph>('GET', `${kbPath(c)}/ontology/graph`);
+export const ontologySPARQL = (c: string, query: string) => call<SPARQLAnswer>('POST', `${kbPath(c)}/ontology/sparql`, { query });
 
 async function stream<E>(path: string, body: unknown, signal: AbortSignal, on: (ev: E) => void) {
   const t = token();

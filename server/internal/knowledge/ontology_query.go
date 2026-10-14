@@ -3,7 +3,6 @@ package knowledge
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -121,8 +120,14 @@ type OntThing struct {
 	Instances   *OntInstances `json:"instances,omitempty"`
 }
 
-// ErrNotInOntology is a name that is neither a class nor a thing of the ontology.
-var ErrNotInOntology = errors.New("not in the ontology")
+// OntologyError is a question the ontology cannot answer as asked: a class or name it does not
+// have (Missing), a query that is not a read.
+type OntologyError struct {
+	Msg     string
+	Missing bool
+}
+
+func (e *OntologyError) Error() string { return e.Msg }
 
 // read runs fn with the company's ontology file (nil when it has none) held for reading.
 func (b *Base) read(id string, fn func(db *cortexdb.DB, st ontoState) error) error {
@@ -339,7 +344,7 @@ func (b *Base) OntologyInstances(ctx context.Context, company, class, relation, 
 	}
 	kind, ok := classKind(m, class)
 	if !ok {
-		return nil, fmt.Errorf("%w: 没有「%s」这个类", ErrNotInOntology, class)
+		return nil, &OntologyError{Missing: true, Msg: fmt.Sprintf("没有「%s」这个类", class)}
 	}
 	if limit <= 0 {
 		limit = 100
@@ -506,7 +511,7 @@ func (b *Base) OntologyThing(ctx context.Context, company, name string) (*OntThi
 			return nil, err
 		}
 		if e == nil {
-			return nil, fmt.Errorf("%w: 没有叫「%s」的类或东西", ErrNotInOntology, name)
+			return nil, &OntologyError{Missing: true, Msg: fmt.Sprintf("本体里没有叫「%s」的类或东西", name)}
 		}
 		out = &OntThing{Name: e.Name, Kind: e.Kind, Classes: []OntFact{{Subject: e.Name, Relation: "是", Object: classOfKind(e.Kind)}}, Facts: []OntFact{}, Back: []OntFact{}}
 	}
@@ -692,6 +697,77 @@ func statement(t graph.RDFTriple, chains map[string]string) string {
 	return ""
 }
 
+// OntGraph is the ontology's classes for drawing beside the knowledge graph: the classes declared
+// (and the built-in ones they are kinds of), and which things of the graph are given as of them.
+type OntGraph struct {
+	Classes []OntGraphClass `json:"classes"`
+	Types   []OntGraphType  `json:"types"`
+}
+
+type OntGraphClass struct {
+	Name    string   `json:"name"`
+	Sub     []string `json:"sub"`
+	Builtin bool     `json:"builtin,omitempty"`
+}
+
+type OntGraphType struct {
+	Thing string `json:"thing"`
+	Class string `json:"class"`
+}
+
+func (b *Base) OntologyGraph(ctx context.Context, company string) (*OntGraph, error) {
+	m, err := b.model(company)
+	if err != nil {
+		return nil, err
+	}
+	out := &OntGraph{Classes: []OntGraphClass{}, Types: []OntGraphType{}}
+	if m.Ontology == nil {
+		return out, nil
+	}
+	declared := map[string]bool{}
+	used := map[string]bool{}
+	for _, c := range m.Ontology.Classes {
+		if _, builtin := builtinClass(c.Name); builtin {
+			continue
+		}
+		declared[c.Name] = true
+		out.Classes = append(out.Classes, OntGraphClass{Name: c.Name, Sub: append([]string{}, c.Sub...)})
+		for _, s := range c.Sub {
+			used[s] = true
+		}
+	}
+	for _, c := range builtinClasses {
+		if used[c.Name] {
+			out.Classes = append(out.Classes, OntGraphClass{Name: c.Name, Sub: []string{}, Builtin: true})
+		}
+	}
+	err = b.read(company, func(db *cortexdb.DB, st ontoState) error {
+		if db == nil {
+			return nil
+		}
+		types, err := find(ctx, db, nil, &iriType, nil)
+		if err != nil {
+			return err
+		}
+		for _, t := range types {
+			c, ns := nameOf(t.Object)
+			s, _ := nameOf(t.Subject)
+			if t.Inferred || ns != nsClass || !declared[c] || st.Things[s] == "" {
+				continue
+			}
+			// a product that is a named thing is drawn under its product name
+			for k, v := range st.Alias {
+				if v == s {
+					s = k
+				}
+			}
+			out.Types = append(out.Types, OntGraphType{Thing: s, Class: c})
+		}
+		return nil
+	})
+	return out, err
+}
+
 // ---- SPARQL ----
 
 // SPARQLAnswer is what a read-only SPARQL query found, its terms by name.
@@ -761,7 +837,7 @@ func (b *Base) OntologySPARQL(ctx context.Context, company, query string) (*SPAR
 	prologue := sparqlPrologue.FindString(query)
 	body := query[len(prologue):]
 	if !sparqlForm.MatchString(body) || sparqlUpdate.MatchString(body) {
-		return nil, fmt.Errorf("%w: 只能查（SELECT、ASK、CONSTRUCT、DESCRIBE），不能改", ErrNotInOntology)
+		return nil, &OntologyError{Msg: "只能查（SELECT、ASK、CONSTRUCT、DESCRIBE），不能改"}
 	}
 	if !sparqlScoped.MatchString(body) {
 		if loc := sparqlWhere.FindStringIndex(body); loc != nil {
@@ -772,13 +848,13 @@ func (b *Base) OntologySPARQL(ctx context.Context, company, query string) (*SPAR
 	out := &SPARQLAnswer{Vars: []string{}, Rows: []map[string]string{}}
 	err := b.read(company, func(db *cortexdb.DB, st ontoState) error {
 		if db == nil {
-			return fmt.Errorf("%w: 这家公司的行业包没有声明本体", ErrNotInOntology)
+			return &OntologyError{Missing: true, Msg: "这家公司的行业包没有声明本体"}
 		}
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		r, err := db.QueryKnowledgeGraph(ctx, cortexdb.KnowledgeGraphQueryRequest{Query: query})
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrNotInOntology, err)
+			return &OntologyError{Msg: "SPARQL：" + err.Error()}
 		}
 		res := r.Result
 		out.Vars, out.Count = append(out.Vars, res.Vars...), res.Count

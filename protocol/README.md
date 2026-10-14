@@ -319,7 +319,7 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 每家公司一个知识库（CortexDB，不用向量）：
 - **工艺**：工厂 → 产线 → 按顺序的工位 → 设备类型，产品、供应商、客户，由引擎排布出的场景生成，场景一改自动重写。每个工位还有一段，写明它在哪条线第几道、上游和下游是谁。
 - **工单**：ERP 的生产工单，每张是一个 `order` 节点，`for_customer` 连客户、`of_product` 连产品、`runs_on` 连产线，另有一段写状态、进度、交期。工单变化几秒内写进去，在做的进度每分钟更新；排队和在做的全留，完成的留最近 300 张、90 天以内，撤回的删掉。
-- **设备记录**：设备最近 30 天发生的事，各是一个节点连到它的工位，另有一段写清经过：`check`（点检、首件检验、化验里有超标或异常的那次，`checked_on`；每个工位还有一个「最近点检」，写每张表最近一次谁填的、有没有异常、这一轮是否超期）、`anomaly`（读数异常提示：哪个读数、什么状态下、偏了几个σ、平常多少、恢复没有，`seen_on`）、`calibration`（在用的校准和 30 天内的拟合：参数模板值 → 校准值、回放误差，`calibrates`）、`command`（AI 发给设备的指令：等待批准、谁批准或拒绝、被哪条规则拒绝、过期，当时设备的状态，`targets`）。每个工位每类最多留 8 条（还没恢复的异常、等待批准的指令都留），每类一共最多 300 条，30 天前的删掉。填表、异常开始或恢复、拟合或启用撤回校准、指令发出或处理后几秒内写进去，另外每 5 分钟看一遍（超期、过期这类随时间变的），没变的不重写；不按读数写。这些段落只连到自己的节点，不直接"提到"工位，免得一个工位被几十段提到，成了搜索不从它出发的热门节点。
+- **设备记录**：设备最近 30 天发生的事，各是一个节点连到它的工位，另有一段写清经过：`check`（点检、首件检验、化验里有超标或异常的那次，`checked_on`；每个工位还有一个「最近点检」，写每张表最近一次谁填的、有没有异常、这一轮是否超期）、`anomaly`（读数异常提示：哪个读数、什么状态下、偏了几个σ、平常多少、恢复没有，`seen_on`）、`calibration`（在用的校准和 30 天内的拟合：参数模板值 → 校准值、回放误差，`calibrates`）、`command`（AI 发给设备的指令：等待批准、谁批准或拒绝、被哪条规则拒绝、过期，当时设备的状态，`targets`）、`violation`（读数超出本体约束的限值：哪条约束、读数多少、什么时候起、恢复没有，`breached_on`，见下面的本体）。每个工位每类最多留 8 条（还没恢复的异常、等待批准的指令都留），每类一共最多 300 条，30 天前的删掉。填表、异常开始或恢复、拟合或启用撤回校准、指令发出或处理后几秒内写进去，另外每 5 分钟看一遍（超期、过期这类随时间变的），没变的不重写；不按读数写。这些段落只连到自己的节点，不直接"提到"工位，免得一个工位被几十段提到，成了搜索不从它出发的热门节点。
 - **资料**：资料库的文档按标题切段，每段和它提到的工位、设备、产线、产品、供应商、客户、工单连起来。
 
 搜索先从问题里认出公司自己的名字：工位、设备、产线、产品（"法兰"认作风电法兰）、客户、工单号，编号不论怎么写（`ih101`、`IH 101` 都是 IH-101），从它们出发沿图走（personalized PageRank，只走写进去的关系，不走统计出来的共现）；讲到这些东西本身的段落排在前面，其次是提到它们的工单。问题里同时有点检、异常、校准、指令这类词时，沿图走更多地走向这类设备记录，这台设备的这类记录排在最前、最新的在前，所以问"RF-101 最近点检有没有超标"先给 RF-101 的点检记录；没问到时设备记录排在工位本身的段落后面。所以问"远岳动力的工单到哪了"先给这个客户的工单，问"HP-101 的上游"先给 HP-101 那一段，问"IH-101 的始锻温度"能找到只写了"中频感应加热炉"的工艺卡。没认出名字时按词找。CortexDB 自己从文本里抽出的名字（编号前缀、段落标题）写入后删掉，免得把不相干的工位连在一起。该公司成员以上可读，管理员可重建。
@@ -333,6 +333,26 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `POST /api/knowledge/{company}/rebuild` | `{docs}` | 重写工艺图、工单和设备记录，重新入库全部文档；管理员 |
 
 助手的 `search_docs` 在有知识库时搜的就是它（文档、工艺、工单、设备记录一起），另有 `process_graph` 查图里一样东西的关系。MCP 有 `knowledge_search`、`knowledge_entity`、`knowledge_graph`、`read_doc`（见第 6 节）。
+
+### 本体 `/api/knowledge/{company}/ontology`
+
+行业包（和公司配置）可以在 `ontology` 里声明本体：`classes`（类，`sub` 是它属于的上级类，可以是内置的 公司 工厂 产线 工位 设备 产品 供应商 客户 工单，以及设备记录 点检 读数异常 校准 AI指令 约束告警）、`relations`（关系：`label`、`domain`、`range`、`transitive`、`symmetric`、`inverse`）、`rules`（`if: [p, q]`、`then: r`：X p Y、Y q Z 推出 X r Z）、`individuals`（有名字的东西：`a` 是它的类，`note`，其余键是关系，值是别的东西的名字；没声明过的名字成为关系 `range` 的东西，工位号、产品名就是那个工位、产品）、`bind`（`products` / `machines`：行业包里的产品、设备种类是哪个类，这种设备的每个工位都是；`individuals`：产品就是哪个有名字的东西）、`constraints`（`field` 加 `min` / `max`：这一类每个工位的这个读数的实时限值，超出 `for` 秒（默认 5）就报警；`requires`（可加 `valueClass`）：这一类每样东西都要有这个关系，在模型上检查；`say` 是提示语，可用 {name} {value} {min} {max} {field} {class}）。公司配置的本体加在它用的行业包的本体上：类的上级和东西的类、事实合起来，同名的关系、同 id 的规则和约束替换。检查行业包和公司配置时一起检查本体：上级类、关系的 domain / range、东西的类没有声明，类的上下级绕成圈，规则用了没声明的关系，`bind` 指向行业包里没有的产品或设备，都会指出在哪、错在什么。
+
+内置关系是工艺图的关系：有工厂、有产线、有工位、生产、设备是、下游、供应、卖给。
+
+每家声明了本体的公司另有一个 CortexDB 文件（`<公司>.ontology.db`，不和知识库的段落和实体放在一起），本体以 RDF 写在命名图 `urn:smartfactory:ontology` 里：类是 `rdfs:Class`，`rdfs:subClassOf`；关系是 `owl:ObjectProperty`，带 `rdfs:domain`、`rdfs:range`、`owl:TransitiveProperty`、`owl:SymmetricProperty`、`owl:inverseOf`；规则是 `owl:propertyChainAxiom`；工艺图里的公司、工厂、产线、工位、设备种类、产品、供应商、客户按内置类和绑定的类写成东西，按工艺图的关系相连。名字直接做 IRI：类 `urn:smartfactory:class:名字`，关系 `urn:smartfactory:rel:名字`，东西 `urn:smartfactory:thing:名字`。本体或工艺变了（重建知识库也是）就整份重写，跑一次推理（RDFS 加 OWL 的传递、对称、反向、属性链），推出的每条都记着从哪几条推出来；不在后台持续推理。结构约束用 SHACL（`sh:minCount 1`，有 `valueClass` 时加 `sh:class`）在写入后检查。没有声明本体的公司没有这个文件，只有内置的类（数量取自知识库）。
+
+实时约束编译成每个工位每个读数一个看护，读数进来（MQTT、Modbus、OPC UA）时一次查表、不分配内存；超出范围持续到约束的秒数就在孪生里这台设备上报警（代码 `rule:<约束 id>`），记一条 `ontology.violation`（`via: ontology`，`target` 是工厂/设备），知识图谱里多一条设备记录 `violation`，`breached_on` 连到工位；回到范围内报警消除，记 `ontology.violation.end`（持续多久、最远多少），记录写上结束。服务重启时上次没结束的结束掉、报警清掉，重新判断。人工记录（`manual`）、被判为不可信或迟到超过一分钟的读数不算。
+
+| 方法 路径 | 响应 | 说明 |
+|---|---|---|
+| `GET /api/knowledge/{company}/ontology` | `Ontology` | 类（内置的在前，`asserted` 直接给定的东西数，`inferred` 只靠推理得出的数）、关系、规则（各带一句话 `text`）、约束和现在的状况（`status`、`violations`：实时的是正超限的工位、读数和开始时间，结构的是不满足的东西）、给定和推理出的事实数 |
+| `GET /api/knowledge/{company}/ontology/instances?class=&relation=&value=&limit=` | `OntologyInstances` | 一个类的东西，含推理（子类的、按关系的 domain / range 推出的）；给 `relation` 和 `value` 时只要和它这样相关的（给定或推理出的）；直接给定的在前；没有这个类 404 |
+| `GET /api/knowledge/{company}/ontology/thing?name=` | `OntologyThing` | 一个类（上级类、下级类、相关关系、约束、它的东西）或一样东西（它的类、它的事实、关于它的事实）；推理出的每条带 `why`：从给定的事实一步一行推到它（`牛油锅底 原料 花生；花生 含过敏原 花生过敏原 → 牛油锅底 含过敏原 花生过敏原（规则「过敏原随原料传递」）`）；产品名、工位号的各种写法都认 |
+| `GET /api/knowledge/{company}/ontology/graph` | `OntologyGraph` | 声明的类（和它们属于的内置类）、工艺图里哪些东西直接属于哪个类，供在知识图谱旁画出类 |
+| `POST /api/knowledge/{company}/ontology/sparql` | `SPARQLAnswer` | `{query}`，只读（SELECT、ASK、CONSTRUCT、DESCRIBE），推理出的事实也查得到；`c:` `r:` `t:` `rdf:` `rdfs:` `owl:` 不用声明，不写 `FROM` / `GRAPH` 时查本体的命名图；最多 200 行；管理员 |
+
+助手（文档助手、售后服务）有 `ontology_query`；工作台助手有 `ontology`、`ontology_instances`、`ontology_explain`；命令行 `smartfactory ontology <公司> [instances <类> [关系=值] | explain <名字> | sparql "…"]`。
 
 ### 生产工单（ERP）`/api/erp/{company}/orders`、`/api/admin/erp/{company}`
 
@@ -490,6 +510,9 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 | `knowledge_entity` | 图里一样东西两个方向的关系和提到它的段落（截短，`passagesTotal` 是总数）；不止一样或没有同名时给 `candidates` | 成员 |
 | `knowledge_graph` | 只给公司：各类数量和入库情况；`around`：一样东西周围 `hops`（最多 3）跳的子图；`kinds`：只要这几类。最多 200 个节点、400 条关系，超出的数在 `nodesLeftOut`、`edgesLeftOut` | 成员 |
 | `read_doc` | 按段读资料库的一篇文档（`from`、`count`，最多 40 段），`next` 是接着读的段号 | 成员 |
+| `ontology` | 公司的本体：类和各有多少东西、关系、规则、约束和现在的状况，同 `GET /api/knowledge/{company}/ontology`；给 `class` 只看这一类和它的东西 | 成员 |
+| `ontology_instances` | 一个类的东西（含推理），可按 `relation` = `value` 筛选，同 `…/ontology/instances` | 成员 |
+| `ontology_explain` | 一样东西或一个类和本体关于它的一切，推理出的每条带 `why`；给 `relation`（和 `object`）只解释那一条 | 成员 |
 | `scene_guide` | 怎样用两份 JSON 搭建一个新场景 | 成员 |
 | `list_industries` / `get_industry` | 列出行业包 / 读取一个完整行业包 | 成员 |
 | `create_industry` | 新建或替换行业包，带校验；行业包是所有公司共用的 | 管理所有公司的管理员 |
