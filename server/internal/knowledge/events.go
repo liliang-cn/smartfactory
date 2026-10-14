@@ -16,6 +16,7 @@ import (
 
 	"github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 
+	"smartfactory/internal/anomaly"
 	"smartfactory/internal/engine"
 )
 
@@ -147,7 +148,7 @@ const (
 )
 
 // eventRelation is the relation from each kind of what happened to its station.
-var eventRelation = map[string]string{TCheck: RCheckedOn, TAnomaly: RSeenOn, TCalibration: RCalibrates, TCommand: RTargets}
+var eventRelation = map[string]string{TCheck: RCheckedOn, TAnomaly: RSeenOn, TCalibration: RCalibrates, TCommand: RTargets, TViolation: RBreachedOn}
 
 // askWords are how a question asks about each kind.
 var askWords = map[string][]string{
@@ -155,6 +156,7 @@ var askWords = map[string][]string{
 	TAnomaly:     {"异常", "读数", "偏高", "偏低", "漂移", "不正常", "波动"},
 	TCalibration: {"校准", "标定", "拟合", "校正"},
 	TCommand:     {"指令", "命令", "下发", "批准", "审批", "远程"},
+	TViolation:   {"约束", "超限", "越限", "冷链", "告警", "违反"},
 }
 
 // askedKinds are the kinds of what happened a question asks about.
@@ -180,6 +182,7 @@ type events struct {
 	anomalies []AnomalyInfo
 	calibs    []CalibInfo
 	commands  []CommandInfo
+	breaches  []LiveRecord
 }
 
 type station struct{ name, desc string }
@@ -516,8 +519,38 @@ func eventItems(m *Model, ev events, now time.Time) []item {
 		}
 		add("event:command:"+c.Key, TCommand, st, fmt.Sprintf("指令 %s %s", c.Cmd, clock(c.At)), status+"："+c.Who, b.String(), c.At, detail)
 	}
+
+	// readings out of the ontology's limits: those still out, and the latest that came back
+	breaches := latest(ev.breaches, func(r LiveRecord) time.Time { return r.Since }, func(r LiveRecord) string { return r.Plant + "/" + r.Station },
+		func(r LiveRecord) bool { return r.Ended == nil }, now)
+	slices.Reverse(breaches)
+	for _, r := range breaches {
+		st, ok := stations[r.Plant+"/"+r.Station]
+		if !ok {
+			continue
+		}
+		req := limits(OntConstraint{Min: r.Min, Max: r.Max})
+		detail := []Fact{{"约束", r.Constraint, false}, {"类", r.Class, false}, {"读数", fmt.Sprintf("%s，要求 %s", anomalyField(r.Field), req), false},
+			{"开始", clock(r.Since), false}, {"当时", fnum(r.Value), true}}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s %s 起违反本体约束「%s」（%s的%s要求 %s）：%s", about(st), clock(r.Since), r.Constraint, r.Class, anomalyField(r.Field), req, r.Text)
+		desc := ""
+		if r.Ended == nil {
+			b.WriteString("，到现在还没恢复。")
+			detail = append(detail, Fact{"结束", "还没恢复", true})
+			desc = "还没恢复：" + r.Text
+		} else {
+			fmt.Fprintf(&b, "，最远 %s，%s 恢复。", fnum(r.Worst), clock(*r.Ended))
+			detail = append(detail, Fact{"最远", fnum(r.Worst), false}, Fact{"结束", clock(*r.Ended), false})
+			desc = fmt.Sprintf("已恢复，最远 %s", fnum(r.Worst))
+		}
+		b.WriteString("机器上同时报了警。")
+		add(fmt.Sprint("event:violation:", r.ID), TViolation, st, fmt.Sprintf("约束 %s %s", r.Constraint, clock(r.Since)), desc, b.String(), r.Since, detail)
+	}
 	return out
 }
+
+func anomalyField(f string) string { return anomaly.FieldLabel(f) }
 
 var commandStatus = map[string]string{
 	"waiting": "等待批准", "deciding": "正在处理", "sent": "已执行", "refused": "被规则拒绝", "denied": "被人拒绝", "expired": "过期没人批准", "failed": "执行失败",
@@ -550,7 +583,7 @@ func (b *Base) eventState(id string) eventState {
 // SyncEvents writes what recently happened to the company's machines into its knowledge base:
 // the new and changed, and removes what aged out. A kind whose source fails keeps what was written.
 func (b *Base) SyncEvents(ctx context.Context, id string) error {
-	if b.Checks == nil && b.Rounds == nil && b.Anomalies == nil && b.Calibrations == nil && b.Commands == nil {
+	if b.Checks == nil && b.Rounds == nil && b.Anomalies == nil && b.Calibrations == nil && b.Commands == nil && b.Live == nil {
 		return nil
 	}
 	now := time.Now()
@@ -584,7 +617,10 @@ func (b *Base) SyncEvents(ctx context.Context, id string) error {
 		ev.commands, err = b.Commands(id, since)
 		note(TCommand, err)
 	}
-	if len(ev.checks)+len(ev.rounds)+len(ev.anomalies)+len(ev.calibs)+len(ev.commands) == 0 && len(b.eventState(id).Items) == 0 {
+	if b.Live != nil {
+		ev.breaches = b.Live.Records(id, since)
+	}
+	if len(ev.checks)+len(ev.rounds)+len(ev.anomalies)+len(ev.calibs)+len(ev.commands)+len(ev.breaches) == 0 && len(b.eventState(id).Items) == 0 {
 		// nothing happened and nothing was written: not even the process is read
 		return nil
 	}

@@ -40,6 +40,10 @@ type Base struct {
 
 	mu  sync.Mutex
 	dbs map[string]*company
+	// each company's ontology (ontology.go)
+	ontos map[string]*ontoDB
+	// Live checks the ontology's limits on readings (live.go); nil checks none.
+	Live *Live
 
 	// Orders reads a company's production orders (from the ERP connection); nil keeps none.
 	Orders func(company string) ([]OrderInfo, error)
@@ -69,7 +73,7 @@ func Open(dir string, eng *engine.Engine, log *slog.Logger) (*Base, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}, dirty: map[string]bool{}, kick: make(chan struct{}, 1),
+	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}, ontos: map[string]*ontoDB{}, dirty: map[string]bool{}, kick: make(chan struct{}, 1),
 		edirty: map[string]bool{}, ekick: make(chan struct{}, 1)}, nil
 }
 
@@ -80,6 +84,15 @@ func (b *Base) Close() {
 		c.db.Close()
 	}
 	b.dbs = map[string]*company{}
+	for _, o := range b.ontos {
+		o.mu.Lock()
+		if o.db != nil {
+			o.db.Close()
+			o.db = nil
+		}
+		o.mu.Unlock()
+	}
+	b.ontos = map[string]*ontoDB{}
 }
 
 func (b *Base) open(id string) (*company, error) {
@@ -108,7 +121,11 @@ func (b *Base) Drop(id string) {
 		c.db.Close()
 		delete(b.dbs, id)
 	}
+	b.dropOntology(id)
 	b.mu.Unlock()
+	if b.Live != nil {
+		b.Live.Set(id, nil)
+	}
 	if engine.ValidID.MatchString(id) {
 		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json"} {
 			os.Remove(filepath.Join(b.dir, f))
@@ -123,6 +140,8 @@ type Model struct {
 	ID     string  `json:"id"`
 	Name   string  `json:"name"`
 	Plants []Plant `json:"plants"`
+	// Ontology is its industry packs' and its own, merged (nil: none declared).
+	Ontology *Ontology `json:"ontology,omitempty"`
 }
 
 type Plant struct {
@@ -157,6 +176,9 @@ type Product struct {
 	Suppliers []string `json:"suppliers"`
 	// Variants are the part numbers of the family a line can run.
 	Variants []string `json:"variants"`
+	// Classes are the ontology's classes it is bound to; Individual the named thing it is.
+	Classes    []string `json:"classes"`
+	Individual string   `json:"individual"`
 }
 
 type Station struct {
@@ -167,6 +189,9 @@ type Station struct {
 	Cycle float64 `json:"cycle"`
 	Makes string  `json:"makes"`
 	Kind  string  `json:"kind"`
+	// Machine is the pack's key of its machine; Classes the ontology's classes that machine is bound to.
+	Machine string   `json:"machine"`
+	Classes []string `json:"classes"`
 }
 
 // The kinds of things in the graph, and how they relate.
@@ -181,11 +206,12 @@ const (
 	TCustomer = "customer"
 	TOrder    = "order"
 	// what happened to a machine: a check filled in on it, a hint that a reading is unusual, its
-	// calibration, a command an AI sent it
+	// calibration, a command an AI sent it, a reading out of the ontology's limits
 	TCheck       = "check"
 	TAnomaly     = "anomaly"
 	TCalibration = "calibration"
 	TCommand     = "command"
+	TViolation   = "violation"
 
 	RHasPlant   = "has_plant"
 	RHasLine    = "has_line"
@@ -204,11 +230,12 @@ const (
 	RSeenOn     = "seen_on"
 	RCalibrates = "calibrates"
 	RTargets    = "targets"
+	RBreachedOn = "breached_on"
 )
 
 // relations are the relation types the graph keeps (the rest are CortexDB's own: mentions, …).
 var relations = []string{RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn,
-	RCheckedOn, RSeenOn, RCalibrates, RTargets}
+	RCheckedOn, RSeenOn, RCalibrates, RTargets, RBreachedOn}
 
 func (b *Base) model(id string) (*Model, error) {
 	js := b.eng.ProcessModel(id)
@@ -495,7 +522,16 @@ func (b *Base) SyncProcess(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	raw, _ := json.Marshal(m)
+	// the ontology, and the limits it puts on readings, follow the process and the ontology
+	if b.Live != nil {
+		b.Live.Set(id, liveWatches(m))
+	}
+	if err := b.syncOntology(ctx, id, m); err != nil {
+		b.log.Error("knowledge: ontology", "company", id, "err", err)
+	}
+	pm := *m
+	pm.Ontology = nil
+	raw, _ := json.Marshal(pm)
 	sum := sha256.Sum256(append(raw, processFormat...))
 	hash := hex.EncodeToString(sum[:])
 	var st processState
@@ -917,7 +953,7 @@ type Entity struct {
 	Detail []Fact `json:"detail,omitempty"`
 }
 
-var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TCheck, TAnomaly, TCalibration, TCommand}
+var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TCheck, TAnomaly, TCalibration, TCommand, TViolation}
 
 // Lookup is the thing called name (of kind, if given) and its relations. What happened to a
 // station comes after the rest, each kind the latest first, with what it was in a line (Title).
@@ -1289,9 +1325,11 @@ func (g Graph) Around(center string, hops int, kinds []string, limit, edges int)
 	return sub, moreNodes, moreEdges
 }
 
-// Forget makes the next SyncProcess write the company's process even if it has not changed.
+// Forget makes the next SyncProcess write the company's process, and load its ontology, even if
+// neither has changed.
 func (b *Base) Forget(id string) {
 	if engine.ValidID.MatchString(id) {
 		os.Remove(b.statePath(id))
 	}
+	b.ForgetOntology(id)
 }
