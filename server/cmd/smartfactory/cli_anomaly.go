@@ -55,8 +55,12 @@ func cliAnomalies(ctx context.Context, args []string) error {
 			return printJSON(raw)
 		}
 		s := rep.Settings
-		fmt.Println(dim(fmt.Sprintf("和每台设备自己在同一状态下的平常读数比：偏离 %g 个标准差持续 %s，或近期平均慢慢偏离，就提示一次；每个状态先学 %s。只是提示，设备照常运行。",
-			s.K, time.Duration(s.Sustain*float64(time.Second)), time.Duration(s.Warmup*float64(time.Second)))))
+		secs := func(x float64) time.Duration { return time.Duration(x * float64(time.Second)) }
+		fmt.Println(dim(fmt.Sprintf("和每台设备自己在同一状态下的平常读数比：偏离 %g 个标准差持续 %s，或近十分钟平均偏离 %g 个标准差持续 %s，就提示一次；恢复 %s 才算结束，结束后 %s 内同样的不再提示；每个状态先学 %s。只是提示，设备照常运行。",
+			s.K, secs(s.Sustain), s.DriftK, secs(s.DriftSustain), secs(s.Clear), secs(s.Cooldown), secs(s.Warmup))))
+		if v := rep.Valve; v.Paused {
+			fmt.Println(red(fmt.Sprintf("提示太多（开着 %d 条，近一小时新增 %d 条），新的先压着，已压下 %d 条：平常值可能要重新学", v.Open, v.LastHour, v.HeldBack)))
+		}
 		if len(rep.Current) == 0 {
 			fmt.Println(green("现在没有读数异常"))
 		} else {

@@ -7453,7 +7453,19 @@
             "k": {
               "type": "number"
             },
+            "driftK": {
+              "type": "number"
+            },
             "sustain": {
+              "type": "number"
+            },
+            "driftSustain": {
+              "type": "number"
+            },
+            "clear": {
+              "type": "number"
+            },
+            "cooldown": {
               "type": "number"
             },
             "warmup": {
@@ -7465,9 +7477,45 @@
           },
           "required": [
             "k",
+            "driftK",
             "sustain",
+            "driftSustain",
+            "clear",
+            "cooldown",
             "warmup",
             "span"
+          ],
+          "additionalProperties": false
+        },
+        "valve": {
+          "type": "object",
+          "properties": {
+            "open": {
+              "type": "number"
+            },
+            "lastHour": {
+              "type": "number"
+            },
+            "maxOpen": {
+              "type": "number"
+            },
+            "maxPerHour": {
+              "type": "number"
+            },
+            "paused": {
+              "type": "boolean"
+            },
+            "heldBack": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "open",
+            "lastHour",
+            "maxOpen",
+            "maxPerHour",
+            "paused",
+            "heldBack"
           ],
           "additionalProperties": false
         },
@@ -7480,6 +7528,7 @@
         "recent",
         "machines",
         "settings",
+        "valve",
         "admin"
       ],
       "additionalProperties": false,

@@ -105,11 +105,11 @@ func TestStepChange(t *testing.T) {
 	if m.Fields[0].Now == nil || math.Abs(m.Fields[0].Now.Mean-4) > 0.05 {
 		t.Errorf("normal moved with the step: %+v", m.Fields[0].Now)
 	}
-	r.run("vib", 50*time.Second, 0.2, flat(4))
+	r.run("vib", 4*time.Minute, 0.2, flat(4))
 	if len(r.hints()) != 1 {
-		t.Fatal("the hint ended before the readings were back for Sustain")
+		t.Fatal("the hint ended before the readings were back for Clear")
 	}
-	r.run("vib", time.Minute, 0.2, flat(4))
+	r.run("vib", 2*time.Minute, 0.2, flat(4))
 	if len(r.hints()) != 0 {
 		t.Fatal("the hint did not end once the readings were back")
 	}
@@ -133,7 +133,8 @@ func TestSpikeIsNotAHint(t *testing.T) {
 	}
 }
 
-// A slow drift is noticed by its average well before a single reading is K σ out.
+// A slow drift is noticed by its average, held DriftK σ off for DriftSustain, before readings
+// stay K σ out.
 func TestSlowDrift(t *testing.T) {
 	r := newRig(t, nil)
 	r.state("running")
@@ -149,8 +150,8 @@ func TestSlowDrift(t *testing.T) {
 		t.Fatal("a drift of 6 σ over 6 hours went unnoticed")
 	}
 	drifted := r.now.Sub(t0).Hours() * 0.2
-	if h[0].Kind != Drift || drifted > 0.5 || math.Abs(h[0].Z) >= 3 {
-		t.Errorf("hint %s %+.2fσ after %.2f of drift (%s): want a drift hint before the readings are 3σ out", h[0].Kind, h[0].Z, drifted, r.now.Sub(t0))
+	if h[0].Kind != Drift || math.Abs(h[0].Z) < 2 || math.Abs(h[0].Z) >= 3 || r.now.Sub(t0) < 2*time.Hour {
+		t.Errorf("hint %s %+.2fσ after %.2f of drift (%s): want a drift hint at 2–3σ, after half an hour past 2σ", h[0].Kind, h[0].Z, drifted, r.now.Sub(t0))
 	}
 	t.Logf("noticed after %s, %.2f mm/s off: %s", r.now.Sub(t0).Round(time.Minute), drifted, h[0].Text)
 }
@@ -306,6 +307,9 @@ func TestRestart(t *testing.T) {
 		t.Errorf("states after a reading without one: %+v", m.Fields[0].States)
 	}
 	r2.state("running")
+	// back after the restart, the first readings are let settle; once near normal it is judged
+	// at once, without warming up again
+	r2.run("vib", 30*time.Second, 0.2, flat(4))
 	r2.run("vib", 2*time.Minute, 0.2, flat(5))
 	if len(r2.hints()) != 1 {
 		t.Fatal("not judged after a restart")
@@ -344,7 +348,7 @@ func TestAudit(t *testing.T) {
 	r.state("running")
 	r.run("temp", time.Hour, 1, flat(50))
 	r.run("temp", 2*time.Minute, 1, flat(60))
-	r.run("temp", 2*time.Minute, 1, flat(50))
+	r.run("temp", 6*time.Minute, 1, flat(50))
 	r.d.Flush()
 	list, _ := trail.List(t.Context(), "c", 0, 10)
 	if len(list) != 2 || list[1].Action != "anomaly" || list[0].Action != "anomaly.end" || list[1].Target != "p/M1" || list[1].Via != "anomaly" {
