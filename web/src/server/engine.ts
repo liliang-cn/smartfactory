@@ -4,6 +4,7 @@
 // Built by `npm run build:engine` into server/internal/engine/js/engine.js.
 import { z } from 'zod';
 import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
+import { companyOntology } from '@/config/ontology';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
 import { History } from '@/sim/history';
 import { isMachineSpec, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
@@ -165,6 +166,10 @@ function checkIndustry(json: string): string {
       products: Object.fromEntries(Object.entries(ind.products).map(([k, p]) => [k, { name: p.name, stages: Object.keys(p.stages), partNo: p.partNo, variants: (p.variants ?? []).map((v) => v.partNo) }])),
       machines: Object.fromEntries(Object.entries(ind.machines).map(([k, m]) => [k, `${m.label} (${m.look.archetype}, ${m.cycle} 秒)`])),
       routes: Object.fromEntries(Object.entries(ind.routes).map(([k, r]) => [k, r.map((st) => (typeof st === 'string' ? st : st.machine))])),
+      ontology: ind.ontology && {
+        classes: Object.keys(ind.ontology.classes), relations: Object.keys(ind.ontology.relations), rules: ind.ontology.rules.length,
+        individuals: Object.keys(ind.ontology.individuals).length, constraints: ind.ontology.constraints.map((c) => c.id),
+      },
     };
   });
 }
@@ -197,8 +202,11 @@ function processModel(id: string): string {
   const c = companies.get(id);
   if (!c) return 'null';
   const cfg = c.bundle.company;
+  const packs = [...new Map(c.plants.map(({ layout: p }) => [p.industry.id, p.industry])).values()];
+  const onto = companyOntology(cfg, packs);
   return JSON.stringify({
     id: cfg.id, name: cfg.name,
+    ontology: onto.empty ? undefined : onto.model,
     plants: c.plants.map(({ layout: p }) => ({
       id: p.id, name: p.name, hall: p.hall, site: p.site, industry: p.industry.name, unit: p.unit,
       warehouse: p.warehouse.name, finishedGoods: p.fg.name,
@@ -209,8 +217,12 @@ function processModel(id: string): string {
           key: l.product.key, name: l.product.name, stages: l.product.order, partNo: l.product.partNo, material: l.product.material,
           weight: l.product.weight, customers: (l.product.customers ?? []).map((x) => x.name), suppliers: (l.product.suppliers ?? []).map((x) => x.name),
           variants: (l.product.variants ?? []).map((v) => v.partNo),
+          classes: onto.productClasses(p.industry, l.product.key), individual: onto.productIndividual(p.industry, l.product.key),
         },
-        stations: l.stations.map((st) => ({ id: st.id, label: st.machine.label, name: st.name, code: st.machine.code, cycle: st.cycle, makes: st.makes ?? '', kind: st.machine.look.archetype })),
+        stations: l.stations.map((st) => ({
+          id: st.id, label: st.machine.label, name: st.name, code: st.machine.code, cycle: st.cycle, makes: st.makes ?? '', kind: st.machine.look.archetype,
+          machine: st.key, classes: onto.machineClasses(p.industry, st.key),
+        })),
       })),
     })),
   });

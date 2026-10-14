@@ -1,6 +1,7 @@
 // Finds every config file by convention, validates it, and resolves a company into plant layouts.
 import { z } from 'zod';
 import { layoutPlant, type PlantLayout } from '@/core/layout';
+import { companyOntologyIssues } from './ontology';
 import { Company, Industry, type CompanyCfg, type IndustryCfg } from './schema';
 
 z.config(z.locales.zhCN());
@@ -63,6 +64,8 @@ export const validateCompany = (raw: unknown, source = '公司配置') => parse(
 export function layoutCompany(company: CompanyCfg, industries: Map<string, IndustryCfg>, source = '公司配置'): PlantLayout[] {
   const missing = industriesOf(company).filter((id) => !industries.has(id));
   if (missing.length) throw new ConfigError(source, [`找不到行业包 ${missing.join('、')}，先创建行业包`]);
+  const ontology = companyOntologyIssues(company, industriesOf(company).map((id) => industries.get(id)!));
+  if (ontology.length) throw new ConfigError(source, ontology);
   return company.plants.map((p, i) => {
     try {
       return layoutPlant(company, p, industries.get(p.industry ?? company.industry)!, i);

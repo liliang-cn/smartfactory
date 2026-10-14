@@ -6,6 +6,7 @@
 //
 // Dropping a new file into either folder registers it; no code changes needed.
 import { z } from 'zod';
+import { industryOntologyIssues } from './ontology.ts';
 
 /** Hex colour or a palette token: white, shell, blue, blueDeep, blueSoft, yellow, orange, kraft, wood, grey, greyDark, ink, metal, glass, red, green, mint. */
 export const Color = z.string();
@@ -303,6 +304,53 @@ export const Step = z.union([
 ]);
 export type StepCfg = z.infer<typeof Step>;
 
+/** a name, or several: "食材" or ["荤菜", "冷藏食材"] */
+const Names = z.union([z.string(), z.array(z.string())]);
+
+/**
+ * The ontology: kinds of things (classes) and how they relate, rules, named things (individuals),
+ * which products and machines are of which class, and constraints. Built-in classes always exist:
+ * 公司 工厂 产线 工位 设备 产品 供应商 客户 工单 (and the machine records 点检 读数异常 校准 AI指令 约束告警);
+ * built-in relations: 有工厂 有产线 有工位 生产 设备是 下游 供应 卖给.
+ */
+export const Ontology = z.object({
+  /** class name → what it is a kind of (`sub`: one or more classes, built-in or declared here) and a note */
+  classes: z.record(z.string(), z.object({ sub: Names.optional(), note: z.string().optional() })).default({}),
+  /**
+   * relation name → `label` (how it reads), `domain` (class of what has it), `range` (class of its values),
+   * `transitive` (A→B and B→C give A→C), `symmetric` (A→B gives B→A), `inverse` (its name read the other way)
+   */
+  relations: z.record(z.string(), z.object({
+    label: z.string().optional(), domain: z.string().optional(), range: z.string().optional(),
+    transitive: z.boolean().optional(), symmetric: z.boolean().optional(), inverse: z.string().optional(), note: z.string().optional(),
+  })).default({}),
+  /** `if: [p, q]`, `then: r`: X p Y and Y q Z give X r Z (a property chain) */
+  rules: z.array(z.object({ id: z.string(), if: z.array(z.string()).min(2), then: z.string(), note: z.string().optional() })).default([]),
+  /**
+   * named things: `a` (its classes), `note`, and any relation → the names of what it relates to (a name not declared
+   * here becomes a thing of the relation's range; a station number or product name is that station or product)
+   */
+  individuals: z.record(z.string(), z.record(z.string(), Names)).default({}),
+  /** which class each product (by key) and each machine (by key: every station of it) is; which individual a product is */
+  bind: z.object({
+    products: z.record(z.string(), z.string()).default({}),
+    machines: z.record(z.string(), z.string()).default({}),
+    individuals: z.record(z.string(), z.string()).default({}),
+  }).default({ products: {}, machines: {}, individuals: {} }),
+  /**
+   * `field` with `min` / `max`: a live limit on that reading of every machine of `class`, out of range for `for` seconds
+   * (default 5) raises an alarm on it; `requires`: every thing of `class` has that relation (its values of `valueClass`,
+   * if given), checked on the model. `say` is the message, with {name} {value} {min} {max} {field} {class}
+   */
+  constraints: z.array(z.object({
+    id: z.string(), class: z.string(),
+    field: z.string().optional(), min: z.number().optional(), max: z.number().optional(), for: z.number().min(0).optional(),
+    requires: z.string().optional(), valueClass: z.string().optional(),
+    say: z.string().optional(), note: z.string().optional(),
+  })).default([]),
+});
+export type OntologyCfg = z.infer<typeof Ontology>;
+
 export const Industry = z.object({
   $schema: z.string().optional(),
   id: z.string(),
@@ -360,6 +408,10 @@ export const Industry = z.object({
   inventory: z.record(z.string(), InventoryItem).default({}),
   /** reusable routings, referenced by lines as `route` */
   routes: z.record(z.string(), z.array(Step).min(1)).default({}),
+  /** what the things of this industry are and how they relate (see Ontology) */
+  ontology: Ontology.optional(),
+}).superRefine((ind, ctx) => {
+  for (const [path, message] of industryOntologyIssues(ind)) ctx.addIssue({ code: 'custom', path, message });
 });
 export type IndustryCfg = z.infer<typeof Industry>;
 
@@ -420,5 +472,7 @@ export const Company = z.object({
     gas: z.number().min(0).default(0),
   }).optional(),
   plants: z.array(PlantCfg).min(1),
+  /** added to the ontology of the company's industry packs: more classes, facts, bindings and constraints */
+  ontology: Ontology.optional(),
 });
 export type CompanyCfg = z.infer<typeof Company>;
