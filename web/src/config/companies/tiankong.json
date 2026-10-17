@@ -1,0 +1,68 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "tiankong",
+  "industry": "camping",
+  "name": "天空乐园",
+  "plants": [
+    {
+      "badge": "烧烤",
+      "carriers": [
+        "鲜到食材配送",
+        "洁美清运"
+      ],
+      "finishedGoods": "餐具垃圾回收",
+      "hall": "星空烧烤区",
+      "id": "bbq",
+      "inventory": {
+        "bbqSet": 120,
+        "charcoal": 200,
+        "tableware": 30
+      },
+      "lines": [
+        {
+          "name": "烧烤区 {n}",
+          "note": "天幕烧烤",
+          "product": "bbqGroup",
+          "repeat": 4,
+          "route": "bbq",
+          "speed": 0.7
+        }
+      ],
+      "name": "烧烤营地",
+      "site": "outdoor",
+      "sub": "天幕烧烤，4 个营区",
+      "warehouse": "食材冷库"
+    },
+    {
+      "badge": "露营",
+      "carriers": [
+        "山野装备",
+        "洁美清运"
+      ],
+      "finishedGoods": "装备清洗区",
+      "hall": "森林露营区",
+      "id": "camp",
+      "inventory": {
+        "firewood": 150,
+        "lantern": 25,
+        "sleepingBag": 60,
+        "tent": 20
+      },
+      "lines": [
+        {
+          "name": "露营区 {n}",
+          "note": "帐篷过夜",
+          "product": "campGroup",
+          "repeat": 4,
+          "route": "camp",
+          "speed": 0.7
+        }
+      ],
+      "name": "露营基地",
+      "site": "outdoor",
+      "sub": "帐篷露营过夜，4 个营区，20 顶帐篷",
+      "warehouse": "露营装备库"
+    }
+  ],
+  "short": "天空"
+}
