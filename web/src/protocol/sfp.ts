@@ -19,8 +19,8 @@ const str = z.string();
  * What a caller may do in a company. No token: visitor. A token carries one role and the
  * companies it covers; elsewhere its holder is a visitor.
  */
-export const Role = z.enum(['visitor', 'member', 'operator', 'admin', 'erp']).meta({
-  description: 'visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants · erp: a business system\'s token for the order API of its companies, a visitor everywhere else',
+export const Role = z.enum(['visitor', 'member', 'operator', 'admin', 'erp', 'reporter']).meta({
+  description: 'visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants · erp: a business system\'s token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor\'s token that reports the tables (and dining sessions) of its companies, a visitor everywhere else',
 });
 
 export const Command = z.enum(['start', 'stop', 'speed', 'reset', 'maint', 'fault', 'restock', 'ship', 'retool', 'toollimit']).meta({
@@ -650,7 +650,7 @@ export const Account = z.object({
 });
 export const Accounts = z.array(Account).meta({ description: 'GET /api/admin/tokens — the tokens of the companies the caller administers' });
 export const IssueToken = z.object({
-  name: str, role: z.enum(['member', 'operator', 'admin', 'erp']),
+  name: str, role: z.enum(['member', 'operator', 'admin', 'erp', 'reporter']),
   /** null: every company (only an administrator of every company) */
   companies: z.array(str).nullable(),
   expires: str.optional(),
@@ -1064,6 +1064,88 @@ export const MachineChecks = z.object({
   last: z.array(CheckSubmission),
   operator: z.boolean(),
 }).meta({ description: 'GET /api/checks/{company}/machines/{plant}/{asset} — members and above; 404 when no form is for it' });
+
+// ---------- a restaurant's tables (/api/report/{company}/…, /api/tables/{company}) ----------
+
+export const TableState = z.enum(['free', 'occupied', 'reserved', 'cleaning']).meta({ description: 'free 空闲 · occupied 就餐中 · reserved 已预订 · cleaning 清台中' });
+/** ms since the epoch, or RFC 3339 */
+const when = z.union([num, str]);
+export const TableReport = z.object({
+  table: str,
+  /** the plant (shop); may be left out when only one plant has a table of that id */
+  plant: str.optional(),
+  state: TableState,
+  /** people at an occupied table (default 2, or the seats of a smaller table) */
+  people: num.optional(),
+  /** when the table got into this state (default: now); a time more than 5 minutes ahead is taken as now */
+  since: when.optional(),
+  /** what saw it: a camera box, a sensor, a waiter (default: the token holder) */
+  source: str.optional(),
+});
+export const TableReports = z.union([TableReport, z.array(TableReport), z.object({ reports: z.array(TableReport) })]).meta({
+  description: 'POST /api/report/{company}/tables — one, a list, or {reports}; the same report twice is kept once; one older than what the table last reported is kept (its sessions are rebuilt) but the twin keeps the newer. A reporter token of the company, operators and above',
+});
+export const TableEvent = z.object({
+  table: str, plant: str.optional(),
+  event: z.enum(['seated', 'ordered', 'paid', 'left']),
+  people: num.optional(),
+  at: when.optional(),
+  source: str.optional(),
+});
+export const TableEvents = z.union([TableEvent, z.array(TableEvent), z.object({ events: z.array(TableEvent) })]).meta({
+  description: 'POST /api/report/{company}/sessions — a POS\'s session events: seated opens a session, paid / left close it (the table is then to clear), ordered is kept',
+});
+export const TableReportResult = z.object({
+  accepted: num, late: num, duplicate: num, unknown: num, invalid: num,
+  items: z.array(z.object({ table: str, plant: str.optional(), status: z.enum(['accepted', 'late', 'duplicate', 'unknown', 'invalid']), error: str.optional() })),
+}).meta({ description: 'What became of each report or event, in the order sent' });
+export const TableNow = z.object({
+  plant: str, plantName: str, line: str, lineName: str, id: str, area: str, seats: num,
+  state: TableState, people: num,
+  /** when the state began (ms) */
+  since: num,
+  /** sim: the twin\'s own; else what reported it */
+  source: str,
+  /** reports govern the table (reported within the last 3 hours) */
+  reported: z.boolean(),
+  lastSource: str.optional(), lastAt: num.optional(),
+  /** minutes in this state */
+  minutes: num,
+  /** sessions at it today */
+  sessions: num,
+});
+export const TableKpis = z.object({
+  plant: str.optional(), name: str.optional(),
+  /** the business day (from 05:00) */
+  day: str,
+  tables: num, seats: num, occupied: num, reserved: num, cleaning: num, free: num, people: num,
+  /** 上座率: occupied tables / tables, now */
+  occupancy: num,
+  /** 座位利用率: people / seats, now */
+  seatUse: num,
+  sessions: num,
+  /** 翻台率: sessions per table today */
+  turnover: num,
+  /** 平均用餐时长 of the sessions that ended today */
+  avgMinutes: num.nullable(),
+  guests: num, waiting: num,
+  source: z.enum(['measured', 'simulated', 'mixed']), measuredShare: num, reportedSessions: num,
+});
+export const TablesOverview = z.object({
+  tables: z.array(TableNow), total: TableKpis, plants: z.array(TableKpis), now: num,
+}).meta({ description: 'GET /api/tables/{company} — every table now and today\'s figures per plant and in all; anyone' });
+export const TableSession = z.object({ plant: str, table: str, start: num, end: num.nullable(), people: num, source: str });
+export const TableDay = z.object({
+  day: str, sessions: z.array(TableSession),
+  marks: z.array(z.object({ at: num, kind: str, people: num, source: str, received: num })),
+}).meta({ description: 'GET /api/tables/{company}/{plant}/{table}/sessions?day=YYYY-MM-DD — that table\'s sessions on the business day, with its reports and events' });
+export const TableCurrent = z.object({
+  table: TableNow, open: TableSession.nullable(), minutes: num.nullable(), today: z.array(TableSession),
+}).meta({ description: 'GET /api/tables/{company}/{plant}/{table} — the table now and its session in progress' });
+export const TableHistory = z.array(z.object({
+  plant: str, start: num, label: str, sessions: num, guests: num, avgMinutes: num.nullable(), occupiedHours: num, reported: num,
+})).meta({ description: 'GET /api/tables/{company}/history?from=&to=&by=hour|day — sessions per plant by hour or business day' });
+
 // ---------- the value report (/api/value/{company}) ----------
 
 const DataSource = z.enum(['measured', 'simulated']);
@@ -1202,6 +1284,7 @@ export const DEFS = {
   CheckForm, CheckForms, CheckRounds, ChecksOverview, CheckSubmission, CheckSubmissions, CheckInput, MachineChecks,
   ValueReport,
   Anomaly, Anomalies, AnomalyMachine, AnomalyReport, AnomalyReset, AnomalyResetResult,
+  TableReports, TableEvents, TableReportResult, TablesOverview, TableDay, TableCurrent, TableHistory,
 } satisfies Record<string, z.ZodType>;
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

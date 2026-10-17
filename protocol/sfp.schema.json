@@ -152,9 +152,10 @@
                 "member",
                 "operator",
                 "admin",
-                "erp"
+                "erp",
+                "reporter"
               ],
-              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
+              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
             },
             "name": {
               "type": "string"
@@ -2365,9 +2366,10 @@
             "member",
             "operator",
             "admin",
-            "erp"
+            "erp",
+            "reporter"
           ],
-          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
+          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
         },
         "you": {
           "type": "string"
@@ -3174,9 +3176,10 @@
               "member",
               "operator",
               "admin",
-              "erp"
+              "erp",
+              "reporter"
             ],
-            "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
+            "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
           },
           "key": {
             "type": "string"
@@ -3248,9 +3251,10 @@
                 "member",
                 "operator",
                 "admin",
-                "erp"
+                "erp",
+                "reporter"
               ],
-              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
+              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
             },
             "companies": {
               "type": "array",
@@ -3541,9 +3545,10 @@
             "member",
             "operator",
             "admin",
-            "erp"
+            "erp",
+            "reporter"
           ],
-          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else"
+          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
         },
         "companies": {
           "type": "array",
@@ -3602,7 +3607,8 @@
             "member",
             "operator",
             "admin",
-            "erp"
+            "erp",
+            "reporter"
           ]
         },
         "companies": {
@@ -7571,6 +7577,927 @@
         "additionalProperties": false
       },
       "description": "POST /api/admin/anomalies/{company}/reset — administrators; each machine answered on its own"
+    },
+    "TableReports": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "plant": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "free",
+                "occupied",
+                "reserved",
+                "cleaning"
+              ],
+              "description": "free 空闲 · occupied 就餐中 · reserved 已预订 · cleaning 清台中"
+            },
+            "people": {
+              "type": "number"
+            },
+            "since": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "table",
+            "state"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "plant": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "free",
+                  "occupied",
+                  "reserved",
+                  "cleaning"
+                ],
+                "description": "free 空闲 · occupied 就餐中 · reserved 已预订 · cleaning 清台中"
+              },
+              "people": {
+                "type": "number"
+              },
+              "since": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "table",
+              "state"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reports": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "plant": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "free",
+                      "occupied",
+                      "reserved",
+                      "cleaning"
+                    ],
+                    "description": "free 空闲 · occupied 就餐中 · reserved 已预订 · cleaning 清台中"
+                  },
+                  "people": {
+                    "type": "number"
+                  },
+                  "since": {
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "table",
+                  "state"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "reports"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "POST /api/report/{company}/tables — one, a list, or {reports}; the same report twice is kept once; one older than what the table last reported is kept (its sessions are rebuilt) but the twin keeps the newer. A reporter token of the company, operators and above"
+    },
+    "TableEvents": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "plant": {
+              "type": "string"
+            },
+            "event": {
+              "type": "string",
+              "enum": [
+                "seated",
+                "ordered",
+                "paid",
+                "left"
+              ]
+            },
+            "people": {
+              "type": "number"
+            },
+            "at": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "table",
+            "event"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "plant": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string",
+                "enum": [
+                  "seated",
+                  "ordered",
+                  "paid",
+                  "left"
+                ]
+              },
+              "people": {
+                "type": "number"
+              },
+              "at": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "table",
+              "event"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "plant": {
+                    "type": "string"
+                  },
+                  "event": {
+                    "type": "string",
+                    "enum": [
+                      "seated",
+                      "ordered",
+                      "paid",
+                      "left"
+                    ]
+                  },
+                  "people": {
+                    "type": "number"
+                  },
+                  "at": {
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "table",
+                  "event"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "events"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "POST /api/report/{company}/sessions — a POS's session events: seated opens a session, paid / left close it (the table is then to clear), ordered is kept"
+    },
+    "TableReportResult": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "number"
+        },
+        "late": {
+          "type": "number"
+        },
+        "duplicate": {
+          "type": "number"
+        },
+        "unknown": {
+          "type": "number"
+        },
+        "invalid": {
+          "type": "number"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "plant": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "late",
+                  "duplicate",
+                  "unknown",
+                  "invalid"
+                ]
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "table",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "accepted",
+        "late",
+        "duplicate",
+        "unknown",
+        "invalid",
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "What became of each report or event, in the order sent"
+    },
+    "TablesOverview": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "plant": {
+                "type": "string"
+              },
+              "plantName": {
+                "type": "string"
+              },
+              "line": {
+                "type": "string"
+              },
+              "lineName": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "area": {
+                "type": "string"
+              },
+              "seats": {
+                "type": "number"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "free",
+                  "occupied",
+                  "reserved",
+                  "cleaning"
+                ],
+                "description": "free 空闲 · occupied 就餐中 · reserved 已预订 · cleaning 清台中"
+              },
+              "people": {
+                "type": "number"
+              },
+              "since": {
+                "type": "number"
+              },
+              "source": {
+                "type": "string"
+              },
+              "reported": {
+                "type": "boolean"
+              },
+              "lastSource": {
+                "type": "string"
+              },
+              "lastAt": {
+                "type": "number"
+              },
+              "minutes": {
+                "type": "number"
+              },
+              "sessions": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "plant",
+              "plantName",
+              "line",
+              "lineName",
+              "id",
+              "area",
+              "seats",
+              "state",
+              "people",
+              "since",
+              "source",
+              "reported",
+              "minutes",
+              "sessions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "total": {
+          "type": "object",
+          "properties": {
+            "plant": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "day": {
+              "type": "string"
+            },
+            "tables": {
+              "type": "number"
+            },
+            "seats": {
+              "type": "number"
+            },
+            "occupied": {
+              "type": "number"
+            },
+            "reserved": {
+              "type": "number"
+            },
+            "cleaning": {
+              "type": "number"
+            },
+            "free": {
+              "type": "number"
+            },
+            "people": {
+              "type": "number"
+            },
+            "occupancy": {
+              "type": "number"
+            },
+            "seatUse": {
+              "type": "number"
+            },
+            "sessions": {
+              "type": "number"
+            },
+            "turnover": {
+              "type": "number"
+            },
+            "avgMinutes": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "guests": {
+              "type": "number"
+            },
+            "waiting": {
+              "type": "number"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "simulated",
+                "mixed"
+              ]
+            },
+            "measuredShare": {
+              "type": "number"
+            },
+            "reportedSessions": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "day",
+            "tables",
+            "seats",
+            "occupied",
+            "reserved",
+            "cleaning",
+            "free",
+            "people",
+            "occupancy",
+            "seatUse",
+            "sessions",
+            "turnover",
+            "avgMinutes",
+            "guests",
+            "waiting",
+            "source",
+            "measuredShare",
+            "reportedSessions"
+          ],
+          "additionalProperties": false
+        },
+        "plants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "plant": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "day": {
+                "type": "string"
+              },
+              "tables": {
+                "type": "number"
+              },
+              "seats": {
+                "type": "number"
+              },
+              "occupied": {
+                "type": "number"
+              },
+              "reserved": {
+                "type": "number"
+              },
+              "cleaning": {
+                "type": "number"
+              },
+              "free": {
+                "type": "number"
+              },
+              "people": {
+                "type": "number"
+              },
+              "occupancy": {
+                "type": "number"
+              },
+              "seatUse": {
+                "type": "number"
+              },
+              "sessions": {
+                "type": "number"
+              },
+              "turnover": {
+                "type": "number"
+              },
+              "avgMinutes": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "guests": {
+                "type": "number"
+              },
+              "waiting": {
+                "type": "number"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "measured",
+                  "simulated",
+                  "mixed"
+                ]
+              },
+              "measuredShare": {
+                "type": "number"
+              },
+              "reportedSessions": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "day",
+              "tables",
+              "seats",
+              "occupied",
+              "reserved",
+              "cleaning",
+              "free",
+              "people",
+              "occupancy",
+              "seatUse",
+              "sessions",
+              "turnover",
+              "avgMinutes",
+              "guests",
+              "waiting",
+              "source",
+              "measuredShare",
+              "reportedSessions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "now": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "tables",
+        "total",
+        "plants",
+        "now"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/tables/{company} — every table now and today's figures per plant and in all; anyone"
+    },
+    "TableDay": {
+      "type": "object",
+      "properties": {
+        "day": {
+          "type": "string"
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "plant": {
+                "type": "string"
+              },
+              "table": {
+                "type": "string"
+              },
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "people": {
+                "type": "number"
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "plant",
+              "table",
+              "start",
+              "end",
+              "people",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "people": {
+                "type": "number"
+              },
+              "source": {
+                "type": "string"
+              },
+              "received": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "kind",
+              "people",
+              "source",
+              "received"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "day",
+        "sessions",
+        "marks"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/tables/{company}/{plant}/{table}/sessions?day=YYYY-MM-DD — that table's sessions on the business day, with its reports and events"
+    },
+    "TableCurrent": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "object",
+          "properties": {
+            "plant": {
+              "type": "string"
+            },
+            "plantName": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            },
+            "lineName": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "area": {
+              "type": "string"
+            },
+            "seats": {
+              "type": "number"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "free",
+                "occupied",
+                "reserved",
+                "cleaning"
+              ],
+              "description": "free 空闲 · occupied 就餐中 · reserved 已预订 · cleaning 清台中"
+            },
+            "people": {
+              "type": "number"
+            },
+            "since": {
+              "type": "number"
+            },
+            "source": {
+              "type": "string"
+            },
+            "reported": {
+              "type": "boolean"
+            },
+            "lastSource": {
+              "type": "string"
+            },
+            "lastAt": {
+              "type": "number"
+            },
+            "minutes": {
+              "type": "number"
+            },
+            "sessions": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "plant",
+            "plantName",
+            "line",
+            "lineName",
+            "id",
+            "area",
+            "seats",
+            "state",
+            "people",
+            "since",
+            "source",
+            "reported",
+            "minutes",
+            "sessions"
+          ],
+          "additionalProperties": false
+        },
+        "open": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "plant": {
+                  "type": "string"
+                },
+                "table": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "number"
+                },
+                "end": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "people": {
+                  "type": "number"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "plant",
+                "table",
+                "start",
+                "end",
+                "people",
+                "source"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minutes": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "today": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "plant": {
+                "type": "string"
+              },
+              "table": {
+                "type": "string"
+              },
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "people": {
+                "type": "number"
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "plant",
+              "table",
+              "start",
+              "end",
+              "people",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "table",
+        "open",
+        "minutes",
+        "today"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/tables/{company}/{plant}/{table} — the table now and its session in progress"
+    },
+    "TableHistory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "plant": {
+            "type": "string"
+          },
+          "start": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          },
+          "sessions": {
+            "type": "number"
+          },
+          "guests": {
+            "type": "number"
+          },
+          "avgMinutes": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "occupiedHours": {
+            "type": "number"
+          },
+          "reported": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "plant",
+          "start",
+          "label",
+          "sessions",
+          "guests",
+          "avgMinutes",
+          "occupiedHours",
+          "reported"
+        ],
+        "additionalProperties": false
+      },
+      "description": "GET /api/tables/{company}/history?from=&to=&by=hour|day — sessions per plant by hour or business day"
     },
     "Source": {
       "type": "object",

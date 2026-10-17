@@ -354,7 +354,7 @@ function AlarmBell() {
   );
 }
 
-const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' } as const;
+const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' } as const;
 
 const AuditSheet = lazy(() => import('@/audit/Audit'));
 

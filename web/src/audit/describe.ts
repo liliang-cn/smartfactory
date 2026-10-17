@@ -19,7 +19,7 @@ export const VIA: Record<Via, { label: string; icon: LucideIcon }> = {
   guard: { label: '指令把关', icon: ShieldCheckIcon },
   anomaly: { label: '异常检测', icon: ActivityIcon },
 };
-export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' };
+export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
 /** How each guard level reads. */
 export const GUARD_LEVEL: Record<string, string> = { advisory: '只提议', guarded: '有护栏', autonomous: '自主' };
 const STATUS_ADVISOR: Record<string, string> = {
