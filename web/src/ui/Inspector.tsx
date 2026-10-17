@@ -145,10 +145,51 @@ function Tiles({ a }: { a: Asset }) {
       ? sim.agvs.find((g) => g.route.some((w) => w.line === a.line!.id && w.act === 'drop'))?.asset
       : sim.trucks.find((t) => t.kind === 'in')?.asset;
     const f = a.stock / a.cap;
+    const next = sim.incoming[0];
+    const ib = sim.inbound;
+    const at = (ms: number) => hhmm(((ms + 8 * 3600_000) % 86_400_000) / 1000);
+    // a storeroom of what the site uses (shown below as its inventory): the next delivery is what matters
+    if (a.type === 'warehouse' && layout.logistics.store !== 'racks') {
+      return (
+        <>
+          <Tile label="下一趟配送" wide>{next ? <>{at(next.eta)}<Unit>{next.no}，{Object.entries(next.items).map(([k, n]) => `${sim.inventory.find((i) => i.key === k)?.label ?? k} ${n}`).join('、')}</Unit></> : sim.supplier ? '没有在途' : '按需补货'}</Tile>
+          <Tile label={w.inTruck}>{feeder?.id ?? '—'}</Tile>
+        </>
+      );
+    }
     return (
       <>
         <Tile label="库存" wide bar={f} tone={f < 0.15 ? 'bad' : f < 0.3 ? 'warn' : 'ok'}>{a.stock}<Unit>/ {a.cap} 件</Unit></Tile>
         <Tile label={a.type === 'buffer' ? `送料${w.vehicle}` : w.inTruck}>{feeder?.id ?? '人工'}</Tile>
+        {a.type === 'warehouse' && ib && (
+          <Tile label={`下一车${w.raw}`} wide tone={ib.late ? 'bad' : 'ok'} bar={ib.late && sim.wall() >= ib.due ? 1 : undefined}>
+            {at(ib.due)}<Unit>{ib.supplier}，{ib.load} 件{ib.late && sim.wall() >= ib.due ? `，延误，约 ${at(ib.at)} 到` : ''}</Unit>
+          </Tile>
+        )}
+      </>
+    );
+  }
+  if (a.type === 'fgzone' && sim.depot) {
+    const d = sim.depot;
+    const name = (k: string) => layout.lines.find((l) => l.product.key === k)?.product.name ?? k;
+    return (
+      <>
+        <Tile label="在库">{d.batches.reduce((n, b) => n + b.qty, 0)}<Unit>{layout.unit}，{d.batches.length} 批</Unit></Tile>
+        <Tile label="留样">{d.samples.length}<Unit>批</Unit></Tile>
+        <Tile label="今日过期" tone={d.wasted ? 'bad' : 'ok'}>{d.wasted}<Unit>{layout.unit}</Unit></Tile>
+        <div className="col-span-3 grid gap-1 rounded-xl bg-surface px-2.5 py-2 text-xs">
+          <small className="text-[11.5px] text-muted-foreground">批次（先进先出，最早的先发）</small>
+          {d.batches.slice(0, 8).map((b) => {
+            const left = (b.expires - sim.wall()) / 3600_000;
+            return (
+              <span key={b.no} className="grid grid-cols-[1fr_auto_auto] gap-2 tabular-nums">
+                <span className="truncate"><b>{b.no}</b> {name(b.product)}</span>
+                <span>{b.qty} {layout.unit}</span>
+                <span className={cn(left < 12 ? 'font-bold text-destructive' : 'text-muted-foreground')}>{left > 240 ? `${Math.round(left / 24)} 天` : `${Math.max(0, left).toFixed(0)} 小时`}</span>
+              </span>
+            );
+          })}
+        </div>
       </>
     );
   }

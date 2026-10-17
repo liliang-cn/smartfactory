@@ -216,6 +216,12 @@ function LiveClock() {
       </span>
       <span className="max-lg:hidden">{paused ? '已暂停' : timeScale === 1 ? '实时' : `${timeScale} 倍速`}</span>
       <time className="tabular-nums text-foreground">{hhmm(sim.clock, true)}</time>
+      {/* the plant's own rhythm: the shift on, a handover, a meal break */}
+      {(sim.shift || sim.pause) && (
+        <span className="rounded-md bg-background/70 px-1.5 py-px text-[11.5px] text-foreground max-xl:hidden">
+          {sim.pause ? `${sim.pause}中` : sim.handoverUntil > sim.elapsed ? `${sim.shift} · 交接班` : sim.shift}
+        </span>
+      )}
     </div>
   );
 }
