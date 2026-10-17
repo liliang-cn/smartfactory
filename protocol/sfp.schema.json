@@ -3191,7 +3191,8 @@
               "cli",
               "api",
               "guard",
-              "anomaly"
+              "anomaly",
+              "ontology"
             ]
           },
           "company": {
@@ -3906,7 +3907,8 @@
                   "check",
                   "anomaly",
                   "calibration",
-                  "command"
+                  "command",
+                  "violation"
                 ]
               },
               "title": {
@@ -3978,7 +3980,8 @@
                 "check",
                 "anomaly",
                 "calibration",
-                "command"
+                "command",
+                "violation"
               ]
             },
             "links": {
@@ -4111,7 +4114,8 @@
                   "check",
                   "anomaly",
                   "calibration",
-                  "command"
+                  "command",
+                  "violation"
                 ]
               },
               "mentions": {
@@ -4154,7 +4158,8 @@
                   "checked_on",
                   "seen_on",
                   "calibrates",
-                  "targets"
+                  "targets",
+                  "breached_on"
                 ]
               }
             },
@@ -4173,6 +4178,615 @@
       ],
       "additionalProperties": false,
       "description": "GET /api/knowledge/{company}/graph — the process graph whole, for drawing"
+    },
+    "Ontology": {
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "boolean"
+        },
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sub": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "note": {
+                "type": "string"
+              },
+              "builtin": {
+                "type": "boolean"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "asserted": {
+                "type": "number"
+              },
+              "inferred": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "sub",
+              "asserted",
+              "inferred"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "range": {
+                "type": "string"
+              },
+              "transitive": {
+                "type": "boolean"
+              },
+              "symmetric": {
+                "type": "boolean"
+              },
+              "inverse": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "builtin": {
+                "type": "boolean"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "if": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "then": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "if",
+              "then",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "class": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "for": {
+                "type": "number"
+              },
+              "requires": {
+                "type": "string"
+              },
+              "valueClass": {
+                "type": "string"
+              },
+              "say": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "live": {
+                "type": "boolean"
+              },
+              "text": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "violated"
+                ]
+              },
+              "watching": {
+                "type": "number"
+              },
+              "violations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "constraint": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "plant": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "number"
+                    },
+                    "since": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "constraint",
+                    "name",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "class",
+              "live",
+              "text",
+              "status",
+              "watching",
+              "violations"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "explicit": {
+          "type": "number"
+        },
+        "inferred": {
+          "type": "number"
+        },
+        "inconsistencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "declared",
+        "classes",
+        "relations",
+        "rules",
+        "constraints",
+        "explicit",
+        "inferred"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/ontology — members and above"
+    },
+    "OntologyInstances": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "inferred": {
+                "type": "boolean"
+              },
+              "fact": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string"
+                  },
+                  "relation": {
+                    "type": "string"
+                  },
+                  "object": {
+                    "type": "string"
+                  },
+                  "inferred": {
+                    "type": "boolean"
+                  },
+                  "rule": {
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "subject",
+                  "relation",
+                  "object",
+                  "inferred"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "inferred"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "class",
+        "instances",
+        "total"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/ontology/instances?class=&relation=&value=&limit= — the things of a class, with inference, optionally only those with relation = value"
+    },
+    "OntologyThing": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "also": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": "string"
+        },
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string"
+              },
+              "relation": {
+                "type": "string"
+              },
+              "object": {
+                "type": "string"
+              },
+              "inferred": {
+                "type": "boolean"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "why": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "subject",
+              "relation",
+              "object",
+              "inferred"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string"
+              },
+              "relation": {
+                "type": "string"
+              },
+              "object": {
+                "type": "string"
+              },
+              "inferred": {
+                "type": "boolean"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "why": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "subject",
+              "relation",
+              "object",
+              "inferred"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "back": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string"
+              },
+              "relation": {
+                "type": "string"
+              },
+              "object": {
+                "type": "string"
+              },
+              "inferred": {
+                "type": "boolean"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "why": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "subject",
+              "relation",
+              "object",
+              "inferred"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "super": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string"
+              },
+              "relation": {
+                "type": "string"
+              },
+              "object": {
+                "type": "string"
+              },
+              "inferred": {
+                "type": "boolean"
+              },
+              "rule": {
+                "type": "string"
+              },
+              "why": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "subject",
+              "relation",
+              "object",
+              "inferred"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "subs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instances": {
+          "$ref": "#/$defs/OntologyInstances"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/ontology/thing?name= — a class or a thing, each inferred fact with why"
+    },
+    "OntologyGraph": {
+      "type": "object",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sub": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "builtin": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "sub"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "thing": {
+                "type": "string"
+              },
+              "class": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "thing",
+              "class"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "classes",
+        "types"
+      ],
+      "additionalProperties": false,
+      "description": "GET /api/knowledge/{company}/ontology/graph — the classes, for drawing beside the knowledge graph"
+    },
+    "SPARQLAnswer": {
+      "type": "object",
+      "properties": {
+        "vars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "boolean": {
+          "type": "boolean"
+        },
+        "count": {
+          "type": "number"
+        },
+        "cut": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "vars",
+        "rows",
+        "count"
+      ],
+      "additionalProperties": false,
+      "description": "POST /api/knowledge/{company}/ontology/sparql {query} — administrators; read-only"
     },
     "ConsoleAction": {
       "type": "object",

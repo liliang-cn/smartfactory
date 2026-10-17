@@ -28,6 +28,7 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 你能做的事都通过工具：
 - 看：list_customers、get_customer（配置和知识库概况）、list_industries、get_industry、list_tokens、activity（操作记录）。
 - 知识库：knowledge_search（文档和工艺）、knowledge_entity（工艺图里一样东西的上下游和关系）。
+- 本体：ontology（行业包声明的类、关系、规则、约束和约束现在的状况）、ontology_instances（一个类有哪些东西，可按关系的值筛）、ontology_explain（一样东西的类和事实，推理出的带为什么）。回答推理出的结论时把「为什么」一起说。
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
 - 仿真校准：calibration（每台设备的模型参数：模板值、按实测拟合的值、在用的值，拟合回放的误差，最近一天模型和实测差多少）。拟合要管理员在后台点；你可以 propose_apply_calibration 提出应用拟合好的参数，说清楚哪些参数会变、误差能降多少。
 - 指令把关：guard_status（AI 能对真实设备做到哪一步、规则、哪些设备接了真实设备、等待批准的指令）。
@@ -148,6 +149,21 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			}},
 		{"knowledge_entity", "知识图谱里一样东西（工位编号、设备名、产线、产品、供应商、客户、工单号）和它的关系；工位还列出它最近的点检、读数异常、校准、AI 指令，查其中一条可得详情。", obj(map[string]any{"company": str("公司 id"), "name": str("名字")}, "company", "name"),
 			func(m map[string]any) (any, error) { return o.KnowledgeEntity(ctx, who, s(m, "company"), s(m, "name")) }},
+		{"ontology", "一家公司的本体：行业包声明的类（每类多少东西，直接给的和推理出的）、关系、规则、约束和它们现在的状况（读数约束哪台设备正超限、结构约束哪些东西没满足）。给 class 只看这一类。", obj(map[string]any{"company": str("公司 id"), "class": str("类名，可省")}, "company"),
+			func(m map[string]any) (any, error) {
+				if c := s(m, "class"); c != "" {
+					return o.OntologyThing(ctx, who, s(m, "company"), c)
+				}
+				return o.Ontology(ctx, who, s(m, "company"))
+			}},
+		{"ontology_instances", "本体里一个类的全部东西（含推理：子类的、按关系推出来的）；给 relation 和 value 只要和它这样相关的，比如 菜品 含过敏原=花生过敏原。每个注明是不是推理出的。", obj(map[string]any{
+			"company": str("公司 id"), "class": str("类名"), "relation": str("关系名，可省"), "value": str("关系的值，可省"),
+		}, "company", "class"),
+			func(m map[string]any) (any, error) {
+				return o.OntologyInstances(ctx, who, s(m, "company"), s(m, "class"), s(m, "relation"), s(m, "value"), 100)
+			}},
+		{"ontology_explain", "本体里一样东西（或一个类）：它是哪些类、它的事实，推理出的每条都带「为什么」（从给定的事实一步步推出来）。", obj(map[string]any{"company": str("公司 id"), "name": str("名字")}, "company", "name"),
+			func(m map[string]any) (any, error) { return o.OntologyThing(ctx, who, s(m, "company"), s(m, "name")) }},
 		{"list_orders", "一家公司的生产工单（来自 ERP）：在做的、排队的（按将要生产的顺序）、完成的和撤回的，含产线、完成数、交期、客户。", obj(map[string]any{
 			"company": str("公司 id"), "status": str("queued、running、done、cancelled，逗号分隔，可省"), "q": str("按工单号、料号、客户、产线找，可省"),
 		}, "company"),

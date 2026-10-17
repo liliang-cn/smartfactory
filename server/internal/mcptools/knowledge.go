@@ -22,6 +22,11 @@ type Knowledge struct {
 	Graph    func(ctx context.Context, who auth.Who, company string) (*knowledge.Graph, error)
 	// ReadDoc reads n passages of a library document from passage from on; nil without a library.
 	ReadDoc func(ctx context.Context, who auth.Who, company, doc string, from, n int) (title string, total int, parts []DocPart, err error)
+
+	// the company's ontology (nil: no ontology tools)
+	Ontology          func(ctx context.Context, who auth.Who, company string) (*knowledge.OntOverview, error)
+	OntologyInstances func(ctx context.Context, who auth.Who, company, class, relation, value string, limit int) (*knowledge.OntInstances, error)
+	OntologyThing     func(ctx context.Context, who auth.Who, company, name string) (*knowledge.OntThing, error)
 }
 
 // DocPart is one passage of a library document.
@@ -285,6 +290,9 @@ func AddKnowledge(s *mcp.Server, kb Knowledge) {
 			return nil, out, nil
 		}))
 
+	if kb.Ontology != nil {
+		addOntology(s, kb)
+	}
 	if kb.ReadDoc == nil {
 		return
 	}
@@ -319,8 +327,8 @@ func passage(p knowledge.Passage, n int) kbPassage {
 		out.Cite = fmt.Sprintf("%s (doc %s, part %d)", p.Title, p.Doc, p.Part)
 	case "order":
 		out.Cite = p.Title + " (production order)"
-	case "check", "anomaly", "calibration", "command":
-		// a machine's record: a check, a reading hint, a calibration or an AI command
+	case "check", "anomaly", "calibration", "command", "violation":
+		// a machine's record: a check, a reading hint, a calibration, an AI command or a reading out of a constraint
 		out.Cite = p.Title + " (" + p.From + " record)"
 	default:
 		out.Cite = p.Title + " (process)"

@@ -571,13 +571,13 @@ export const AuditEntry = z.object({
   id: num, at: time, who: str, role: Role,
   /** which token: the start of its hash ("token" for the original single token) */
   key: str,
-  /** api: another system (the ERP) calling the order API with its own token · guard: the command guard itself (a request lapsing) · anomaly: the detector of unusual readings */
-  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard', 'anomaly']),
+  /** api: another system (the ERP) calling the order API with its own token · guard: the command guard itself (a request lapsing) · anomaly: the detector of unusual readings · ontology: the ontology's limits on readings */
+  via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard', 'anomaly', 'ontology']),
   /** the company it happened in; * for what every company shares */
   company: str,
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · device.add / device.renew / device.revoke (a device on the embedded broker; target its name) */
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · check.form / check.form.delete (target the form id) · check.submit (a form filled in: target plant/asset and the submission id; context every value) */
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · anomaly / anomaly.end (a hint raised and over; target plant/asset) · anomaly.reset */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · anomaly / anomaly.end (a hint raised and over; target plant/asset) · anomaly.reset · ontology.violation / ontology.violation.end (a reading out of an ontology constraint and back; target plant/asset) */
   action: str,
   target: str, detail: str.optional(), ok: z.boolean(), error: str.optional(),
   /** what was true when it happened, for a command to a machine: its state, temperature and alarms, the rule that refused it, who asked and who approved */
@@ -705,16 +705,16 @@ export const SaveTemplate = z.object({
 
 /**
  * What a thing in the graph is: the process, the production orders from the ERP, and what recently happened to a machine —
- * check (a form out of spec, or a station's latest checks) · anomaly (a hint that a reading is unusual) · calibration · command (one an AI sent)
+ * check (a form out of spec, or a station's latest checks) · anomaly (a hint that a reading is unusual) · calibration · command (one an AI sent) · violation (a reading out of an ontology constraint)
  */
-export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command']);
+export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command', 'violation']);
 /**
  * has_plant · has_line · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to ·
  * for_customer (order → customer) · of_product (order → product) · runs_on (order → line) ·
- * checked_on (check → station) · seen_on (anomaly → station) · calibrates (calibration → station) · targets (command → station)
+ * checked_on (check → station) · seen_on (anomaly → station) · calibrates (calibration → station) · targets (command → station) · breached_on (violation → station)
  */
 export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on',
-  'checked_on', 'seen_on', 'calibrates', 'targets']);
+  'checked_on', 'seen_on', 'calibrates', 'targets', 'breached_on']);
 
 export const KnowledgeOverview = z.object({
   kinds: z.record(str, num),
@@ -730,7 +730,7 @@ export const Passage = z.object({
    * doc: a passage of a library document (doc, part locate it) · process: the company's process · order: a production order ·
    * check · anomaly · calibration · command: what happened to a machine
    */
-  from: z.enum(['doc', 'process', 'order', 'check', 'anomaly', 'calibration', 'command']),
+  from: z.enum(['doc', 'process', 'order', 'check', 'anomaly', 'calibration', 'command', 'violation']),
   title: str, doc: str.optional(), part: num, text: str, entities: z.array(str).optional(),
 });
 export const KnowledgeAnswer = z.object({
@@ -754,6 +754,76 @@ export const KnowledgeGraph = z.object({
   nodes: z.array(z.object({ name: str, kind: EntityKind, mentions: num })),
   edges: z.array(z.object({ from: str, to: str, type: RelationType })),
 }).meta({ description: 'GET /api/knowledge/{company}/graph — the process graph whole, for drawing' });
+
+// ---------- the ontology (/api/knowledge/{company}/ontology) ----------
+
+/** a constraint broken: a thing without a relation it requires, or (live) a station whose reading is out of range: plant, field, value (the furthest out), since (epoch ms) */
+const OntViolation = z.object({
+  constraint: str, name: str, text: str,
+  plant: str.optional(), field: str.optional(), value: num.optional(), since: num.optional(),
+});
+/** subject relation object ("鲜毛肚 存放于 FZ-101"; relation 是 for a class, 是一种 for a superclass); why: for an inferred one, what it follows from, a step a line */
+const OntFact = z.object({ subject: str, relation: str, object: str, inferred: z.boolean(), rule: str.optional(), why: z.array(str).optional() });
+/** kind: the kind of thing in the knowledge graph it is (station, product …), absent for a named thing; fact: the matching one, when asked by a relation's value */
+const OntInstance = z.object({ name: str, kind: str.optional(), inferred: z.boolean(), fact: OntFact.optional() });
+
+export const OntologyInstances = z.object({
+  class: str, relation: str.optional(), value: str.optional(),
+  /** given ones first; at most limit, total is how many there are */
+  instances: z.array(OntInstance), total: num,
+}).meta({ description: 'GET /api/knowledge/{company}/ontology/instances?class=&relation=&value=&limit= — the things of a class, with inference, optionally only those with relation = value' });
+
+export const Ontology = z.object({
+  /** the company's industry packs (or the company) declare an ontology; without one only the built-in classes and relations */
+  declared: z.boolean(),
+  /** built-in ones first (kind: the knowledge graph's kind); sub: what it is a kind of; asserted: things given as of it, inferred: of it by inference only */
+  classes: z.array(z.object({
+    name: str, sub: z.array(str), note: str.optional(), builtin: z.boolean().optional(), kind: str.optional(), asserted: num, inferred: num,
+  })),
+  /** text: the relation in a line (菜品 原料是 食材；可以传递) */
+  relations: z.array(z.object({
+    name: str, label: str.optional(), domain: str.optional(), range: str.optional(), transitive: z.boolean().optional(), symmetric: z.boolean().optional(),
+    inverse: str.optional(), note: str.optional(), builtin: z.boolean().optional(), text: str,
+  })),
+  /** text: X 原料 Y，Y 含过敏原 Z → X 含过敏原 Z */
+  rules: z.array(z.object({ id: str, if: z.array(str), then: str, note: str.optional(), text: str })),
+  /**
+   * live: a limit on a reading of every station of the class (field, min, max, for seconds), watching that many stations; otherwise
+   * structural (requires, valueClass), checked on the model. status: ok | violated
+   */
+  constraints: z.array(z.object({
+    id: str, class: str, field: str.optional(), min: num.optional(), max: num.optional(), for: num.optional(),
+    requires: str.optional(), valueClass: str.optional(), say: str.optional(), note: str.optional(),
+    live: z.boolean(), text: str, status: z.enum(['ok', 'violated']), watching: num, violations: z.array(OntViolation),
+  })),
+  /** facts given and inferred */
+  explicit: num, inferred: num,
+  inconsistencies: z.array(str).optional(),
+}).meta({ description: 'GET /api/knowledge/{company}/ontology — members and above' });
+
+export const OntologyThing = z.object({
+  name: str,
+  /** class · a kind of thing in the knowledge graph (station, product …) · thing: a named thing of the ontology */
+  kind: str,
+  /** other names it goes by (a product's) */
+  also: z.array(str).optional(), note: str.optional(),
+  /** a thing: its classes, its facts, facts about it */
+  classes: z.array(OntFact).optional(), facts: z.array(OntFact).optional(), back: z.array(OntFact).optional(),
+  /** a class: what it is a kind of, its subclasses, the relations and constraints about it, its things */
+  super: z.array(OntFact).optional(), subs: z.array(str).optional(), relations: z.array(str).optional(), constraints: z.array(str).optional(),
+  instances: OntologyInstances.optional(),
+}).meta({ description: 'GET /api/knowledge/{company}/ontology/thing?name= — a class or a thing, each inferred fact with why' });
+
+export const OntologyGraph = z.object({
+  /** the classes declared, and the built-in ones they are kinds of (builtin) */
+  classes: z.array(z.object({ name: str, sub: z.array(str), builtin: z.boolean().optional() })),
+  /** things of the knowledge graph given as of a declared class (a station by its machine kind, a product) */
+  types: z.array(z.object({ thing: str, class: str })),
+}).meta({ description: 'GET /api/knowledge/{company}/ontology/graph — the classes, for drawing beside the knowledge graph' });
+
+export const SPARQLAnswer = z.object({
+  vars: z.array(str), rows: z.array(z.record(str, str)), boolean: z.boolean().optional(), count: num, cut: z.boolean().optional(),
+}).meta({ description: 'POST /api/knowledge/{company}/ontology/sparql {query} — administrators; read-only' });
 
 // ---------- production orders from the ERP (/api/erp/{company}/orders, /api/admin/erp/{company}) ----------
 
@@ -1193,7 +1263,7 @@ export const DEFS = {
   Docs, Doc, DocView, DocUpload, DocVersions, UploadResults, Notes, Note, Tickets, Ticket, TicketPatch, Done,
   AuditLog,
   AdminOverview, CompanyCreated, ConfigProblem, Accounts, Account, IssueToken, IssuedToken, ComposeRequest, ComposeEvent,
-  KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, ConsoleAction, ConsoleEvent,
+  KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, Ontology, OntologyInstances, OntologyThing, OntologyGraph, SPARQLAnswer, ConsoleAction, ConsoleEvent,
   Templates, TemplateSummary, Template, SaveTemplate,
   Order, Orders, OrderInput, OrderResults, OrderCallback, ERPConfig, ERPOverview, PullResult,
   CalibMachine, Calibration, CalibRequest, CalibOutcomes, Residuals,

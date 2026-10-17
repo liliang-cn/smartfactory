@@ -65,4 +65,18 @@ func TestKnowledgeToolsSeeChecks(t *testing.T) {
 	if !found {
 		t.Errorf("process_graph: %+v", got)
 	}
+
+	// ontology_query: a company without an ontology has the built-in classes, a station is a 工位
+	got, err = ts["ontology_query"].run(ctx, args{})
+	if o, _ := got.(*knowledge.OntOverview); err != nil || o == nil || o.Declared || len(o.Classes) == 0 {
+		t.Errorf("ontology_query: %+v %v", got, err)
+	}
+	got, err = ts["ontology_query"].run(ctx, args{"name": "RF-101"})
+	if th, _ := got.(*knowledge.OntThing); err != nil || th == nil || th.Kind != knowledge.TStation || th.Classes[0].Object != "工位" {
+		t.Errorf("ontology_query RF-101: %+v %v", got, err)
+	}
+	got, err = ts["ontology_query"].run(ctx, args{"class": "工位"})
+	if in, _ := got.(*knowledge.OntInstances); err != nil || in == nil || in.Total < 50 {
+		t.Errorf("ontology_query 工位: %+v %v", got, err)
+	}
 }

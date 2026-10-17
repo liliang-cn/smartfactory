@@ -4,6 +4,7 @@
 // Built by `npm run build:engine` into server/internal/engine/js/engine.js.
 import { z } from 'zod';
 import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
+import { companyOntology } from '@/config/ontology';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
 import { History } from '@/sim/history';
 import { isMachineSpec, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
@@ -165,6 +166,10 @@ function checkIndustry(json: string): string {
       products: Object.fromEntries(Object.entries(ind.products).map(([k, p]) => [k, { name: p.name, stages: Object.keys(p.stages), partNo: p.partNo, variants: (p.variants ?? []).map((v) => v.partNo) }])),
       machines: Object.fromEntries(Object.entries(ind.machines).map(([k, m]) => [k, `${m.label} (${m.look.archetype}, ${m.cycle} 秒)`])),
       routes: Object.fromEntries(Object.entries(ind.routes).map(([k, r]) => [k, r.map((st) => (typeof st === 'string' ? st : st.machine))])),
+      ontology: ind.ontology && {
+        classes: Object.keys(ind.ontology.classes), relations: Object.keys(ind.ontology.relations), rules: ind.ontology.rules.length,
+        individuals: Object.keys(ind.ontology.individuals).length, constraints: ind.ontology.constraints.map((c) => c.id),
+      },
     };
   });
 }
@@ -197,8 +202,11 @@ function processModel(id: string): string {
   const c = companies.get(id);
   if (!c) return 'null';
   const cfg = c.bundle.company;
+  const packs = [...new Map(c.plants.map(({ layout: p }) => [p.industry.id, p.industry])).values()];
+  const onto = companyOntology(cfg, packs);
   return JSON.stringify({
     id: cfg.id, name: cfg.name,
+    ontology: onto.empty ? undefined : onto.model,
     plants: c.plants.map(({ layout: p }) => ({
       id: p.id, name: p.name, hall: p.hall, site: p.site, industry: p.industry.name, unit: p.unit,
       warehouse: p.warehouse.name, finishedGoods: p.fg.name,
@@ -209,8 +217,12 @@ function processModel(id: string): string {
           key: l.product.key, name: l.product.name, stages: l.product.order, partNo: l.product.partNo, material: l.product.material,
           weight: l.product.weight, customers: (l.product.customers ?? []).map((x) => x.name), suppliers: (l.product.suppliers ?? []).map((x) => x.name),
           variants: (l.product.variants ?? []).map((v) => v.partNo),
+          classes: onto.productClasses(p.industry, l.product.key), individual: onto.productIndividual(p.industry, l.product.key),
         },
-        stations: l.stations.map((st) => ({ id: st.id, label: st.machine.label, name: st.name, code: st.machine.code, cycle: st.cycle, makes: st.makes ?? '', kind: st.machine.look.archetype })),
+        stations: l.stations.map((st) => ({
+          id: st.id, label: st.machine.label, name: st.name, code: st.machine.code, cycle: st.cycle, makes: st.makes ?? '', kind: st.machine.look.archetype,
+          machine: st.key, classes: onto.machineClasses(p.industry, st.key),
+        })),
       })),
     })),
   });
@@ -398,6 +410,23 @@ function stations(c: string): string {
 /** Raises a quality alarm on a machine from a record a person filled in, or clears it (text ""). */
 function alert(c: string, plant: string, asset: string, code: string, text: string): boolean {
   return get(c)?.byId[plant]?.alert(asset, code, text) ?? false;
+}
+
+const SIMULATED = { temp: 'temp', power: 'power', vib: 'vib', speed: 'speed', health: 'health' } as const;
+
+/**
+ * Simulated readings ([[plant, asset, field], …] in, the values out in order): null for a machine
+ * whose equipment reports (its readings come in as such) and for a field the twin does not model.
+ */
+function readings(c: string, json: string): string {
+  const keys = JSON.parse(json) as [string, string, string][];
+  return JSON.stringify(keys.map(([plant, asset, field]) => {
+    const a = get(c)?.byId[plant]?.assets.get(asset);
+    const f = SIMULATED[field as keyof typeof SIMULATED];
+    if (!a || !f || liveFields(a)) return null;
+    const v = a[f];
+    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
+  }));
 }
 
 /** Every machine's parameters: the template's, the calibration in force, and whether it is reporting now. */
@@ -869,5 +898,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
-  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert,
+  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
 };

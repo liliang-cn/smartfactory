@@ -1,6 +1,7 @@
 // The knowledge graph drawn as a network: plants, lines and their stations in order, the machines
 // the stations are, products, suppliers, customers, the production orders, and what recently
-// happened at the stations (checks, reading hints, calibrations, AI commands). Laid out once by a
+// happened at the stations (checks, reading hints, calibrations, AI commands, readings out of a
+// constraint), and the ontology's classes when they are asked for. Laid out once by a
 // force simulation, each plant's lines, stations and orders gathered around it, what happened next
 // to its station; wheel to zoom, drag to pan, click a thing to see what it connects to, and show
 // or hide each kind.
@@ -10,7 +11,10 @@ import { MinusIcon, PlusIcon, ScanIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type * as api from './api';
 
-export const KIND: Record<api.EntityKind, { label: string; color: string; r: number }> = {
+/** a kind of thing drawn: the knowledge graph's, and the ontology's classes when they are shown */
+export type Kind = api.EntityKind | 'class';
+
+export const KIND: Record<Kind, { label: string; color: string; r: number }> = {
   company: { label: '公司', color: '#1f2a44', r: 13 },
   plant: { label: '工厂', color: '#2f5bea', r: 10 },
   line: { label: '产线', color: '#6f8ff5', r: 6.5 },
@@ -24,28 +28,36 @@ export const KIND: Record<api.EntityKind, { label: string; color: string; r: num
   anomaly: { label: '异常', color: '#e0a100', r: 3.2 },
   calibration: { label: '校准', color: '#c056b5', r: 3.2 },
   command: { label: '指令', color: '#4d5a6e', r: 3.2 },
+  violation: { label: '约束告警', color: '#d6453d', r: 3.4 },
+  class: { label: '类', color: '#0d5c63', r: 5.5 },
 };
 
-const PRIORITY: Record<api.EntityKind, number> = {
-  company: 0, plant: 1, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9,
+const PRIORITY: Record<Kind, number> = {
+  company: 0, plant: 1, class: 2, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9, violation: 9,
 };
 
 /** what happened at a station, and how it is linked to it */
-const EVENT: Record<string, api.EntityKind> = { checked_on: 'check', seen_on: 'anomaly', calibrates: 'calibration', targets: 'command' };
-const isEvent = (k: api.EntityKind) => k === 'check' || k === 'anomaly' || k === 'calibration' || k === 'command';
+const EVENT: Record<string, api.EntityKind> = { checked_on: 'check', seen_on: 'anomaly', calibrates: 'calibration', targets: 'command', breached_on: 'violation' };
+const isEvent = (k: Kind) => k === 'check' || k === 'anomaly' || k === 'calibration' || k === 'command' || k === 'violation';
 
 const DIST: Record<string, number> = {
   has_plant: 70, has_line: 46, makes: 46, has_station: 12, feeds: 9, is_a: 60, supplies: 40, sold_to: 40, runs_on: 18, for_customer: 40, of_product: 50,
-  checked_on: 8, seen_on: 8, calibrates: 8, targets: 8,
+  checked_on: 8, seen_on: 8, calibrates: 8, targets: 8, breached_on: 8, a: 70, sub: 45,
 };
 
-interface N extends SimulationNodeDatum { id: string; kind: api.EntityKind; mentions: number; r: number; plant?: string }
+interface N extends SimulationNodeDatum { id: string; label: string; kind: Kind; mentions: number; r: number; plant?: string }
 /** stations and what happened at them are labelled smaller */
 const small = (n: N) => n.kind === 'station' || isEvent(n.kind);
 interface L extends SimulationLinkDatum<N> { type: string }
 
+/** what is drawn: the knowledge graph, and the ontology's classes (a: a thing is of a class, sub: a class is a kind of another) when they are shown; label: a name other than the id */
+export interface Drawn {
+  nodes: { name: string; kind: Kind; mentions: number; label?: string }[];
+  edges: { from: string; to: string; type: string }[];
+}
+
 /** The plant each line, station, order and what happened at a station belongs to, following has_line, has_station, runs_on and the station's. */
-function plantsOf(g: api.KnowledgeGraph) {
+function plantsOf(g: Drawn) {
   const plant = new Map<string, string>();
   for (const e of g.edges) if (e.type === 'has_line') plant.set(e.to, e.from);
   for (const e of g.edges) {
@@ -57,10 +69,10 @@ function plantsOf(g: api.KnowledgeGraph) {
   return plant;
 }
 
-function layout(g: api.KnowledgeGraph) {
+function layout(g: Drawn) {
   const plantOf = plantsOf(g);
   const nodes: N[] = g.nodes.map((n) => ({
-    id: n.name, kind: n.kind, mentions: n.mentions, plant: plantOf.get(n.name),
+    id: n.name, label: n.label ?? n.name, kind: n.kind, mentions: n.mentions, plant: plantOf.get(n.name),
     r: KIND[n.kind].r + (n.kind === 'machine' ? Math.min(6, Math.sqrt(n.mentions)) : 0),
   }));
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -76,9 +88,9 @@ function layout(g: api.KnowledgeGraph) {
   const pull = (n: N) => (n.plant ? 0.03 : 0.012);
   const sim = forceSimulation(nodes)
     .force('link', forceLink<N, L>(links).id((d) => d.id).distance((l) => DIST[l.type] ?? 30)
-      .strength((l) => (l.type === 'is_a' || l.type === 'of_product' || l.type === 'for_customer' ? 0.06
+      .strength((l) => (l.type === 'is_a' || l.type === 'of_product' || l.type === 'for_customer' || l.type === 'a' ? 0.06
         : l.type === 'feeds' || l.type === 'has_station' || l.type === 'runs_on' || EVENT[l.type] ? 0.9 : 0.4)))
-    .force('charge', forceManyBody<N>().strength((d) => (isEvent(d.kind) ? -6 : d.kind === 'station' || d.kind === 'order' ? -12 : d.kind === 'machine' ? -60 : -140)))
+    .force('charge', forceManyBody<N>().strength((d) => (isEvent(d.kind) ? -6 : d.kind === 'station' || d.kind === 'order' ? -12 : d.kind === 'machine' || d.kind === 'class' ? -60 : -140)))
     .force('collide', forceCollide<N>((d) => d.r + 2))
     // wider than tall, like the box it is drawn in
     .force('x', forceX<N>((d) => anchor.get(d.plant ?? '')?.x ?? 0).strength(pull))
@@ -90,22 +102,22 @@ function layout(g: api.KnowledgeGraph) {
 
 interface View { x: number; y: number; w: number; h: number }
 
-export function GraphView({ graph, selected, onSelect, className }: { graph: api.KnowledgeGraph; selected: string | null; onSelect(name: string | null): void; className?: string }) {
+export function GraphView({ graph, selected, onSelect, className }: { graph: Drawn; selected: string | null; onSelect(name: string | null): void; className?: string }) {
   const all = useMemo(() => layout(graph), [graph]);
   const byId = all.byId;
   // kinds shown; the layout stays put when one is hidden
-  const [hidden, setHidden] = useState<Set<api.EntityKind>>(() => new Set());
+  const [hidden, setHidden] = useState<Set<Kind>>(() => new Set());
   const nodes = useMemo(() => all.nodes.filter((n) => !hidden.has(n.kind) || n.id === selected), [all, hidden, selected]);
   const links = useMemo(() => {
     const shown = new Set(nodes.map((n) => n.id));
     return all.links.filter((l) => shown.has((l.source as N).id) && shown.has((l.target as N).id));
   }, [all, nodes]);
   const counts = useMemo(() => {
-    const c = new Map<api.EntityKind, number>();
+    const c = new Map<Kind, number>();
     for (const n of all.nodes) c.set(n.kind, (c.get(n.kind) ?? 0) + 1);
     return c;
   }, [all]);
-  const toggle = (k: api.EntityKind) => setHidden((h) => {
+  const toggle = (k: Kind) => setHidden((h) => {
     const next = new Set(h);
     if (next.has(k)) next.delete(k);
     else next.add(k);
@@ -190,7 +202,7 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
       if (out.size >= budget) break;
       const fs = small(n) ? 11.5 * 0.85 : 11.5;
       // a CJK character is about as wide as the font is tall, a Latin one a little over half
-      const w = [...n.id].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? fs : fs * 0.6), 0);
+      const w = [...n.label].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? fs : fs * 0.6), 0);
       const cx = (n.x! - view.x) / u, top = (n.y! - n.r - view.y) / u - fs * 1.35;
       const box = { x0: cx - w / 2 - 2, x1: cx + w / 2 + 2, y0: top, y1: top + fs * 1.3 };
       if (placed.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) continue;
@@ -239,10 +251,12 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
             const flow = l.type === 'feeds';
             const order = l.type === 'runs_on' || l.type === 'for_customer' || l.type === 'of_product';
             const event = EVENT[l.type];
+            const onto = l.type === 'a' || l.type === 'sub';
             return (
               <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={on ? 'var(--primary)' : flow ? '#7f93c8' : l.type === 'is_a' ? '#f29a2e' : order ? KIND.order.color : event ? KIND[event].color : '#9aa7bd'}
-                strokeOpacity={near ? (on ? 0.9 : 0.06) : l.type === 'is_a' ? 0.18 : flow ? 0.7 : order ? (l.type === 'runs_on' ? 0.5 : 0.16) : event ? 0.45 : 0.35}
+                stroke={on ? 'var(--primary)' : flow ? '#7f93c8' : l.type === 'is_a' ? '#f29a2e' : order ? KIND.order.color : event ? KIND[event].color : onto ? KIND.class.color : '#9aa7bd'}
+                strokeDasharray={l.type === 'a' ? `${3 * unit} ${3 * unit}` : undefined}
+                strokeOpacity={near ? (on ? 0.9 : 0.06) : l.type === 'is_a' ? 0.18 : flow ? 0.7 : order ? (l.type === 'runs_on' ? 0.5 : 0.16) : event ? 0.45 : l.type === 'a' ? 0.3 : 0.35}
                 strokeWidth={(on ? 1.8 : flow ? 1.2 : 0.8) * unit} />
             );
           })}
@@ -256,7 +270,7 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
                 {label(n) && (
                   <text x={n.x} y={n.y! - n.r - font * 0.45} textAnchor="middle" fontSize={small(n) ? font * 0.85 : font} fontWeight={small(n) ? 600 : 700}
                     fill="var(--foreground)" paintOrder="stroke" stroke="var(--card)" strokeWidth={font * 0.3} strokeLinejoin="round">
-                    {n.id}
+                    {n.label}
                   </text>
                 )}
               </g>
@@ -270,7 +284,7 @@ export function GraphView({ graph, selected, onSelect, className }: { graph: api
         <button type="button" aria-label="全图" className="grid size-8 place-items-center border-t hover:bg-surface" onClick={() => setView(fit)}><ScanIcon className="size-4" /></button>
       </div>
       <ul className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.5rem)] flex-wrap gap-1 rounded-xl bg-card/85 p-1 text-[11.5px] backdrop-blur max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none]" aria-label="显示哪些">
-        {(Object.keys(KIND) as api.EntityKind[]).filter((k) => counts.has(k)).map((k) => {
+        {(Object.keys(KIND) as Kind[]).filter((k) => counts.has(k)).map((k) => {
           const off = hidden.has(k);
           return (
             <li key={k}>

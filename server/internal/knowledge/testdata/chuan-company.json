@@ -1,0 +1,20 @@
+{
+  "id": "chuan",
+  "name": "串串小馆",
+  "short": "串串",
+  "industry": "chuan-test",
+  "plants": [
+    {
+      "id": "s1",
+      "name": "一号店",
+      "hall": "后厨",
+      "lines": [
+        { "name": "串串线", "product": "skewer", "route": "skewer" },
+        { "name": "锅底线", "product": "pot", "route": "pot" }
+      ]
+    }
+  ],
+  "ontology": {
+    "individuals": { "毛肚串": { "原料": ["鲜毛肚"] } }
+  }
+}

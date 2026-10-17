@@ -123,5 +123,24 @@ func knowledgeTools(kb *knowledge.Base, company string) []tool {
 				}
 				return map[string]any{"candidates": cands, "hint": "没有完全同名的，可能是：" + strings.Join(names, "、")}, nil
 			}},
+		{name: "ontology_query", desc: "查公司的本体（行业包声明的东西有哪些类、怎么相关、有什么规则和约束），带推理。三种问法：" +
+			"不带参数看全部类（每类多少东西）、关系、规则、约束和约束现在的状况（哪台设备的读数正超限、哪些东西不满足要求）；" +
+			"给 class 列这一类的全部东西（子类的、按关系推出来的都算），再给 relation 和 value 只要和它这样相关的（比如 class=菜品 relation=含过敏原 value=花生过敏原：哪些菜含花生）；" +
+			"给 name 查一样东西（或一个类）：它是哪些类、它的事实，推理出的每条带 why（从给定事实一步步推出来）。回答推理出的结论时把 why 说给用户。",
+			params: obj(map[string]any{
+				"name":     prop("string", "一样东西或一个类的名字（可省）"),
+				"class":    prop("string", "类名（可省）"),
+				"relation": prop("string", "关系名，和 value 一起用（可省）"),
+				"value":    prop("string", "关系的值（可省）"),
+			}),
+			run: func(ctx context.Context, a args) (any, error) {
+				switch {
+				case a.str("name") != "":
+					return kb.OntologyThing(ctx, company, a.str("name"))
+				case a.str("class") != "":
+					return kb.OntologyInstances(ctx, company, a.str("class"), a.str("relation"), a.str("value"), 60)
+				}
+				return kb.OntologyOverview(ctx, company)
+			}},
 	}
 }

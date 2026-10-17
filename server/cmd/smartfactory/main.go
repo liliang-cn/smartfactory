@@ -183,14 +183,31 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			return fmt.Errorf("anomaly: %w", err)
 		}
 	}
-	switch {
-	case readings != nil && hints != nil:
-		hub.Tap = func(t tags.Tag) {
-			readings.Add(t)
-			hints.Add(t)
+	// the limits the ontology puts on readings ("冷藏设备 temp ≤ 4"), compiled with the knowledge base
+	var limits *knowledge.Live
+	if cfg.Data != "" {
+		limits = knowledge.NewLive(filepath.Join(cfg.Data, "knowledge"), log)
+		limits.Alert, limits.Sim = eng.Alert, eng.Readings
+	}
+	var taps []func(tags.Tag)
+	for _, tap := range []struct {
+		on  bool
+		add func(tags.Tag)
+	}{{readings != nil, func(t tags.Tag) { readings.Add(t) }}, {hints != nil, func(t tags.Tag) { hints.Add(t) }}, {limits != nil, func(t tags.Tag) { limits.Add(t) }}} {
+		if tap.on {
+			taps = append(taps, tap.add)
 		}
-	case readings != nil:
-		hub.Tap = readings.Add
+	}
+	switch len(taps) {
+	case 0:
+	case 1:
+		hub.Tap = taps[0]
+	default:
+		hub.Tap = func(t tags.Tag) {
+			for _, tap := range taps {
+				tap(t)
+			}
+		}
 	}
 	eng.Dir = cfg.Data
 	switch {
@@ -335,6 +352,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		if assistants != nil {
 			assistants.KB = kb
 		}
+		limits.Audit, limits.Changed = trail, kb.EventsChanged
+		kb.Live = limits
+		go limits.Run(ctx)
 		eng.OnChange = func(company string, deleted bool) {
 			if deleted {
 				kb.Drop(company)

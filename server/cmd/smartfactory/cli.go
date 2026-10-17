@@ -7,6 +7,7 @@ package main
 //	smartfactory industries | industries show <id> | industries new -ai "描述" | industries new -f pack.json
 //	smartfactory tokens | tokens issue -name 张工 -role operator -company huaduan | tokens revoke <key>
 //	smartfactory kb <company> | kb <company> search "问题" | entity <名字> | docs | upload <文件>… | rebuild
+//	smartfactory ontology <company> | ontology <company> instances <类> [关系=值] | explain <名字> | sparql "SELECT …"
 //	smartfactory orders <company> | orders <company> show <工单号> | send -f orders.json | cancel <工单号> | pull [-dry] | erp
 //	smartfactory calib <company> | calib <company> show <设备> | fit [-hours 24] [设备…] | apply [设备…] | revert [设备…]
 //	smartfactory guard <company> | guard <company> set -level guarded -approve start,speed | pending | approve <编号> | deny <编号>
@@ -40,7 +41,7 @@ import (
 var cliCommands = map[string]func(ctx context.Context, args []string) error{
 	"login": cliLogin, "logout": cliLogout, "whoami": cliWhoami,
 	"company": cliCustomers, "industries": cliIndustries, "tokens": cliTokens,
-	"kb": cliKB, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "device": cliDevice, "checks": cliChecks, "value": cliValue, "anomalies": cliAnomalies, "activity": cliActivity, "agent": cliAgent,
+	"kb": cliKB, "ontology": cliOntology, "orders": cliOrders, "calib": cliCalib, "guard": cliGuard, "device": cliDevice, "checks": cliChecks, "value": cliValue, "anomalies": cliAnomalies, "activity": cliActivity, "agent": cliAgent,
 }
 
 // ---- output ----
@@ -861,7 +862,7 @@ func cliKB(ctx context.Context, args []string) error {
 				tag = green("文档")
 			case "order":
 				tag = red("工单")
-			case "check", "anomaly", "calibration", "command":
+			case "check", "anomaly", "calibration", "command", "violation":
 				tag = red(kindLabel[p.From])
 			}
 			fmt.Printf("\n%d. %s %s\n", i+1, tag, bold(p.Title))
@@ -1003,7 +1004,7 @@ func cliKB(ctx context.Context, args []string) error {
 
 var kindLabel = map[string]string{
 	"company": "公司", "plant": "工厂", "line": "产线", "station": "工位", "machine": "设备", "product": "产品", "supplier": "供应商", "customer": "客户", "order": "工单",
-	"check": "点检", "anomaly": "读数异常", "calibration": "校准", "command": "AI 指令",
+	"check": "点检", "anomaly": "读数异常", "calibration": "校准", "command": "AI 指令", "violation": "约束告警",
 }
 
 // relLabel reads a relation from the thing's side: "IH-101 feeds HP-101" is 下游 from IH-101.
@@ -1013,7 +1014,7 @@ func relLabel(typ string, out bool) string {
 		"has_station": {"有工位", "在产线"}, "is_a": {"是", "这种设备的工位"}, "feeds": {"下游", "上游"},
 		"supplies": {"供应", "供应商"}, "sold_to": {"卖给", "买"},
 		"for_customer": {"客户", "工单"}, "of_product": {"产品", "工单"}, "runs_on": {"产线", "工单"},
-		"checked_on": {"工位", "点检"}, "seen_on": {"工位", "读数异常"}, "calibrates": {"工位", "校准"}, "targets": {"工位", "AI 指令"},
+		"checked_on": {"工位", "点检"}, "seen_on": {"工位", "读数异常"}, "calibrates": {"工位", "校准"}, "targets": {"工位", "AI 指令"}, "breached_on": {"工位", "约束告警"},
 	}
 	l, ok := labels[typ]
 	if !ok {

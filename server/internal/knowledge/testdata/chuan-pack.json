@@ -1,0 +1,71 @@
+{
+  "id": "chuan-test",
+  "name": "串串（测试）",
+  "unit": "份",
+  "products": {
+    "skewer": {
+      "name": "毛肚串",
+      "stages": {
+        "raw": { "parts": [{ "shape": "box", "size": [0.2, 0.05, 0.1], "color": "#d9c9a8" }] },
+        "done": { "parts": [{ "shape": "box", "size": [0.2, 0.05, 0.1], "color": "#b5651d" }] }
+      }
+    },
+    "pot": {
+      "name": "牛油锅底",
+      "stages": {
+        "raw": { "parts": [{ "shape": "cylinder", "size": [0.15, 0.1], "color": "#c0392b" }] },
+        "done": { "parts": [{ "shape": "cylinder", "size": [0.15, 0.12], "color": "#e74c3c" }] }
+      }
+    }
+  },
+  "machines": {
+    "freezer": {
+      "label": "冷柜", "code": "FZ", "look": { "archetype": "chamber", "glow": "#9fe8ff" }, "cycle": 6,
+      "thermal": { "idle": 1, "run": 2, "warn": 40, "trip": 48 }, "makes": "raw"
+    },
+    "skewer-table": { "label": "穿串台", "code": "ST", "look": { "archetype": "manual" }, "cycle": 8, "makes": "done" },
+    "cooker": { "label": "熬料锅", "code": "CK", "look": { "archetype": "tank", "fluid": "#c0392b" }, "cycle": 10, "makes": "done" }
+  },
+  "routes": {
+    "skewer": ["freezer", "skewer-table"],
+    "pot": ["cooker"]
+  },
+  "ontology": {
+    "classes": {
+      "食材": { "note": "做菜用的原料" },
+      "荤菜": { "sub": ["食材"] },
+      "冷藏食材": { "sub": ["食材"], "note": "存放 0～4 ℃" },
+      "毛肚": { "sub": ["荤菜", "冷藏食材"] },
+      "坚果": { "sub": "食材" },
+      "过敏原": {},
+      "菜品": { "sub": ["产品"] },
+      "锅底": { "sub": ["菜品"] },
+      "冷藏设备": { "sub": ["设备"] }
+    },
+    "relations": {
+      "原料": { "label": "原料是", "domain": "菜品", "range": "食材", "transitive": true },
+      "含过敏原": { "domain": "食材", "range": "过敏原" },
+      "存放于": { "domain": "食材", "range": "冷藏设备", "inverse": "存放" },
+      "同锅": { "symmetric": true }
+    },
+    "rules": [
+      { "id": "过敏原随原料传递", "if": ["原料", "含过敏原"], "then": "含过敏原", "note": "原料含过敏原，做出来的菜也含" }
+    ],
+    "individuals": {
+      "牛油锅底": { "a": ["锅底"], "原料": ["牛油", "花椒", "花生碎"], "同锅": ["毛肚串"] },
+      "花生碎": { "a": ["坚果"], "原料": ["花生"] },
+      "花生": { "a": ["坚果"], "含过敏原": ["花生过敏原"] },
+      "鲜毛肚": { "a": ["毛肚"], "存放于": ["FZ-101"], "note": "每天早上到货" },
+      "清汤锅底": { "a": ["锅底"] }
+    },
+    "bind": {
+      "products": { "pot": "锅底", "skewer": "菜品" },
+      "machines": { "freezer": "冷藏设备" },
+      "individuals": { "pot": "牛油锅底" }
+    },
+    "constraints": [
+      { "id": "冷链", "class": "冷藏设备", "field": "temp", "max": 4, "for": 3, "say": "{name} 温度 {value} ℃，冷藏要求不高于 4 ℃" },
+      { "id": "菜品写明原料", "class": "菜品", "requires": "原料", "say": "{name} 没写原料" }
+    ]
+  }
+}

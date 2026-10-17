@@ -48,3 +48,14 @@ func (e *Engine) Stations(company string) []PlantStations {
 func (e *Engine) Alert(company, plant, asset, code, text string) bool {
 	return e.str("alert", company, plant, asset, code, text) == "true"
 }
+
+// Readings are the twin's simulated values of fields of machines ({plant, asset, field} each), in
+// order: nil for a machine whose equipment reports its own, or a field the twin does not model.
+func (e *Engine) Readings(company string, keys [][3]string) []*float64 {
+	raw, _ := json.Marshal(keys)
+	var out []*float64
+	if json.Unmarshal([]byte(e.str("readings", company, string(raw))), &out) != nil || len(out) != len(keys) {
+		return make([]*float64, len(keys))
+	}
+	return out
+}
