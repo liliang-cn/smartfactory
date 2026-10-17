@@ -35,6 +35,7 @@ import (
 	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
+	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
 )
@@ -86,6 +87,8 @@ type Server struct {
 	History map[string]ops.PlantHistory
 	// Hints are readings unusual for their machine (nil without data).
 	Hints *anomaly.Detector
+	// Tables are the restaurants' tables as reported and simulated (nil without data).
+	Tables *tables.Service
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -159,6 +162,7 @@ func (s *Server) Handler() http.Handler {
 	s.guardRoutes(mux)
 	s.deviceRoutes(mux)
 	s.checkRoutes(mux)
+	s.tableRoutes(mux)
 	s.valueRoutes(mux)
 	s.anomalyRoutes(mux)
 	s.advisorRoutes(mux)
@@ -174,8 +178,8 @@ func (s *Server) caller(r *http.Request) auth.Who { return s.Keys.Of(r) }
 func (s *Server) requireToken(next http.Handler) http.Handler {
 	verify := func(_ context.Context, token string, _ *http.Request) (*mcpauth.TokenInfo, error) {
 		w, ok := s.Keys.Lookup(token)
-		if !ok || w.Role == auth.ERP {
-			// an ERP token is for the order API alone
+		if !ok || w.Role.Narrow() {
+			// an ERP token is for the order API alone, a reporter's for table reports
 			return nil, mcpauth.ErrInvalidToken
 		}
 		return &mcpauth.TokenInfo{UserID: w.Key, Extra: map[string]any{"who": w}}, nil
