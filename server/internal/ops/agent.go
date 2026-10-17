@@ -232,6 +232,18 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 				return o.CheckSubmissions(who, s(m, "company"), checks.Filter{Form: s(m, "form"), Asset: s(m, "asset"), Bad: bad, Limit: 50,
 					From: time.Now().Add(-time.Duration(min(h, 720)) * time.Hour)})
 			}},
+		{"tables_now", "饭店的餐桌现在怎样：每张桌（门店、区域、座位数）空闲 / 就餐中 / 已预订 / 清台中，几个人、这个状态多少分钟，谁最后上报的；以及今天（05:00 起）每家店和合计的上座率、座位利用率、翻台率、平均用餐时长。source：measured 全部是上报的（摄像头、收银、服务员），simulated 是孪生仿真的（不是真实门店），mixed 两者都有。", obj(map[string]any{"company": str("公司 id")}, "company"),
+			func(m map[string]any) (any, error) { return o.TablesNow(who, s(m, "company")) }},
+		{"table_now", "一张桌（如 A03）坐了多久：现在的状态、几个人、这次从几点坐下、坐了几分钟，今天在这张桌的每次用餐和来源。", obj(map[string]any{
+			"company": str("公司 id"), "table": str("桌号，如 A03"), "plant": str("门店 id，几家店都有这个桌号时要填"),
+		}, "company", "table"),
+			func(m map[string]any) (any, error) { return o.TableNow(who, s(m, "company"), s(m, "plant"), s(m, "table")) }},
+		{"tables_history", "饭店按天或按小时的用餐记录：每家店开台数、客人数、平均用餐分钟、占用桌时，其中上报的多少（其余是仿真）。", obj(map[string]any{
+			"company": str("公司 id"), "from": str("开始日期 YYYY-MM-DD，默认 6 天前"), "to": str("结束日期 YYYY-MM-DD（含），默认今天"), "by": str("day 或 hour，默认 day"),
+		}, "company"),
+			func(m map[string]any) (any, error) {
+				return o.TableHistory(who, s(m, "company"), s(m, "from"), s(m, "to"), s(m, "by") != "hour")
+			}},
 		{"value_report", "一家公司一段时间里从这套系统得到了什么：顾问计划的提出、采纳、否决、采纳率、决定用时，采纳后量出的变化和验收；你提出的改动确认和不要的条数；AI 的设备指令直接执行、等批准、批准、拒绝、被规则拒绝、过期；校准；工单按期完工率；工厂每周的 OEE、产量、停机和第一条采纳计划前后的对比。每个数字有 n（从多少条记录算的）和 basis（依据），value 为 null 是没有数据。", obj(map[string]any{
 			"company": str("公司 id"), "days": map[string]any{"type": "integer", "description": "往前几天，默认 30（常用 7、30、90）"},
 			"from": str("第一天 YYYY-MM-DD（和 to 一起给，代替 days）"), "to": str("最后一天 YYYY-MM-DD（含）"),

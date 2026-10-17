@@ -23,6 +23,7 @@ import (
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/tables"
 )
 
 var shanghai = func() *time.Location {
@@ -53,6 +54,8 @@ type Runner struct {
 	Checks *checks.Service
 	// Hints are the measured machines' readings unusual for them.
 	Hints Hints
+	// Tables are the restaurants' tables, as reported and simulated.
+	Tables *tables.Service
 
 	dir string
 	llm domain.Generator
@@ -167,6 +170,10 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 	}
 	if r.Hints != nil {
 		t := anomalyTool(r.Hints, a.Company)
+		all[t.name] = t
+	}
+	if r.Tables != nil {
+		t := tablesTool(r.Tables, a.Company)
 		all[t.name] = t
 	}
 	writes := map[string]bool{}
