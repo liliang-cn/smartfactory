@@ -289,7 +289,8 @@ export function buildFG(def: Zone): ModelHandle {
     m.makeTranslation(x, 0.14 + 0.45, z); box.setMatrixAt(i, m);
     m.makeTranslation(x, 0.14 + 0.65, z); wrap.setMatrixAt(i, m);
   });
-  for (const im of [pal, box, wrap]) { im.castShadow = true; im.receiveShadow = true; im.count = 0; root.add(im); }
+  // all cells shown until the first update, so the footprint of the selection outline has a size
+  for (const im of [pal, box, wrap]) { im.castShadow = true; im.receiveShadow = true; root.add(im); }
   return {
     root, tint: [], top: 1.8, labelAt: new THREE.Vector3((def.x0 + def.x1) / 2, 0, (def.z0 + def.z1) / 2),
     update(a) {

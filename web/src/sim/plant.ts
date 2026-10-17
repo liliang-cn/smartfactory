@@ -239,6 +239,7 @@ export class PlantSim {
 
     this.wh = this.asset({ id: L.warehouse.id, name: L.warehouse.name, type: 'warehouse', group: 'WH', stock: Math.round(L.warehouse.cap * 0.78), cap: L.warehouse.cap });
     this.fg = this.asset({ id: L.fg.id, name: L.fg.name, type: 'fgzone', group: 'WH', count: 40 + 20 * L.lines.length });
+    this.fg.state = 'ok';
 
     for (const def of L.agvs) {
       const a = this.asset({ id: def.id, name: def.name, type: 'agv', group: 'LOG', battery: rand(62, 96) });

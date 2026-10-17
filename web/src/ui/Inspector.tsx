@@ -211,7 +211,8 @@ function Controls({ a }: { a: Asset }) {
   const [speed, setSpeed] = useState(Math.round(a.speed * 100));
   useEffect(() => setSpeed(Math.round(a.speed * 100)), [a]);
   if (a.type === 'warehouse') return layout.logistics.store === 'racks' ? <Button className="h-9" onClick={() => command(a.id, 'restock')}>{layout.words.raw}入库 400 件</Button> : null;
-  if (a.type === 'fgzone') return layout.logistics.outbound.vehicle === 'rider' ? null : <Button className="h-9" onClick={() => command(a.id, 'ship')}>立即发运</Button>;
+  // a counter riders take from, or a depot whose van goes out on the delivery rounds: nothing to ship by hand
+  if (a.type === 'fgzone') return layout.logistics.outbound.vehicle === 'rider' || runtime().byId[layout.id]?.sim.depot ? null : <Button className="h-9" onClick={() => command(a.id, 'ship')}>立即发运</Button>;
   if (!isMachine(a) && !isVehicle(a)) return null;
   return (
     <div className="grid gap-3">
@@ -319,6 +320,7 @@ export function Inspector() {
     : a.type === 'table' ? (a.state === 'occupied' ? `${a.count} 人` : '')
     : a.type === 'agv' ? `位置 x ${a.agv!.x.toFixed(1)}  z ${a.agv!.z.toFixed(1)}`
     : a.state === 'running' && a.cycle && !a.slots ? `本${venueLine ? '组' : '件'}进度 ${(a.progress * 100).toFixed(0)}%`
+    : a.type !== 'station' ? ''
     : a.state === 'idle' ? (venueLine ? '没有客人' : '等待上游来料') : a.state === 'blocked' ? (a.waitFor ? `等${a.waitFor}` : '下游未放行') : '';
   const log = sim.log.filter((x) => x.asset === a.id).slice(0, 4);
   const spc = a.measure && metric === 'meas' ? spcStats(a) : null;

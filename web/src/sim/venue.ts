@@ -55,6 +55,8 @@ export class Venue {
     this.sim = sim;
     this.demand = demand;
     this.day = emptyDay(-1);
+    // the pick-up counter holds delivery bags, none yet
+    if (demand.takeaway) sim.fg.count = 0;
   }
 
   /** The hour the business day starts: opening time, or 05:00 for a site that never closes. */
