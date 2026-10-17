@@ -487,7 +487,11 @@
                   "ok",
                   "empty",
                   "low",
-                  "full"
+                  "full",
+                  "free",
+                  "occupied",
+                  "reserved",
+                  "cleaning"
                 ]
               },
               "temp": {
@@ -634,6 +638,9 @@
               },
               "changing": {
                 "type": "number"
+              },
+              "since": {
+                "type": "number"
               }
             },
             "required": [
@@ -772,6 +779,18 @@
                 "items": false,
                 "minItems": 5,
                 "maxItems": 5
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "slots": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
               }
             },
             "required": [
@@ -1036,6 +1055,183 @@
             "minItems": 3,
             "maxItems": 3
           }
+        },
+        "venue": {
+          "type": "object",
+          "properties": {
+            "q": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "day": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "rain": {
+              "type": "boolean"
+            },
+            "orders": {
+              "type": "number"
+            },
+            "counter": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "q",
+            "day",
+            "rain",
+            "orders",
+            "counter"
+          ],
+          "additionalProperties": false
+        },
+        "depot": {
+          "type": "object",
+          "properties": {
+            "batches": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 5,
+                "maxItems": 5
+              }
+            },
+            "samples": {
+              "type": "number"
+            },
+            "otif": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "wasted": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "batches",
+            "samples",
+            "otif",
+            "wasted"
+          ],
+          "additionalProperties": false
+        },
+        "incoming": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            ],
+            "items": false,
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "cold": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "rhythm": {
+          "type": "object",
+          "properties": {
+            "shift": {
+              "type": "string"
+            },
+            "handover": {
+              "type": "boolean"
+            },
+            "pause": {
+              "type": "string"
+            },
+            "cost": {
+              "type": "number"
+            },
+            "price": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "shift",
+            "handover",
+            "pause",
+            "cost",
+            "price"
+          ],
+          "additionalProperties": false
         },
         "events": {
           "type": "array",

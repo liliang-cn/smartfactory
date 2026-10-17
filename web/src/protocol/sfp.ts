@@ -31,6 +31,8 @@ export const AssetState = z.enum([
   'running', 'idle', 'blocked', 'stopped', 'fault', 'maint', 'changeover',
   'moving', 'waiting', 'handling', 'away',
   'ok', 'empty', 'low', 'full',
+  // places (tables, pitches)
+  'free', 'occupied', 'reserved', 'cleaning',
 ]);
 
 export const Source = z.object({
@@ -114,6 +116,8 @@ export const AssetFrame = z.object({
   toolLimit: num.optional(),
   /** seconds left of a tool change */
   changing: num.optional(),
+  /** a place (table, pitch): elapsed its state began; `count` is the people at it */
+  since: num.optional(),
 });
 
 export const LineFrame = z.object({
@@ -129,6 +133,9 @@ export const LineFrame = z.object({
   lot: z.tuple([str, str]).optional(),
   /** [order no, part name, quantity, good, issued at] */
   job: z.tuple([str, str, num, num, num]).optional(),
+  /** walk-flow lines, one per product: people in the group, and the place it holds (-1 none) */
+  groups: z.array(num).optional(),
+  slots: z.array(num).optional(),
 });
 
 export const PlantState = z.object({
@@ -158,6 +165,16 @@ export const PlantState = z.object({
   log: z.array(LogEntry),
   /** [key, available, capacity] */
   inventory: z.array(z.tuple([str, num, num])).optional(),
+  /** a walk-flow site: groups waiting at the door [people, elapsed they came], the business day's figures, rain, delivery orders being made and bags at the counter */
+  venue: z.object({ q: z.array(z.tuple([num, num])), day: z.record(str, num), rain: z.boolean(), orders: num, counter: num }).optional(),
+  /** a depot (central kitchen): finished batches [no, product, quantity, made, expires (wall ms)], retained samples, deliveries on time and in full of the last ones, units thrown away today */
+  depot: z.object({ batches: z.array(z.tuple([str, str, num, num, num])), samples: num, otif: z.tuple([num, num]), wasted: num }).optional(),
+  /** deliveries on their way here: [no, from, eta (wall ms), items] */
+  incoming: z.array(z.tuple([str, str, num, z.record(str, num)])).optional(),
+  /** today's cold-chain machine-seconds held within limits, of all */
+  cold: z.tuple([num, num]).optional(),
+  /** the shift on now, whether it is handing over, a meal break, 元 of electricity today and the price now */
+  rhythm: z.object({ shift: str, handover: z.boolean(), pause: str, cost: num, price: num }).optional(),
   /** what happened since the previous frame of this plant */
   events: z.array(SimEvent),
 }).meta({ description: "A plant's replicated state" });
