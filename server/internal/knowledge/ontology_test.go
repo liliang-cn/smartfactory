@@ -225,6 +225,58 @@ func TestOntology(t *testing.T) {
 	}
 }
 
+// The 签语串串香 template on its two packs: the dishes the peanut crumb carries its allergen into,
+// the dishes that need the cold chain through what they are made of, the new skewer with nowhere
+// to be kept, and each fridge watched once though both packs declare the 0–4 ℃ limit.
+func TestOntologyQianyu(t *testing.T) {
+	eng, ctx := chuan(t)
+	kb, err := Open(t.TempDir(), eng, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer kb.Close()
+	kb.Live = NewLive(t.TempDir(), nil)
+	if err := kb.SyncProcess(ctx, "qianyu"); err != nil {
+		t.Fatal(err)
+	}
+	names := func(in *OntInstances) []string {
+		var out []string
+		for _, x := range in.Instances {
+			out = append(out, x.Name)
+		}
+		return out
+	}
+	in, err := kb.OntologyInstances(ctx, "qianyu", "菜品", "含过敏原", "花生", 0)
+	if err != nil || !slices.Equal(names(in), []string{"干碟", "油碟"}) || !in.Instances[0].Fact.Inferred {
+		t.Errorf("dishes with peanut: %+v %v", in, err)
+	}
+	in, _ = kb.OntologyInstances(ctx, "qianyu", "菜品", "需冷链", "冷藏", 0)
+	if !slices.Contains(names(in), "毛肚串") || in.Total < 10 {
+		t.Errorf("dishes that need the cold chain: %v", names(in))
+	}
+	ov, err := kb.OntologyOverview(ctx, "qianyu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chilled := 0
+	for _, c := range ov.Constraints {
+		switch c.ID {
+		case "chilled-temp":
+			chilled++
+			if c.Watching != 5 {
+				t.Errorf("fridges watched: %d", c.Watching)
+			}
+		case "skewer-has-storage":
+			if len(c.Violations) != 1 || c.Violations[0].Name != "掌中宝串（新品）" {
+				t.Errorf("the skewer kept nowhere: %+v", c.Violations)
+			}
+		}
+	}
+	if chilled != 1 {
+		t.Errorf("the 0–4 ℃ limit is there %d times", chilled)
+	}
+}
+
 type alerts struct {
 	mu   sync.Mutex
 	list []string
