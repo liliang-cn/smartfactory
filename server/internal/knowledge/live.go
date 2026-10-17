@@ -25,13 +25,17 @@ import (
 // class with a field and limits ("冷藏设备 temp ≤ 4") is compiled, each time the ontology or the
 // process changes, into one watch per station of that class; a reading finds its watches in one
 // map lookup, without allocating, and only a reading of a watched field of a watched station does
-// more. Out of range for the constraint's seconds (5 by default), the watch fires: an alarm on the
+// more. A machine no equipment reports for is judged by the twin's simulated values instead, every
+// few seconds (Sim). Out of range for the constraint's seconds (5 by default), the watch fires: an alarm on the
 // machine in the twin, an entry in the activity log, and a record that goes into the knowledge
 // graph beside the station. Back in range, the alarm clears and the record ends. Firing and
 // clearing are done off the reading's path (Run).
 type Live struct {
 	// Alert raises (text) or clears ("") an alarm on a machine; nil raises none.
 	Alert func(company, plant, asset, code, text string) bool
+	// Sim is the twin's simulated values of fields of machines (nil for one its equipment reports
+	// for); nil judges readings from equipment only.
+	Sim   func(company string, keys [][3]string) []*float64
 	Audit *audit.Log
 	// Changed is told the company a record began or ended in.
 	Changed func(company string)
@@ -350,16 +354,54 @@ func (l *Live) save(company string, r *liveRecords) {
 	}
 }
 
-// Run fires and clears the watches whose readings went out of range or came back, until ctx ends.
+// simEvery is how often the twin's own values are judged, for machines no equipment reports for.
+const simEvery = 2 * time.Second
+
+// Run fires and clears the watches whose readings went out of range or came back, until ctx ends;
+// with Sim, it also judges the twin's simulated values of the watched machines every few seconds.
 func (l *Live) Run(ctx context.Context) {
+	tick := time.NewTicker(simEvery)
+	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-l.kick:
 			l.reconcile()
+		case <-tick.C:
+			if l.sample() {
+				l.reconcile()
+			}
 		}
 	}
+}
+
+// sample judges the twin's values of every watched machine its equipment does not report for
+// (those come through Add); true when a watch began or stopped firing.
+func (l *Live) sample() bool {
+	if l.Sim == nil {
+		return false
+	}
+	l.mu.Lock()
+	byCompany := map[string][]*watch{}
+	for c, ws := range l.watches {
+		byCompany[c] = slices.Clone(ws)
+	}
+	l.mu.Unlock()
+	changed := false
+	now := l.Now()
+	for c, ws := range byCompany {
+		keys := make([][3]string, len(ws))
+		for i, w := range ws {
+			keys[i] = [3]string{w.key.plant, w.key.asset, w.key.field}
+		}
+		for i, v := range l.Sim(c, keys) {
+			if v != nil && !math.IsNaN(*v) {
+				changed = ws[i].see(*v, now) || changed
+			}
+		}
+	}
+	return changed
 }
 
 func (l *Live) reconcile() {

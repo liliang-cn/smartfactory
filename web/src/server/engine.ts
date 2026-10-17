@@ -412,6 +412,23 @@ function alert(c: string, plant: string, asset: string, code: string, text: stri
   return get(c)?.byId[plant]?.alert(asset, code, text) ?? false;
 }
 
+const SIMULATED = { temp: 'temp', power: 'power', vib: 'vib', speed: 'speed', health: 'health' } as const;
+
+/**
+ * Simulated readings ([[plant, asset, field], …] in, the values out in order): null for a machine
+ * whose equipment reports (its readings come in as such) and for a field the twin does not model.
+ */
+function readings(c: string, json: string): string {
+  const keys = JSON.parse(json) as [string, string, string][];
+  return JSON.stringify(keys.map(([plant, asset, field]) => {
+    const a = get(c)?.byId[plant]?.assets.get(asset);
+    const f = SIMULATED[field as keyof typeof SIMULATED];
+    if (!a || !f || liveFields(a)) return null;
+    const v = a[f];
+    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
+  }));
+}
+
 /** Every machine's parameters: the template's, the calibration in force, and whether it is reporting now. */
 function machineParams(c: string): string {
   const co = get(c);
@@ -881,5 +898,5 @@ function list(): string {
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
-  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert,
+  historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
 };

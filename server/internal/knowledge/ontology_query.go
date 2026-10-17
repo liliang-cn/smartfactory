@@ -233,6 +233,9 @@ func (b *Base) OntologyOverview(ctx context.Context, company string) (*OntOvervi
 	}
 	out := &OntOverview{Declared: m.Ontology != nil, Classes: classesOf(m), Relations: []OntRelationInfo{}, Rules: []OntRuleInfo{}, Constraints: []OntConstraintInfo{}}
 	for _, r := range builtinRelations {
+		if m.Ontology.declares(r.Name) {
+			continue
+		}
 		rel := OntRelation{Name: r.Name, Domain: r.Domain, Range: r.Range}
 		out.Relations = append(out.Relations, OntRelationInfo{OntRelation: rel, Builtin: true, Text: relationText(rel)})
 	}
@@ -529,7 +532,7 @@ func (b *Base) ontologyClass(ctx context.Context, company string, m *Model, name
 		}
 	}
 	for _, r := range builtinRelations {
-		if r.Domain == name || r.Range == name {
+		if (r.Domain == name || r.Range == name) && !m.Ontology.declares(r.Name) {
 			out.Relations = append(out.Relations, relationText(OntRelation{Name: r.Name, Domain: r.Domain, Range: r.Range}))
 		}
 	}

@@ -105,6 +105,19 @@ var builtinRelations = []struct{ Name, Domain, Range, Type string }{
 	{"供应", "供应商", "产品", RSupplies}, {"卖给", "产品", "客户", RSoldTo},
 }
 
+// declares is whether the ontology declares a relation of that name (nil declares none).
+func (o *Ontology) declares(relation string) bool {
+	if o == nil {
+		return false
+	}
+	for _, r := range o.Relations {
+		if r.Name == relation {
+			return true
+		}
+	}
+	return false
+}
+
 func builtinClass(name string) (kind string, ok bool) {
 	for _, c := range builtinClasses {
 		if c.Name == name {
@@ -248,8 +261,11 @@ func compileOntology(m *Model) *ontoPlan {
 	}
 	for _, r := range builtinRelations {
 		ri := rel(r.Name)
-		add(ri, graph.NewIRI(nsRDFS+"domain"), class(r.Domain))
-		add(ri, graph.NewIRI(nsRDFS+"range"), class(r.Range))
+		// a pack that declares a relation of the same name says what it relates
+		if !o.declares(r.Name) {
+			add(ri, graph.NewIRI(nsRDFS+"domain"), class(r.Domain))
+			add(ri, graph.NewIRI(nsRDFS+"range"), class(r.Range))
+		}
 	}
 	for _, r := range o.Relations {
 		ri := rel(r.Name)

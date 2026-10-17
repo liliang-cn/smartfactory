@@ -361,6 +361,32 @@ func TestLiveConstraint(t *testing.T) {
 		t.Errorf("records after a restart: %+v", r)
 	}
 
+	// a freezer no equipment reports for: the twin's own value is judged
+	var al3 alerts
+	twin := NewLive(t.TempDir(), nil)
+	twin.Alert, twin.Now = al3.alert, func() time.Time { return now }
+	temp := 8.0
+	twin.Sim = func(company string, keys [][3]string) []*float64 {
+		out := make([]*float64, len(keys))
+		for i, k := range keys {
+			if k == [3]string{"s1", "FZ-101", "temp"} {
+				out[i] = &temp
+			}
+		}
+		return out
+	}
+	m, _ := kb.model("chuan")
+	twin.Set("chuan", liveWatches(m))
+	for i := range 5 {
+		now = t0.Add(time.Minute + time.Duration(i)*time.Second)
+		if twin.sample() {
+			twin.reconcile()
+		}
+	}
+	if got := al3.last(); !strings.HasPrefix(got, "chuan|s1|FZ-101|rule:冷链|FZ-101 温度 8 ℃") {
+		t.Errorf("the twin's value out of range: %q", got)
+	}
+
 	idle := tags.Tag{Company: "chuan", Plant: "s1", Asset: "ST-101", Field: "temp", Value: 30.0, Source: "plc", At: now}
 	cold := tags.Tag{Company: "chuan", Plant: "s1", Asset: "FZ-101", Field: "temp", Value: 2.0, Source: "plc", At: now}
 	live.Add(cold)

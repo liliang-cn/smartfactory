@@ -187,7 +187,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	var limits *knowledge.Live
 	if cfg.Data != "" {
 		limits = knowledge.NewLive(filepath.Join(cfg.Data, "knowledge"), log)
-		limits.Alert = eng.Alert
+		limits.Alert, limits.Sim = eng.Alert, eng.Readings
 	}
 	var taps []func(tags.Tag)
 	for _, tap := range []struct {
