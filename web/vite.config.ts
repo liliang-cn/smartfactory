@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 /**
  * The console is its own page: /admin and everything under it get admin.html; and so is the phone
- * page for forms filled in by hand, /check (the server does the same).
+ * page for forms filled in by hand, /check, and the waiter's page for the tables, /waiter (the server does the same).
  */
 const consolePage: Plugin = {
   name: 'sf-console',
@@ -14,6 +14,7 @@ const consolePage: Plugin = {
       const query = req.url?.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
       if (req.url && /^\/admin(\/[^.]*)?(\?.*)?$/.test(req.url)) req.url = `/admin.html${query}`;
       else if (req.url && /^\/check(\?.*)?$/.test(req.url)) req.url = `/check.html${query}`;
+      else if (req.url && /^\/waiter(\?.*)?$/.test(req.url)) req.url = `/waiter.html${query}`;
       next();
     });
   },
@@ -30,6 +31,6 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1600,
-    rollupOptions: { input: { main: path.resolve(import.meta.dirname, 'index.html'), admin: path.resolve(import.meta.dirname, 'admin.html'), check: path.resolve(import.meta.dirname, 'check.html') } },
+    rollupOptions: { input: { main: path.resolve(import.meta.dirname, 'index.html'), admin: path.resolve(import.meta.dirname, 'admin.html'), check: path.resolve(import.meta.dirname, 'check.html'), waiter: path.resolve(import.meta.dirname, 'waiter.html') } },
   },
 });

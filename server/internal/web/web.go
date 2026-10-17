@@ -531,13 +531,16 @@ func (s *Server) static() http.Handler {
 				return
 			}
 			r = r.Clone(r.Context())
-			// the console is its own page, and so is the phone page for filling forms in
+			// the console is its own page, and so are the phone pages for filling forms in and for the tables
 			if p == "admin" || strings.HasPrefix(p, "admin/") {
 				r.URL.Path = "/admin.html"
 				p = "admin.html"
 			} else if p == "check" {
 				r.URL.Path = "/check.html"
 				p = "check.html"
+			} else if p == "waiter" {
+				r.URL.Path = "/waiter.html"
+				p = "waiter.html"
 			} else {
 				r.URL.Path = "/"
 				p = "index.html"
