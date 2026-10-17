@@ -120,6 +120,24 @@ func TestDebugWarm(t *testing.T) {
 	}
 }
 
+func TestDebugCamp(t *testing.T) {
+	if os.Getenv("SF_DEBUG") == "" {
+		t.Skip("debug")
+	}
+	e := offline(t, "tiankong")
+	at(t, e, "tiankong", time.Date(2026, 10, 16, 12, 0, 0, 0, shanghai))
+	for h := 0; h < 30; h += 2 {
+		e.Advance("tiankong", 7200, 2)
+		for _, p := range snapOf(t, e, "tiankong") {
+			line := p.Kpis.Clock + " " + p.ID
+			for _, f := range p.Figures {
+				line += " | " + f.Label + " " + f.Text
+			}
+			t.Log(line)
+		}
+	}
+}
+
 func TestDebugShopDay(t *testing.T) {
 	if os.Getenv("SF_DEBUG") == "" {
 		t.Skip("debug")

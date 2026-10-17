@@ -130,7 +130,12 @@ func figures(list []engine.Table, sessions []Session, from, now time.Time) KPIs 
 	k := KPIs{Day: from.Format("2006-01-02")}
 	in := map[string]bool{}
 	reported := 0
+	waiting := map[string]int{}
 	for _, t := range list {
+		if t.Waiting > waiting[t.Plant] {
+			k.Waiting += t.Waiting - waiting[t.Plant]
+			waiting[t.Plant] = t.Waiting
+		}
 		in[t.Plant+"/"+t.ID] = true
 		k.Tables++
 		k.Seats += t.Seats

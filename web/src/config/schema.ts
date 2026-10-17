@@ -592,6 +592,9 @@ export const PlantCfg = z.object({
    * `transit` hours later. `items` maps this site's inventory to the products there that refill it;
    * other consumables come on the same van from what the company buys in.
    */
+  /** this site's own guests' day and figures, in place of its pack's (a barbecue ground next to the campsite) */
+  demand: Demand.optional(),
+  kpis: z.array(z.union([KpiId, z.object({ id: KpiId, item: z.string().optional(), label: z.string().optional() })])).optional(),
   supply: z.object({
     from: z.string(),
     depart: z.array(z.number().min(0).max(24)).min(1),

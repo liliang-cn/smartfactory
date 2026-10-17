@@ -25,6 +25,8 @@ type Table struct {
 	// Source is "sim" or who reported it; Reported while reports govern the table.
 	Source   string `json:"source"`
 	Reported bool   `json:"reported"`
+	// Waiting is the groups waiting at the door of the table's plant now (the same on each of its tables).
+	Waiting int `json:"waiting"`
 }
 
 // SimSession is a simulated dining session the engine opened (End nil) or closed.

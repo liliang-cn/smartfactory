@@ -499,6 +499,7 @@ function tables(c: string): string {
     return {
       plant: p.layout.id, plantName: p.layout.name, line: a.line?.id ?? '', lineName: a.line?.name ?? '', id: a.id, area: a.place!.area, seats: a.place!.seats,
       label: a.place!.label, state: a.state, people: a.count, since: Math.round(p.epoch + (a.since ?? 0) * 1000), source: rep ? a.live!.src : 'sim', reported: rep,
+      waiting: p.venue?.queue.length ?? 0,
     };
   })));
 }

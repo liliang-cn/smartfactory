@@ -492,8 +492,8 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     home,
     words,
     logistics: lg,
-    kpis: industry.kpis,
-    demand: industry.demand,
+    kpis: plant.kpis ?? industry.kpis,
+    demand: plant.demand ?? industry.demand,
     supply: plant.supply,
   };
 }

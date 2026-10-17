@@ -523,6 +523,228 @@
               ]
             }
           },
+          "demand": {
+            "type": "object",
+            "properties": {
+              "rate": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "curve": {
+                "minItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 24
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "week": {
+                "minItems": 7,
+                "maxItems": 7,
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "sizes": {
+                "default": [
+                  0.12,
+                  0.38,
+                  0.22,
+                  0.16,
+                  0.08,
+                  0.04
+                ],
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "patience": {
+                "default": [
+                  20,
+                  70
+                ],
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "balk": {
+                "default": 6,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "fee": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "takeaway": {
+                "type": "object",
+                "properties": {
+                  "rate": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "take": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "prep": {
+                    "default": 12,
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "spend": {
+                    "default": [
+                      60,
+                      140
+                    ],
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "rate",
+                  "take"
+                ]
+              },
+              "weather": {
+                "type": "object",
+                "properties": {
+                  "rain": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "factor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  }
+                },
+                "required": [
+                  "rain",
+                  "factor"
+                ]
+              }
+            },
+            "required": [
+              "rate",
+              "curve"
+            ]
+          },
+          "kpis": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "oee",
+                    "throughput",
+                    "quality",
+                    "power",
+                    "turnover",
+                    "occupancy",
+                    "queue",
+                    "ticket",
+                    "rating",
+                    "served",
+                    "takeaway",
+                    "checkins",
+                    "inUse",
+                    "weather",
+                    "onTime",
+                    "coldChain"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "enum": [
+                        "oee",
+                        "throughput",
+                        "quality",
+                        "power",
+                        "turnover",
+                        "occupancy",
+                        "queue",
+                        "ticket",
+                        "rating",
+                        "served",
+                        "takeaway",
+                        "checkins",
+                        "inUse",
+                        "weather",
+                        "onTime",
+                        "coldChain"
+                      ]
+                    },
+                    "item": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              ]
+            }
+          },
           "supply": {
             "type": "object",
             "properties": {

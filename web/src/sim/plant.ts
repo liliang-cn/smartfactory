@@ -274,11 +274,25 @@ export class PlantSim {
     this.clock = (local % 86_400_000) / 1000;
     if (this.shut(Math.floor(h))) return;
     const d = v.demand;
-    const busy = intensity(d.curve, h) * (d.week?.[new Date(local).getUTCDay()] ?? 1);
+    const dow = new Date(local).getUTCDay();
+    let busy = intensity(d.curve, h) * (d.week?.[dow] ?? 1);
     const sizes = d.sizes;
     for (const line of this.lines) {
       if (line.gate === undefined) continue;
       const st = line.stations[line.gate];
+      if (st.until !== undefined) {
+        // kept overnight: who checked in since this day's arrivals began (yesterday's, before check-out)
+        const day = h < st.until ? (dow + 6) % 7 : dow;
+        let all = 0;
+        let sofar = 0;
+        for (let x = 0; x < 24; x += 0.5) {
+          const k = intensity(d.curve, x);
+          all += k;
+          if (h < st.until || x <= h) sofar += k;
+        }
+        // groups a pitch gets in a day: the rate over the day's curve (half-hour samples)
+        busy = Math.min(0.95, (d.week?.[day] ?? 1) * d.rate * 0.5 * all) * (all ? sofar / all : 0);
+      }
       let kind = line.layout.input;
       for (let i = 0; i < line.gate; i++) kind = line.stations[i].makes ?? kind;
       for (const place of this.places) {
@@ -289,7 +303,13 @@ export class PlantSim {
         n = Math.min(n, place.place!.seats);
         const p: Product = { id: `${line.id}-${++line.pid}`, s: st.s, done: line.gate - 1, proc: line.gate, t: 0, kind, stall: 0, n, arr: this.elapsed, w: rand(0, 600), slot: place.place!.slot, spend: 0 };
         p.need = this.stay(st, p) ?? st.cycle;
-        p.t = p.need * rand(0.05, 0.9);
+        // a stay that ends at check-out began recently; a meal is part-way through
+        p.t = st.until !== undefined ? rand(0, 3600) : p.need * rand(0.05, 0.9);
+        // what they were lent and took on the way in
+        for (let i = 0; i < line.gate; i++) {
+          const a = line.stations[i];
+          if (a.take) this.takeInv(p, a.perPerson ? this.appetite(a.take, n) : a.take);
+        }
         line.products.push(p);
         v.seat(p, place);
         place.since = this.elapsed - p.t;
@@ -1319,7 +1339,10 @@ export class PlantSim {
         needed = this.wall() >= this.inbound.at;
         idle = `下一车${w.raw}预计 ${hhmm(((this.inbound.at + 8 * 3600_000) % 86_400_000) / 1000)} 到`;
       } else {
-        needed = t.kind === 'in' ? this.wh.stock < this.wh.cap - 500 : this.fg.count >= 30;
+        // material in: when the store has room, or a consumable runs low (charcoal, meat sets …)
+        needed = t.kind === 'in'
+          ? this.wh.stock < this.wh.cap - 500 || this.inventory.some((i) => i.kind === 'consume' && !i.lead && i.avail <= i.cap * Math.max(0.3, i.low * 2))
+          : this.fg.count >= 30;
         idle = t.kind === 'in' ? `待命：${w.raw}库位已满` : `待命：${w.goods}不足 30 ${this.layout.unit}`;
       }
       // a vehicle sent by a schedule says when that is; the others count down to their next round
