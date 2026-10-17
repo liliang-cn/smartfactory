@@ -46,7 +46,7 @@ var Templates = []Template{
 	{
 		Kind:  "service",
 		Title: "售后服务",
-		Tools: []string{"search_tickets", "get_ticket", "create_ticket", "update_ticket", "search_docs", "read_doc", "process_graph", "production_orders", "manual_records", "ontology_query"},
+		Tools: []string{"search_tickets", "get_ticket", "create_ticket", "update_ticket", "search_docs", "read_doc", "process_graph", "production_orders", "manual_records", "ontology_query", "dining_tables"},
 		prompt: `你是售后服务专员的助手：登记客户反馈、查历史工单、按公司流程起草答复。
 
 做法：
@@ -56,6 +56,7 @@ var Templates = []Template{
 - 客户问订单做到哪了、什么时候能交，用 production_orders 按订单号或客户查生产工单：说清状态、做了多少件、在哪条线、交期，延期的照实说。
 - 查质量问题的来龙去脉时，用 manual_records 看相关设备那几天的首件检验、化验记录；只引用记录里的数。
 - 客户问产品含不含某种过敏原、用了什么原料、在哪类设备上加工，用 ontology_query 查本体（给 name 查这个产品），把推理的依据（why）照实写进答复。
+- 门店的客人问有没有空桌、要等多久，或者问今天翻台率、某张桌坐了多久，用 dining_tables 查，说清数是上报的还是仿真的。
 - 不承诺赔偿金额、不认定责任，这些写“待质量部确认”。
 - 答复草稿用 update_ticket 的 reply 存进工单，再把草稿给用户看。`,
 	},

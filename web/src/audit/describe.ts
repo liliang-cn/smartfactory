@@ -20,7 +20,7 @@ export const VIA: Record<Via, { label: string; icon: LucideIcon }> = {
   anomaly: { label: '异常检测', icon: ActivityIcon },
   ontology: { label: '本体约束', icon: ShapesIcon },
 };
-export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' };
+export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
 /** How each guard level reads. */
 export const GUARD_LEVEL: Record<string, string> = { advisory: '只提议', guarded: '有护栏', autonomous: '自主' };
 const STATUS_ADVISOR: Record<string, string> = {

@@ -76,6 +76,10 @@ export const Measure = z.object({
   defects: z.object({ lo: z.string().optional(), hi: z.string().optional() }).optional(),
   /** out-of-spec units are reworked (re-heat-treated, re-machined) and stay on the line instead of being scrapped */
   rework: z.boolean().default(false),
+  /** reading shift per 10 minutes the unit waited (in the queue, for stock): a guest's score falls with the wait */
+  wait: z.number().optional(),
+  /** reading shift in sigmas per 10 °C the machine runs above its normal running temperature (an overheated die press) */
+  heat: z.number().optional(),
 });
 export type MeasureCfg = z.infer<typeof Measure>;
 
@@ -117,6 +121,10 @@ export const Product = z.object({
     price: z.number().positive().optional(), lead: z.number().positive().default(20), late: z.number().min(0).max(1).default(0.1),
   })).optional(),
   stages: z.record(z.string(), z.object({ parts: z.array(Part).min(1) })),
+  /** hours a finished batch keeps (保质期): what has not left by then is thrown away, oldest goes out first */
+  shelf: z.number().positive().optional(),
+  /** hours one unit of every batch is kept as a retained sample (留样), e.g. 48 */
+  sample: z.number().positive().optional(),
 });
 export type ProductCfg = z.infer<typeof Product>;
 
@@ -146,11 +154,33 @@ export const Look = z.object({
   /** plain: no factory fittings (manual: a counter instead of racks and tool rail; frame: a deck in the body colour, no HMI) */
   style: z.enum(['industrial', 'plain']).optional(),
   parts: z.array(Part).default([]),
+  /** where the units a machine with `slots` holds are drawn, [x, z] from its centre (a table, a pitch); a grid by default */
+  places: z.array(z.tuple([z.number(), z.number()])).optional(),
 });
 export type LookCfg = z.infer<typeof Look>;
 
 /** Units of inventory a step lends out (or uses up): {tent: 1, sleepingBag: 3}. */
 const Take = z.record(z.string(), z.number().int().positive());
+
+/**
+ * A place that holds several units at once — tables of a dining room, pitches of a campsite — for a
+ * time that depends on the group, or until a time of day (check-out). A walk-flow line lets people
+ * in only while its first such place has room: the rest wait at the door.
+ */
+const Slotted = {
+  /** units held at once (tables, pitches) */
+  slots: z.number().int().min(1).optional(),
+  /** people a slot seats, for 上座率 (default 4) */
+  seats: z.number().int().min(1).optional(),
+  /** seconds a group of 1, 2, 3 … people stays, in place of `cycle` (the last one for bigger groups) */
+  bySize: z.array(z.number().positive()).min(1).optional(),
+  /** units stay until this hour of the day comes round (11 = check out by 11:00 the next morning), give or take an hour */
+  until: z.number().min(0).max(24).optional(),
+  /** `take` amounts are per person of the group (and vary with appetite), not per unit */
+  perPerson: z.boolean().optional(),
+  /** each slot is a place of its own the twin shows and outside systems report on: what it is called (桌, 营位) and the floor it takes [x, z] */
+  place: z.object({ label: z.string().default('桌'), size: z.tuple([z.number().positive(), z.number().positive()]).default([2.4, 2.4]) }).optional(),
+};
 
 /**
  * Something the site keeps a count of: lent to units and returned (tents, tables, tableware)
@@ -171,8 +201,48 @@ export const InventoryItem = z.object({
    * `low`, `refill` more are ordered and arrive this many hours later (spare dies, rolls …)
    */
   lead: z.number().positive().optional(),
+  /** 元 a guest pays per unit taken (a 份 of skewers): what a group spends adds up from what it took */
+  price: z.number().min(0).optional(),
 });
 export type InventoryItemCfg = z.infer<typeof InventoryItem>;
+
+/**
+ * Figures a pack can put on top of its twin. Factories: oee, throughput, quality, power. Venues:
+ * turnover 翻台率, occupancy 上座率 / 占用, queue 等位, ticket 客单价, rating 好评率 (the share of
+ * scores in spec), served 每小时接待, takeaway 外卖, checkins 今日入住 / 退房, inUse (an inventory
+ * item lent out), weather. Kitchens and depots: onTime 准时配送率, coldChain 冷链达标率.
+ */
+export const KpiId = z.enum(['oee', 'throughput', 'quality', 'power', 'turnover', 'occupancy', 'queue', 'ticket', 'rating', 'served', 'takeaway', 'checkins', 'inUse', 'weather', 'onTime', 'coldChain']);
+export type KpiIdT = z.infer<typeof KpiId>;
+
+/** Guests arriving at a walk-flow site (a shop, a campsite) through the day. */
+export const Demand = z.object({
+  /** groups arriving per hour per place (table, pitch) at full intensity */
+  rate: z.number().positive(),
+  /** intensity by hour of the day, [hour, 0..1] points joined by straight lines (13.5 = 13:30) */
+  curve: z.array(z.tuple([z.number().min(0).max(24), z.number().min(0)])).min(2),
+  /** multiplier by weekday, Sunday first */
+  week: z.array(z.number().min(0)).length(7).optional(),
+  /** share of groups of 1, 2, 3 … people */
+  sizes: z.array(z.number().min(0)).min(1).max(8).default([0.12, 0.38, 0.22, 0.16, 0.08, 0.04]),
+  /** minutes a waiting group gives up after, [min, max] */
+  patience: z.tuple([z.number().positive(), z.number().positive()]).default([20, 70]),
+  /** groups waiting at which newcomers start to walk away (all of them at twice as many) */
+  balk: z.number().int().positive().default(6),
+  /** 元 per person on top of what they took (茶位、调料) */
+  fee: z.number().min(0).default(0),
+  /** orders for delivery (外卖), separate from the guests: per hour at full intensity, what one takes, minutes to make */
+  takeaway: z.object({
+    rate: z.number().positive(),
+    take: Take,
+    prep: z.number().positive().default(12),
+    /** 元 an order brings */
+    spend: z.tuple([z.number().min(0), z.number().min(0)]).default([60, 140]),
+  }).optional(),
+  /** weather drawn each morning: the chance of rain and what rain does to arrivals */
+  weather: z.object({ rain: z.number().min(0).max(1), factor: z.number().min(0).max(2) }).optional(),
+});
+export type DemandCfg = z.infer<typeof Demand>;
 
 /**
  * A wearing tool counted in units it has made: forging die, trim die, cutter, punch, mould.
@@ -249,6 +319,11 @@ export const Machine = z.object({
   tooling: Tooling.optional(),
   /** fuel burnt per hour (natural gas for a furnace …), idle / running */
   fuel: z.object({ label: z.string(), unit: z.string(), idle: z.number().min(0), run: z.number().min(0) }).optional(),
+  /** a cold-chain machine (a cold room, a freezer): the highest °C its goods may be kept at; counts towards 冷链达标率 */
+  hold: z.number().optional(),
+  /** false: it runs on through meal breaks and shift handovers (a freezer, an unmanned cell); a crewed line stops for them */
+  crew: z.boolean().optional(),
+  ...Slotted,
   /** how often it breaks down and how long the crew takes; defaults suit a demo, real plants are slower */
   upkeep: z.object({
     /** running hours between breakdowns at full health (a worn machine breaks down up to 7× as often) */
@@ -276,6 +351,11 @@ export const Machine = z.object({
   flaws: z.array(z.object({
     type: z.string(), rate: z.number().min(0).max(1),
     material: z.boolean().default(false), wear: z.number().min(1).default(1), cold: z.number().min(1).default(1),
+    /**
+     * how much likelier per sigma the unit's last measured step (a heater's exit temperature) was
+     * below (`lo`) or above (`hi`) its target: a cold billet does not fill the die
+     */
+    process: z.object({ lo: z.number().min(0).default(0), hi: z.number().min(0).default(0) }).optional(),
   })).optional(),
   /** an inspection: catches units carrying these flaws (with probability `catch`) and rejects them under the flaw's name */
   detects: z.object({ types: z.array(z.string()).min(1), catch: z.number().min(0).max(1).default(0.95) }).optional(),
@@ -306,6 +386,7 @@ export const Step = z.union([
     take: Take.optional(),
     /** lent inventory the unit hands back at this step (anything still held is returned when it leaves) */
     give: z.array(z.string()).optional(),
+    ...Slotted,
   }),
 ]);
 export type StepCfg = z.infer<typeof Step>;
@@ -389,7 +470,68 @@ export const Industry = z.object({
       /** issued, kitted, in progress, completed, checked, delivered — default 工单下达 物料齐套 生产中 生产完成 质检入库 发运 */
       steps: z.array(z.string()).length(6).optional(),
     }).optional(),
+    /** what a plant is called, default 工厂 (门店, 营地) */
+    plant: z.string().optional(),
+    /** what a line is called as a noun, default 产线 (区域) */
+    lineNoun: z.string().optional(),
+    /** what a machine is called, default 设备 (档口, 设施) */
+    machine: z.string().optional(),
+    /** the material lot a line runs on, default 炉号 (批号) */
+    lot: z.string().optional(),
+    /** what comes in and what goes out, default 原料 / 成品 (食材 / 出品) */
+    raw: z.string().optional(),
+    goods: z.string().optional(),
+    /** the walk-flow entrance where groups wait, default 上料缓存 (门口等位区) */
+    infeed: z.string().optional(),
+    /** where finished units leave a line, default 成品托盘 (离店) */
+    outfeed: z.string().optional(),
+    /** the conveyor / walkway, default 输送线 (过道) */
+    conveyor: z.string().optional(),
+    /** cycle time, default 节拍 (用时) */
+    cycle: z.string().optional(),
+    /** utilisation, default 稼动率 (使用率) */
+    util: z.string().optional(),
+    /** state words in place of the factory ones, e.g. {"idle": "空闲", "changeover": "换台"} */
+    states: z.record(z.string(), z.string()).optional(),
   }).default({}),
+  /**
+   * how material moves: inside the site (AGVs, forklifts, nobody — guests walk, staff carry), what
+   * the store looks like, and the vehicles that bring material in and take goods out
+   */
+  logistics: z.object({
+    internal: z.enum(['agv', 'forklift', 'none']).default('agv'),
+    /** racks: a high-bay store; shelves: a small storeroom; none */
+    store: z.enum(['racks', 'shelves', 'none']).default('racks'),
+    inbound: z.object({
+      vehicle: z.enum(['truck', 'van', 'none']).default('truck'),
+      /** default 原料进厂车 */
+      label: z.string().optional(),
+      /**
+       * hours between scheduled material deliveries; each brings that long's use and can come late
+       * (the supplier's `late` share): the store runs dry and the lines starve. Omitted: the truck
+       * comes whenever the store has room.
+       */
+      every: z.number().positive().optional(),
+      /** hours a late delivery comes after it was due, [min, max] (default 1.5 to 6) */
+      delay: z.tuple([z.number().min(0), z.number().positive()]).optional(),
+    }).default({ vehicle: 'truck' }),
+    outbound: z.object({
+      /** rider: couriers on motorbikes picking orders up at the counter */
+      vehicle: z.enum(['truck', 'van', 'rider', 'none']).default('truck'),
+      /** default 成品发运车 */
+      label: z.string().optional(),
+      /** how many (riders) */
+      count: z.number().int().min(1).max(4).default(1),
+    }).default({ vehicle: 'truck', count: 1 }),
+  }).default({ internal: 'agv', store: 'racks', inbound: { vehicle: 'truck' }, outbound: { vehicle: 'truck', count: 1 } }),
+  /**
+   * the figures on top of the twin, in order; the first is the plant's headline. Default OEE,
+   * throughput, quality and power. An item `{"id": "inUse", "item": "tent"}` shows how many of an
+   * inventory item are lent out.
+   */
+  kpis: z.array(z.union([KpiId, z.object({ id: KpiId, item: z.string().optional(), label: z.string().optional() })])).optional(),
+  /** guests who come to a walk-flow site by the hour of the day: a queue forms when the places are full */
+  demand: Demand.optional(),
   /**
    * the working week: night shift (operators tire: more short stops and flaws) and a weekly planned
    * maintenance slot per line (lines take turns through the week)
@@ -402,6 +544,24 @@ export const Industry = z.object({
      * lines take in no new units and finish what they have; machines stay on (fridges keep cold)
      */
     open: z.object({ from: z.number().min(0).max(23), to: z.number().min(0).max(24) }).optional(),
+    /**
+     * shift changes (交接班) at these hours: for `handover` minutes crews work at `pace` of their
+     * speed while the outgoing shift hands over, and the handover note goes into the log
+     */
+    shifts: z.object({
+      at: z.array(z.number().min(0).max(24)).min(1),
+      handover: z.number().positive().default(15),
+      pace: z.number().min(0).max(1).default(0.5),
+      /** names of the shifts in the order of `at`, default 早班 / 中班 / 夜班 or 白班 / 夜班 */
+      names: z.array(z.string()).optional(),
+    }).optional(),
+    /** meal breaks: the lines stop, crews eat (planned stops, not counted against OEE) */
+    breaks: z.array(z.object({ at: z.number().min(0).max(24), minutes: z.number().positive(), label: z.string().default('用餐') })).optional(),
+    /**
+     * the week's order mix: work-order size by weekday (Sunday first), and the part number each
+     * weekday favours (the customers' call-off schedule) — more changeovers on mixed days
+     */
+    week: z.array(z.number().min(0)).length(7).optional(),
   }).default({}),
   /**
    * how far real cycles run over the nominal one: each unit takes cycle × (1 + |N(0, pace)|), so
@@ -445,6 +605,17 @@ export const LineCfg = z.object({
   /** belt top height in metres */
   beltHeight: z.number().positive().optional(),
   order: z.object({ no: z.string().optional(), part: z.string().optional(), qty: z.number().int().positive().optional() }).optional(),
+  /**
+   * the places of the line's station with slots — its tables (A01 …) or pitches: listed one by one,
+   * or as the seats of each (their number is the slots). Ids default to the line's letter and a number.
+   */
+  tables: z.object({
+    prefix: z.string().optional(),
+    /** area shown with each (大厅A区, 包间); default the line's name */
+    area: z.string().optional(),
+    seats: z.array(z.number().int().min(1)).optional(),
+    list: z.array(z.object({ id: z.string().regex(/^[A-Za-z0-9-]{1,12}$/), seats: z.number().int().min(1), area: z.string().optional() })).optional(),
+  }).optional(),
 }).refine((l) => l.route || l.steps, { message: '产线需要 route 或 steps 其中之一' });
 export type LineCfgT = z.infer<typeof LineCfg>;
 
@@ -454,8 +625,8 @@ export const PlantCfg = z.object({
   /** two or three characters on the site badge */
   badge: z.string().max(3).optional(),
   hall: z.string().default('生产车间'),
-  /** hall: an indoor workshop with walls; outdoor: grass, a fence and walkways (venues, yards, farms) */
-  site: z.enum(['hall', 'outdoor']).default('hall'),
+  /** hall: an indoor workshop with walls; outdoor: grass, a fence and walkways (venues, yards, farms); shop: a shopfront onto the street */
+  site: z.enum(['hall', 'outdoor', 'shop']).default('hall'),
   sub: z.string().optional(),
   /** defaults to the company's industry */
   industry: z.string().optional(),
@@ -467,6 +638,21 @@ export const PlantCfg = z.object({
   carriers: z.tuple([z.string(), z.string()]).default(['顺达物流', '远航货运']),
   /** who carries finished goods to customers: share of shipments, chance one is delayed on the road, tonnes a truck takes */
   freight: z.array(z.object({ carrier: z.string(), share: z.number().positive().default(1), late: z.number().min(0).max(1).default(0.1), truck: z.number().positive().default(25) })).optional(),
+  /**
+   * another plant of the company keeps this one stocked (a central kitchen its shops): at each
+   * `depart` hour its van loads what this site is short of, oldest batches first, and arrives
+   * `transit` hours later. `items` maps this site's inventory to the products there that refill it;
+   * other consumables come on the same van from what the company buys in.
+   */
+  /** this site's own guests' day and figures, in place of its pack's (a barbecue ground next to the campsite) */
+  demand: Demand.optional(),
+  kpis: z.array(z.union([KpiId, z.object({ id: KpiId, item: z.string().optional(), label: z.string().optional() })])).optional(),
+  supply: z.object({
+    from: z.string(),
+    depart: z.array(z.number().min(0).max(24)).min(1),
+    transit: z.number().positive().default(1),
+    items: z.record(z.string(), z.array(z.string()).min(1)),
+  }).optional(),
 });
 export type PlantCfgT = z.infer<typeof PlantCfg>;
 

@@ -30,7 +30,7 @@ export function ago(iso?: string): string {
 
 const ROLE_TONE: Record<api.Role, string> = {
   visitor: 'bg-surface text-muted-foreground', member: 'bg-surface text-foreground', operator: 'bg-warning-soft text-warning', admin: 'bg-brand-soft text-primary',
-  erp: 'bg-success-soft text-success',
+  erp: 'bg-success-soft text-success', reporter: 'bg-success-soft text-success',
 };
 export const RoleChip = ({ role }: { role: api.Role }) => (
   <span className={cn('inline-block rounded-md px-1.5 py-0.5 text-[12px] font-bold whitespace-nowrap', ROLE_TONE[role])}>{api.ROLE_LABEL[role]}</span>
@@ -98,7 +98,7 @@ export function Issue({ open, onOpenChange, company, onIssued, holder = '', as =
               <div className="grid gap-1.5">
                 <span className="text-[13px] font-bold">角色</span>
                 <RadioGroup value={role} onValueChange={(v) => setRole(v as typeof role)} className="grid gap-2">
-                  {(['member', 'operator', 'admin', 'erp'] as const).map((r) => (
+                  {(['member', 'operator', 'admin', 'erp', 'reporter'] as const).map((r) => (
                     <Label key={r} htmlFor={`role-${r}`} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border p-3 font-normal transition-colors', role === r && 'border-primary bg-brand-soft/50')}>
                       <RadioGroupItem id={`role-${r}`} value={r} className="mt-0.5" />
                       <span className="grid gap-0.5"><b className="text-[13.5px]">{api.ROLE_LABEL[r]}</b><small className="text-[12px] text-muted-foreground">{api.ROLE_NOTE[r]}</small></span>

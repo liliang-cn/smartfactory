@@ -24,6 +24,7 @@ ICON.runtest = '<svg viewBox="0 0 26 26"><rect x="3" y="5" width="20" height="16
 ICON.tank = '<svg viewBox="0 0 26 26"><rect x="7" y="5" width="12" height="15" rx="5" fill="#2f5bea"/><rect x="11.5" y="8" width="3" height="9" rx="1.5" fill="#f2d39b"/><rect x="11" y="2" width="4" height="3" rx="1" fill="#28314b"/><path d="M8 20l-1 3M18 20l1 3" stroke="#58627a" stroke-width="1.6"/></svg>';
 ICON.roller = '<svg viewBox="0 0 26 26"><rect x="3" y="4" width="3" height="18" rx="1" fill="#2f5bea"/><rect x="20" y="4" width="3" height="18" rx="1" fill="#2f5bea"/><circle cx="13" cy="9" r="4" fill="#b7c1d8"/><circle cx="13" cy="18" r="3" fill="#b7c1d8"/><path d="M6 13.5h14" stroke="#28314b" stroke-width="1.4"/></svg>';
 ICON.frame = ICON.cnc;
+ICON.table = '<svg viewBox="0 0 26 26"><rect x="4" y="9" width="18" height="4" rx="1.5" fill="#c79a68"/><rect x="12" y="13" width="2.4" height="8" fill="#58627a"/><circle cx="6" cy="18" r="2.6" fill="#e2412b"/><circle cx="20" cy="18" r="2.6" fill="#e2412b"/><circle cx="13" cy="8" r="2.4" fill="#d9361e"/></svg>';
 
 /** Archetype -> pictogram for machines; asset type for everything else. */
 const BY_ARCH: Record<string, string> = {

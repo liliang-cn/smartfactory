@@ -3,11 +3,14 @@
 // so swapping it for a live MQTT/OPC UA feed means implementing the same surface.
 
 import type { History } from './history';
+import { Depot } from './depot';
+import { kpiValues } from './kpis';
+import { intensity, reported, Venue } from './venue';
 import type { MachineCfg } from '@/config/schema';
 import type { PlantLayout } from '@/core/layout';
 import type { PlantState, ProductTuple } from '@/protocol/sfp';
 import type {
-  AgvState, Alarm, Asset, AssetState, AssetType, Calibration, Command, CommandResult, ExtOrder, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec, OrderFeed,
+  AgvState, Alarm, Asset, AssetState, AssetType, Calibration, Command, CommandResult, Delivery, ExtOrder, InventoryState, Job, Later, Kpis, Line, LineKpi, LiveValues, LogEntry, Lot, MachineSpec, OrderFeed,
   Product, ProductKind, SimEvent, TruckState, TypeSpec,
 } from './types';
 
@@ -22,6 +25,7 @@ const BUILTIN: Partial<Record<AssetType, TypeSpec>> = {
   outfeed: { label: '成品托盘' },
   warehouse: { label: '立体仓库' },
   fgzone: { label: '成品库' },
+  table: { label: '餐桌' },
 };
 
 const machineSpec = (m: MachineCfg): MachineSpec => ({
@@ -60,6 +64,7 @@ const ema = (dt: number, tau: number) => 1 - Math.exp(-dt / tau);
 export const STATE_LABEL: Record<AssetState, string> = {
   running: '运行', idle: '待料', blocked: '阻塞', stopped: '停机', fault: '故障', maint: '维护', changeover: '换模',
   moving: '行驶', waiting: '等待', handling: '装卸', away: '在途', ok: '正常', empty: '缺料', low: '低位', full: '满载',
+  free: '空闲', occupied: '有客', reserved: '已预订', cleaning: '清台',
 };
 
 type AssetInit = Partial<Asset> & Pick<Asset, 'id' | 'name' | 'type'>;
@@ -80,7 +85,16 @@ export interface SavedPlant {
   /** shipments on their way, complaints still to come */
   later?: Later[];
   /** each line's steel heat, work order and planning state, in layout order */
-  lines?: { lot?: Lot; job?: Job; last?: Job; pmWeek?: number; planEff?: number }[];
+  lines?: { lot?: Lot; job?: Job; last?: Job; pmWeek?: number; planEff?: number; pauses?: [number, number | null][]; shiftMark?: { good: number; scrap: number }; noJobUntil?: number }[];
+  /** what each unit on each line carries besides its place (its material lot, flaw, group …), in layout and line order */
+  wip?: Partial<Product>[][];
+  /** guests at the door, delivery orders, the business day, the weather; places' clearing times */
+  venue?: { queue: Venue['queue']; orders: Venue['orders']; counter: number[]; day: Venue['day']; rain: boolean; clear: [string, number][] };
+  /** a depot's store, samples, delivery record and next departures */
+  depot?: { batches: Depot['batches']; samples: Depot['samples']; otif: boolean[]; wasted: number; wastedDay: number; next: Record<string, number> };
+  incoming?: Delivery[];
+  inbound?: PlantSim['inbound'];
+  rhythm?: { shift: string; handoverUntil: number; pause: string; pauseUntil: number; paused: string[]; cold: [number, number]; costToday: number; today: number };
   /** the last purchase / shipment / complaint number */
   seq?: number;
 }
@@ -129,6 +143,11 @@ export class PlantSim {
   follower = false;
   /** what the site keeps a count of (tents, charcoal …) */
   inventory: InventoryState[] = [];
+  /** the places of its stations with slots: tables, pitches */
+  places: Asset[] = [];
+  private doorLine = 0;
+  /** guests, the queue at the door and the day's figures of a walk-flow site with demand */
+  venue?: Venue;
   /** false until a follower has received its first state from the server */
   synced = true;
   /** hour-by-hour record for the history database (server only) */
@@ -151,7 +170,12 @@ export class PlantSim {
 
   private asset(def: AssetInit): Asset {
     let spec = def.machine ? machineSpec(def.machine) : BUILTIN[def.type];
-    if (def.type === 'agv' && this.layout.terms.vehicle) spec = { ...spec!, label: this.layout.terms.vehicle };
+    const w = this.layout.words;
+    if (def.type === 'agv') spec = { ...spec!, label: w.vehicle };
+    if (def.type === 'truck' && def.kind) spec = { ...spec!, label: def.kind === 'in' ? w.inTruck : w.outTruck };
+    if (def.type === 'outfeed') spec = { label: w.outfeed };
+    if (def.type === 'fgzone') spec = { label: `${w.goods}库` };
+    if (def.type === 'table') spec = { label: def.place!.label === '桌' ? '餐桌' : def.place!.label };
     const a: Asset = {
       group: 'WH', s: 0, cycle: 0, stock: 0, cap: 0, count: 0, battery: 0, vel: 0, task: '', rejects: 0, arch: def.type,
       ...def,
@@ -185,23 +209,37 @@ export class PlantSim {
       line.conveyor = this.asset({ ...ll.conveyor, type: 'conveyor', group: ll.id, line });
       line.infeed = this.asset({ id: ll.infeed.id, name: ll.infeed.name, cap: ll.infeed.cap, type: 'buffer', group: ll.id, line, stock: 26 });
       line.outfeed = this.asset({ id: ll.outfeed.id, name: ll.outfeed.name, cap: ll.outfeed.cap, type: 'outfeed', group: ll.id, line, count: Math.min(7, ll.outfeed.cap - 1) });
+      line.pauses = [];
       line.stations = ll.stations.map((st) => this.asset({
         id: st.id, name: st.name, type: 'station', arch: st.machine.look.archetype, machine: st.machine, group: ll.id, line,
         s: st.x - ll.x0, cycle: st.cycle, makes: st.makes, measure: st.measure, take: st.take, give: st.give,
+        slots: st.slots, seats: st.seats, bySize: st.bySize, until: st.until, perPerson: st.perPerson,
         // tools are part-way through their life when the shift starts
         tool: st.machine.tooling ? { ...st.machine.tooling, used: Math.floor(st.machine.tooling.life * rand(0.05, 0.97)) } : undefined,
       }));
+      const gate = line.stations.findIndex((a) => a.slots);
+      if (gate >= 0 && ll.places.length) line.gate = gate;
+      for (const pl of ll.places) {
+        const a = this.asset({
+          id: pl.id, name: `${pl.area} ${pl.id}`, type: 'table', group: ll.id, line,
+          place: { line: ll.id, station: pl.station, slot: pl.slot, area: pl.area, seats: pl.seats, label: pl.label, overnight: pl.overnight, x: pl.x, z: pl.z },
+        });
+        a.state = 'free';
+        a.since = 0;
+        this.places.push(a);
+      }
       // Warm start: pretend the line has been running for the last counting window.
-      const n = this.pretendDone(line, -countSpan(line), 0);
+      const n = line.gate !== undefined && L.demand ? 0 : this.pretendDone(line, -countSpan(line), 0);
       line.good = n;
       line.scrap = Math.round(n * rand(0.01, 0.025));
-      this.seedProducts(line);
+      if (line.gate === undefined || !L.demand) this.seedProducts(line);
       this.lines.push(line);
       this.lineById[line.id] = line;
     }
 
     this.wh = this.asset({ id: L.warehouse.id, name: L.warehouse.name, type: 'warehouse', group: 'WH', stock: Math.round(L.warehouse.cap * 0.78), cap: L.warehouse.cap });
     this.fg = this.asset({ id: L.fg.id, name: L.fg.name, type: 'fgzone', group: 'WH', count: 40 + 20 * L.lines.length });
+    this.fg.state = 'ok';
 
     for (const def of L.agvs) {
       const a = this.asset({ id: def.id, name: def.name, type: 'agv', group: 'LOG', battery: rand(62, 96) });
@@ -213,10 +251,106 @@ export class PlantSim {
 
     this.trucks = L.trucks.map((def, i) => {
       const a = this.asset({ id: def.id, name: def.name, type: 'truck', group: 'LOG', carrier: def.carrier, kind: def.kind });
-      const t: TruckState = { asset: a, route: def.route, kind: def.kind, idx: 1, x: def.route[0].x, z: def.route[0].z, heading: 0, phase: 'away', wait: 10 + i * 25, dock: 0, load: 0 };
+      const t: TruckState = { asset: a, route: def.route, kind: def.kind, idx: 1, x: def.route[0].x, z: def.route[0].z, heading: 0, phase: 'away', wait: 10 + i * 25, dock: 0, load: 0, vehicle: def.vehicle };
       a.truck = t;
       return t;
     });
+    // the queue at the door is shown with the first line guests come in by
+    this.doorLine = this.lines.find((l) => l.gate !== undefined)?.layout.no ?? 0;
+    if (L.demand && this.places.length) {
+      this.venue = new Venue(this, L.demand);
+      this.venue.places = this.places;
+      this.warmVenue();
+    }
+    if (L.logistics.inbound.every) {
+      // material on hand to cover a delivery and a couple of hours over; the next one is due within the interval
+      this.wh.stock = Math.min(this.wh.cap, this.stockTarget());
+      this.planInbound(this.wall() - L.logistics.inbound.every * 0.5 * 3600_000);
+    }
+  }
+
+  /**
+   * The plant's clock was set before it ran at all (a backfill, a test): a site guests come to
+   * starts over as that hour has it, not as the hour it was built in.
+   */
+  rewarm() {
+    if (!this.venue || this.elapsed > 0) return;
+    for (const line of this.lines) {
+      if (line.gate === undefined) continue;
+      line.products.length = 0;
+      for (const a of line.stations) {
+        a.busy = null;
+        if (a.slots) a.count = 0;
+      }
+    }
+    for (const a of this.places) Object.assign(a, { state: 'free', count: 0, since: 0, busy: null });
+    for (const it of this.inventory) if (it.kind === 'lend') it.avail = it.cap;
+    this.venue.queue.length = 0;
+    this.warmVenue();
+  }
+
+  /**
+   * Warm start of a site guests come to: its places as full as the hour usually has them, the
+   * groups part-way through their stay, and a queue at the door at a peak.
+   */
+  private warmVenue() {
+    const v = this.venue!;
+    const local = this.wall() + 8 * 3600_000;
+    const h = (local % 86_400_000) / 3_600_000;
+    this.clock = (local % 86_400_000) / 1000;
+    if (this.shut(Math.floor(h))) return;
+    const d = v.demand;
+    const dow = new Date(local).getUTCDay();
+    let busy = intensity(d.curve, h) * (d.week?.[dow] ?? 1);
+    const sizes = d.sizes;
+    for (const line of this.lines) {
+      if (line.gate === undefined) continue;
+      const st = line.stations[line.gate];
+      if (st.until !== undefined) {
+        // kept overnight: who checked in since this day's arrivals began (yesterday's, before check-out)
+        const day = h < st.until ? (dow + 6) % 7 : dow;
+        let all = 0;
+        let sofar = 0;
+        for (let x = 0; x < 24; x += 0.5) {
+          const k = intensity(d.curve, x);
+          all += k;
+          if (h < st.until || x <= h) sofar += k;
+        }
+        // groups a pitch gets in a day: the rate over the day's curve (half-hour samples)
+        busy = Math.min(0.95, (d.week?.[day] ?? 1) * d.rate * 0.5 * all) * (all ? sofar / all : 0);
+      }
+      let kind = line.layout.input;
+      for (let i = 0; i < line.gate; i++) kind = line.stations[i].makes ?? kind;
+      for (const place of this.places) {
+        if (place.place!.line !== line.id || Math.random() > Math.min(0.95, busy * 1.1)) continue;
+        let r = Math.random() * sizes.reduce((a, b) => a + b, 0);
+        let n = 1;
+        for (let i = 0; i < sizes.length; i++) if ((r -= sizes[i]) <= 0) { n = i + 1; break; }
+        n = Math.min(n, place.place!.seats);
+        const p: Product = { id: `${line.id}-${++line.pid}`, s: st.s, done: line.gate - 1, proc: line.gate, t: 0, kind, stall: 0, n, arr: this.elapsed, w: rand(0, 600), slot: place.place!.slot, spend: 0 };
+        p.need = this.stay(st, p) ?? st.cycle;
+        // last night's guests, before check-out: they leave this morning
+        if (st.until !== undefined && h < st.until) p.need = Math.max(600, (st.until - h) * 3600 + rand(-0.75, 0.5) * 3600);
+        // a stay that ends at check-out began recently; a meal is part-way through
+        p.t = st.until !== undefined ? rand(0, 3600) : p.need * rand(0.05, 0.9);
+        // what they were lent and took on the way in
+        for (let i = 0; i < line.gate; i++) {
+          const a = line.stations[i];
+          if (a.take) this.takeInv(p, a.perPerson ? this.appetite(a.take, n) : a.take);
+        }
+        line.products.push(p);
+        v.seat(p, place);
+        place.since = this.elapsed - p.t;
+        st.count++;
+        st.busy ??= p;
+      }
+      line.products.sort((a, b) => b.s - a.s);
+    }
+    v.sessions.length = 0;
+    v.day.sessions = 0;
+    v.day.seated = 0;
+    v.day.waitSum = 0;
+    for (let i = 0; i < Math.min(d.balk, Math.max(0, Math.round((busy - 0.8) * 12))); i++) v.queue.push({ n: 1 + Math.floor(Math.random() * 4), at: this.elapsed - rand(0, 900), until: this.elapsed + rand(d.patience[0], d.patience[1]) * 60 });
   }
 
   private seedProducts(line: Line) {
@@ -246,8 +380,112 @@ export class PlantSim {
   /** outside opening hours: lines take in nothing new */
   private closed = false;
   private calHour = -1;
+  private calMinute = -1;
+  /** the plant that keeps this one stocked, deliveries on their way here, and the depot this plant is for others */
+  supplier?: PlantSim;
+  incoming: Delivery[] = [];
+  depot?: Depot;
+  /** the next scheduled material delivery: when it is due, when it will come, how much */
+  inbound?: { due: number; at: number; load: number; supplier: string; late: boolean; told?: boolean };
+  /** the shift on now, the elapsed its handover ends, a meal break and the elapsed it ends */
+  shift = '';
+  handoverUntil = 0;
+  pause = '';
+  pauseUntil = 0;
+  /** today's cold-chain machine-seconds within limits, of all; electricity 元 today; the day they count */
+  cold: [number, number] = [0, 0];
+  costToday = 0;
+  private today = -1;
 
   wall() { return this.epoch + this.elapsed * 1000; }
+
+  /** Whether the lines are meant to be running now: not closed, not on a meal break (what OEE counts time over). */
+  planned() {
+    return !this.closed && !this.pause;
+  }
+
+  /** 元/kWh of the company's tariff now. */
+  price() {
+    const t = this.layout.tariff;
+    if (!t) return 0;
+    const h = Math.floor(this.clock / 3600) % 24;
+    return t.power.find((p) => h >= p.from && h < p.to)?.price ?? 0;
+  }
+
+  /** the tariff's price this minute */
+  private priceNow = 0;
+
+  /** How fast a crew works at a machine now: slower at handover, not at all on a meal break. */
+  private crewPace(a: Asset) {
+    if (a.pause) return 0;
+    if (this.handoverUntil > this.elapsed && a.machine?.crew !== false) return this.layout.calendar?.shifts?.pace ?? 1;
+    return 1;
+  }
+
+  /** Once a minute: shift handovers and meal breaks. */
+  private minute(m: number) {
+    this.priceNow = this.price();
+    const cal = this.layout.calendar;
+    const sh = cal?.shifts;
+    if (sh) {
+      const names = sh.names ?? (sh.at.length === 3 ? ['早班', '中班', '夜班'] : sh.at.length === 2 ? ['白班', '夜班'] : sh.at.map((_, i) => `${i + 1} 班`));
+      // the shift on now: the last change at or before this minute
+      const order = sh.at.map((h, i) => [Math.round(h * 60) % 1440, i] as const).sort((x, y) => x[0] - y[0]);
+      const cur = [...order].reverse().find(([at]) => at <= m) ?? order[order.length - 1];
+      const name = names[cur[1]] ?? '';
+      if (this.shift && name !== this.shift && cur[0] === m) this.handover(this.shift, name, sh.handover);
+      this.shift = name;
+    }
+    if (this.pause && this.pauseUntil <= this.elapsed) {
+      this.pause = '';
+      for (const line of this.lines) for (const a of line.stations) a.pause = undefined;
+    }
+    for (const b of cal?.breaks ?? []) {
+      if (Math.round(b.at * 60) % 1440 !== m || this.closed) continue;
+      this.pause = b.label;
+      this.pauseUntil = this.elapsed + b.minutes * 60;
+      for (const line of this.lines) {
+        line.pauses.push([this.elapsed, this.pauseUntil]);
+        for (const a of line.stations) if (a.machine?.crew !== false) a.pause = b.label;
+      }
+      this.note(this.lines[0]?.stations[0] ?? this.wh, `${b.label} ${b.minutes} 分钟：各${this.layout.words.line}暂停投料，人工${this.layout.words.machine}停下`, 'op');
+    }
+  }
+
+  /** The outgoing shift hands over: crews slow down for a while, and each line's handover note goes into the log. */
+  private handover(from: string, to: string, minutes: number) {
+    this.handoverUntil = this.elapsed + minutes * 60;
+    const w = this.layout.words;
+    for (const line of this.lines) {
+      const was = line.shiftMark ?? { good: line.good, scrap: line.scrap };
+      const alarms = this.alarms.filter((x) => x.active && line.stations.some((a) => a.id === x.asset)).length;
+      const tools = line.stations.filter((a) => a.tool && a.tool.used / a.tool.life >= 0.8).map((a) => `${a.id} ${a.tool!.label} ${Math.round((a.tool!.used / a.tool!.life) * 100)}%`);
+      const down = line.stations.filter((a) => a.fault || a.maint > 0).map((a) => `${a.id}${a.fault ? '故障' : '保养中'}`);
+      this.note(line.stations[0], `交接班 ${from}→${to}：${line.name}本班${w.goods} ${line.good - was.good}，不合格 ${line.scrap - was.scrap}，未消除报警 ${alarms} 条${tools.length ? `；注意 ${tools.join('、')}` : ''}${down.length ? `；${down.join('、')}` : ''}${line.job ? `；在做 ${line.job.no} ${line.job.good}/${line.job.qty}` : ''}`, 'op');
+      line.shiftMark = { good: line.good, scrap: line.scrap };
+    }
+  }
+
+  /** The next scheduled material delivery after `after`: one supplier, sometimes late. */
+  private planInbound(after: number) {
+    const every = this.layout.logistics.inbound.every;
+    if (!every) return;
+    const sups = this.lines.flatMap((l) => l.layout.product.suppliers ?? []);
+    const s = pickShare(sups) ?? { name: '', late: 0.1, share: 1 };
+    const late = Math.random() < (s.late ?? 0.1);
+    const due = after + every * 3600_000;
+    // what the lines use over the interval at the pace they really run (their orders' efficiency)
+    const use = this.lines.reduce((n, l) => n + ((every * 3600) / Math.max(...l.stations.map((a) => a.cycle))) * (l.planEff ?? 0.75), 0);
+    const [d0, d1] = this.layout.logistics.inbound.delay ?? [1.5, 6];
+    this.inbound = { due, at: due + (late ? rand(d0, d1) * 3600_000 : rand(-10, 10) * 60_000), load: Math.round(use * 1.02), supplier: s.name, late };
+  }
+
+  /** Material this plant keeps to cover a late delivery: two hours of use on top of a delivery's worth. */
+  private stockTarget() {
+    const lg = this.layout.logistics.inbound;
+    const use = this.lines.reduce((n, l) => n + (3600 / Math.max(...l.stations.map((a) => a.cycle))) * (l.planEff ?? 0.75), 0);
+    return Math.round(use * ((lg.every ?? 0) + 2));
+  }
 
   private advanceClock(dt: number) {
     this.elapsed += dt;
@@ -265,6 +503,26 @@ export class PlantSim {
       this.calHour = hour;
       this.calendar(local);
     }
+    const minute = Math.floor(local / 60_000) % 1440;
+    if (minute !== this.calMinute) {
+      this.calMinute = minute;
+      this.minute(minute);
+      const day = Math.floor((local - 5 * 3600_000) / 86_400_000);
+      if (day !== this.today) {
+        this.today = day;
+        this.cold = [0, 0];
+        this.costToday = 0;
+      }
+      // the plant's clock was moved (a backfill, a test): the delivery plan starts over from now
+      const every = this.layout.logistics.inbound.every;
+      if (this.inbound && every && Math.abs(this.inbound.due - this.wall()) > (every + 8) * 3600_000) this.planInbound(this.wall() - every * 0.5 * 3600_000);
+      const ib = this.inbound;
+      if (ib?.late && !ib.told && this.wall() >= ib.due) {
+        ib.told = true;
+        this.raise(this.wh, 'late-delivery', 2, `${ib.supplier || '供应商'}${this.layout.words.raw}送货延误，预计晚到 ${((ib.at - ib.due) / 3600_000).toFixed(1)} 小时`);
+      }
+      if (ib && this.wall() >= ib.at) this.clear(this.wh, 'late-delivery');
+    }
   }
 
   /** Whether hour h of the day is outside the opening hours (never, when there are none). */
@@ -280,7 +538,20 @@ export class PlantSim {
     const h = Math.floor(local / 3_600_000) % 24;
     const n = cal?.night;
     this.night = !!n && (n.from < n.to ? h >= n.from && h < n.to : h >= n.from || h < n.to);
+    const was = this.closed;
     this.closed = this.shut(h);
+    // closed hours are planned stops: not counted against the lines' performance
+    if (this.closed && !was) for (const line of this.lines) line.pauses.push([this.elapsed, Infinity]);
+    // closing time: guests still at their tables finish up within half an hour (a stay overnight goes on)
+    if (this.closed && !was && this.venue) {
+      for (const line of this.lines) {
+        for (const p of line.products) {
+          const a = p.proc >= 0 ? line.stations[p.proc] : null;
+          if (a?.slots && a.until === undefined) p.need = Math.min(p.need ?? a.cycle, p.t + rand(600, 1800));
+        }
+      }
+    }
+    if (!this.closed && was) for (const line of this.lines) { const last = line.pauses[line.pauses.length - 1]; if (last && last[1] === Infinity) last[1] = this.elapsed; }
     const pm = cal?.pm;
     if (!pm || h !== pm.start) return;
     const day = new Date(local).getUTCDay();
@@ -322,22 +593,37 @@ export class PlantSim {
     const vs = this.variants(line);
     const prev = line.job ?? line.last;
     let v = prev ? prev.variant : 0;
-    if (!prev || (vs.length > 1 && Math.random() > 0.35)) {
-      let r = Math.random() * vs.reduce((s, x) => s + (x.share ?? 1), 0);
-      v = Math.max(0, vs.findIndex((x) => (r -= x.share ?? 1) <= 0));
-    }
     const L = line.layout;
+    // the week's order mix: how much is called off today, and which part number the day favours
+    const week = this.layout.calendar?.week;
+    const dow = new Date(this.wall() + 8 * 3600_000).getUTCDay();
+    if (!prev || (vs.length > 1 && Math.random() > 0.35)) {
+      const weight = (x: (typeof vs)[number], i: number) => (x.share ?? 1) * (week && vs.length > 1 && i === dow % vs.length ? 2.5 : 1);
+      let r = Math.random() * vs.reduce((s, x, i) => s + weight(x, i), 0);
+      v = Math.max(0, vs.findIndex((x, i) => (r -= weight(x, i)) <= 0));
+    }
     const neck = Math.max(...line.stations.map((a) => a.cycle));
-    const base = L.order.qty;
-    const qty = base >= 100 ? Math.max(50, Math.round((base * rand(0.6, 1.4)) / 10) * 10) : Math.max(1, Math.round(base * rand(0.6, 1.4)));
+    const base = L.order.qty * (week?.[dow] ?? 1);
+    let qty = base >= 100 ? Math.max(50, Math.round((base * rand(0.6, 1.4)) / 10) * 10) : Math.max(1, Math.round(base * rand(0.6, 1.4)));
+    const pr0 = L.product;
+    const allowed0 = (pr0.customers ?? []).filter((c) => !vs[v].customers || vs[v].customers!.includes(c.name));
+    const cust = pickShare(allowed0.length ? allowed0 : (pr0.customers ?? [])) ?? { name: pr0.customer ?? '', transit: 24 };
+    // made to stock for the company's own sites: only what their stock and the orders in hand do not cover
+    if (this.depot && this.depot.outletNames().includes(cust.name)) {
+      qty = this.depot.plan(line, L.order.qty);
+      if (!qty) {
+        if (line.job) line.last = line.job;
+        line.job = undefined;
+        line.noJobUntil = this.elapsed + 600;
+        return;
+      }
+    }
     const now = this.wall();
     const d = new Date(now + 8 * 3600_000).toISOString();
     const ymd = d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
     const seq = (prev?.seq ?? 0) + 1;
     const parts = L.order.no.split('-');
     const pr = L.product;
-    const allowed = (pr.customers ?? []).filter((c) => !vs[v].customers || vs[v].customers!.includes(c.name));
-    const cust = pickShare(allowed.length ? allowed : (pr.customers ?? [])) ?? { name: pr.customer ?? '', transit: 24 };
     line.job = {
       no: `${parts[0] || 'MO'}-${ymd}-${parts[parts.length - 1]}${String(seq % 100).padStart(2, '0')}`, seq, variant: v,
       partNo: vs[v].partNo, name: vs[v].name, weight: vs[v].weight ?? L.product.weight ?? 0, input: vs[v].input ?? L.product.input ?? 0, qty, good: 0, scrap: 0, issued: now,
@@ -417,7 +703,7 @@ export class PlantSim {
       if (line.job?.ext && line.job.no === no) {
         line.last = line.job;
         line.job = undefined;
-        this.note(line.stations[0], `${line.name}工单 ${no} 已撤回`, 'op');
+        this.note(line.stations[0], `${line.name}${this.layout.terms.order?.tab ?? '工单'} ${no} 已撤回`, 'op');
       }
     }
   }
@@ -436,7 +722,7 @@ export class PlantSim {
       a.setupLeft = t.setup ?? 0;
       a.sinceChange = 0;
     }
-    this.note(line.stations[0], `${line.name}换型：${from.name} → ${to.name}（工单 ${to.no}）`, 'op');
+    this.note(line.stations[0], `${line.name}换型：${from.name} → ${to.name}（${this.layout.terms.order?.tab ?? '工单'} ${to.no}）`, 'op');
   }
 
   private jobOutput(line: Line, p?: Product) {
@@ -455,8 +741,9 @@ export class PlantSim {
       line.planEff = 0.7 * (line.planEff ?? 0.75) + 0.3 * ran;
       this.history?.jobDone(line, j);
       if (j.ext && !this.headless) this.orders?.event({ kind: 'done', no: j.no, plant: this.layout.id, line: line.id, good: j.good, scrap: j.scrap, plantName: this.layout.name, lineName: line.name });
-      // packed and staged, it leaves with the next scheduled pickup
-      this.schedule({ at: j.done + rand(2, 16) * 3600_000, kind: 'ship', data: { line: line.id, job: { ...j, escapes: { ...(j.escapes ?? {}) } } } });
+      // for the company's own sites: into stock for the next delivery round; else it leaves with the next scheduled pickup
+      if (this.depot && this.depot.outletNames().includes(j.customer)) this.depot.add(line, j);
+      else this.schedule({ at: j.done + rand(2, 16) * 3600_000, kind: 'ship', data: { line: line.id, job: { ...j, escapes: { ...(j.escapes ?? {}) } } } });
       this.newJob(line);
     }
   }
@@ -502,7 +789,33 @@ export class PlantSim {
     return n;
   }
 
-  private ymd(ms: number) {
+  /** The next purchase / shipment / delivery number. */
+  nextSeq() {
+    return ++this.seq;
+  }
+
+  /** A delivery round on its way here from the plant that keeps this one stocked. */
+  receive(d: Delivery) {
+    let i = this.incoming.length;
+    while (i > 0 && this.incoming[i - 1].eta > d.eta) i--;
+    this.incoming.splice(i, 0, d);
+  }
+
+  /** A delivery that arrived: what it brought goes on the shelves. */
+  private unload(d: Delivery, by: Asset) {
+    const got: string[] = [];
+    for (const [k, n] of Object.entries(d.items)) {
+      const it = this.inv(k);
+      if (!it) continue;
+      const add = Math.min(n, it.cap - it.avail);
+      it.avail += add;
+      got.push(`${it.label} +${add} ${it.unit}`);
+    }
+    const late = Math.round((this.wall() - d.planned) / 60_000);
+    this.note(by, `${d.no} 到货：${got.join('，')}${late > 10 ? `，晚到 ${late} 分钟` : ''}`, 'info');
+  }
+
+  ymd(ms: number) {
     const d = new Date(ms + 8 * 3600_000).toISOString();
     return d.slice(2, 4) + d.slice(5, 7) + d.slice(8, 10);
   }
@@ -557,16 +870,25 @@ export class PlantSim {
 
   step(dt: number) {
     this.advanceClock(dt);
+    if (!this.follower) {
+      this.venue?.step(dt, this.closed);
+      this.depot?.step(dt);
+      // a site without its own van takes deliveries as they arrive
+      if (this.supplier && !this.trucks.some((t) => t.kind === 'in')) while (this.incoming.length && this.incoming[0].eta <= this.wall()) this.unload(this.incoming.shift()!, this.wh);
+    }
     for (const line of this.lines) this.stepLine(line, dt);
     for (const g of this.agvs) this.stepAgv(g, dt);
     for (const t of this.trucks) this.stepTruck(t, dt);
     let p = 0;
     for (const a of this.assets.values()) {
+      // a table or pitch has no telemetry of its own: the station it belongs to draws the power
+      if (a.place) continue;
       this.stepTelemetry(a, dt);
       p += a.power;
     }
     this.powerKW = p;
     this.energyKWh += (p * dt) / 3600;
+    this.costToday += ((p * dt) / 3600) * this.priceNow;
 
     if (this.repairs.length) this.stepRepairs();
     this.history?.step(dt);
@@ -574,8 +896,21 @@ export class PlantSim {
     this.histAcc += dt;
     if (this.histAcc >= 1) {
       this.histAcc -= 1;
-      if (!this.headless) for (const a of this.assets.values()) this.pushHist(a);
+      if (!this.headless) for (const a of this.assets.values()) if (a.type !== 'table') this.pushHist(a);
       this.checkInventory();
+      this.checkCold();
+    }
+  }
+
+  /** Once a second: whether each cold-chain machine holds its goods cold enough. */
+  private checkCold() {
+    for (const line of this.lines) {
+      for (const a of line.stations) {
+        const hold = a.machine?.hold;
+        if (hold === undefined) continue;
+        this.cold[1]++;
+        if (a.temp <= hold) this.cold[0]++;
+      }
     }
   }
 
@@ -612,7 +947,9 @@ export class PlantSim {
     const cold = !!t && (a.sinceChange ?? 1e9) < (t.warm ?? 0);
     const night = this.night ? this.layout.calendar?.night?.flaws ?? 1 : 1;
     for (const f of a.machine!.flaws!) {
-      const r = f.rate * (f.material ? p.lf ?? 1 : 1) * (1 + (f.wear - 1) * worn * worn) * (cold ? f.cold : 1) * night;
+      // how far off the unit's last measured step (its heating) was, the way that makes this flaw likelier
+      const off = f.process && p.dev !== undefined ? 1 + f.process.lo * Math.max(0, -p.dev) + f.process.hi * Math.max(0, p.dev) : 1;
+      const r = f.rate * (f.material ? p.lf ?? 1 : 1) * (1 + (f.wear - 1) * worn * worn) * (cold ? f.cold : 1) * night * off;
       if (Math.random() < r) {
         p.flaw = f.type;
         return;
@@ -622,7 +959,7 @@ export class PlantSim {
 
   // One reading per finished unit. Wear and over-speed push the process off target, so
   // a neglected machine shows up first as drift on the chart, then as rejects.
-  private measure(a: Asset, quiet = false): boolean {
+  private measure(a: Asset, quiet = false, p?: Product): boolean {
     if (this.follower) return true;
     // A machine that reports its own measurements decides pass/fail itself.
     const lv = liveFields(a);
@@ -634,7 +971,13 @@ export class PlantSim {
     const toolWear = a.tool ? Math.max(0, (a.tool.used / a.tool.life - 0.6) / 0.4) : 0;
     const mw = m.wear ?? { shift: 4, spread: 2.5 };
     let dev = gauss * m.sigma * (1 + wear * mw.spread) + m.drift * wear * m.sigma * mw.shift + m.drift * toolWear * toolWear * m.sigma * (a.tool?.drift ?? 0) + (a.speed - 1) * (m.speedBias ?? 0);
+    // a machine running hot (worn, over speed, its cooling off) pushes the process the way wear does
+    const s = a.spec;
+    if (m.heat && isMachineSpec(s)) dev += m.drift * m.heat * m.sigma * Math.max(0, a.temp - (AMBIENT + s.runRise * (0.6 + 0.4 * a.speed))) / 10;
+    // a guest who waited long scores lower
+    if (m.wait && p?.w) dev += m.wait * (p.w / 600);
     if (m.abs) dev = Math.abs(dev);
+    if (p) p.dev = dev / m.sigma;
     return this.record(a, m.target + dev, quiet);
   }
 
@@ -695,16 +1038,32 @@ export class PlantSim {
   }
 
   private stepLine(line: Line, dt: number) {
-    if (!line.job && !this.follower) this.newJob(line);
+    if (!line.job && !this.follower && !((line.noJobUntil ?? 0) > this.elapsed)) this.newJob(line);
     const cv = line.conveyor;
     const v = this.ready(cv) ? line.speed * cv.speed : 0;
     const st = line.stations;
     const P = line.products;
+    let resort = false;
 
-    // Release raw parts from the infeed buffer onto the belt.
+    // Release raw parts from the infeed buffer onto the belt; a venue lets the next group in from its door.
     line.spawnT -= dt;
     const last = P[P.length - 1];
-    if (v > 0 && !this.closed && line.infeed.stock > 0 && line.spawnT <= 0 && (line.job || this.follower) && (!last || last.s > line.gap + 0.05)) {
+    const venue = line.gate !== undefined ? this.venue : undefined;
+    if (venue) {
+      if (!this.follower && v > 0 && !this.closed && line.spawnT <= 0 && (!last || last.s > line.gap + 0.05)) {
+        const got = venue.admit(line);
+        if (got) {
+          const p: Product = {
+            id: `${line.id}-${++line.pid}`, s: 0, done: -1, proc: -1, t: 0, kind: line.layout.input, stall: 0,
+            n: got.g.n, arr: got.g.at, w: this.elapsed - got.g.at, slot: got.place.place!.slot, spend: 0,
+          };
+          P.push(p);
+          venue.seat(p, got.place);
+          line.spawnT = 3;
+          this.history?.released(line);
+        }
+      }
+    } else if (v > 0 && !this.closed && !this.pause && line.infeed.stock > 0 && line.spawnT <= 0 && (line.job || this.follower) && (!last || last.s > line.gap + 0.05)) {
       if (!this.follower && (!line.lot || line.lot.left <= 0)) this.newLot(line);
       const lot = line.lot;
       if (lot) lot.left--;
@@ -720,22 +1079,27 @@ export class PlantSim {
       if (p.proc >= 0) {
         const a = st[p.proc];
         if (!this.ready(a)) continue;
-        p.t += dt * a.speed;
+        // how long a group stays at its table is the server's to know: a follower leaves it there
+        if (this.follower && a.slots) continue;
+        p.t += dt * a.speed * (a.pause || this.handoverUntil > this.elapsed ? this.crewPace(a) : 1);
         const need = p.need ?? a.cycle;
         a.progress = Math.min(1, p.t / need);
         if (p.t < need) continue;
         // inventory this step lends out: the unit waits here until there is enough
         if (a.take && !this.follower) {
-          const short = this.shortOf(a.take);
+          const want = a.perPerson ? (p.want ??= this.appetite(a.take, p.n ?? 1)) : a.take;
+          const short = this.shortOf(want);
           if (short) {
             p.t = need;
+            p.w = (p.w ?? 0) + dt;
             if (a.waitFor !== short.label) {
               a.waitFor = short.label;
               this.raise(a, 'inv', 3, `${short.label}不足，等待中`);
             }
             continue;
           }
-          this.takeInv(p, a.take);
+          this.takeInv(p, want);
+          p.want = undefined;
         }
         if (a.waitFor) {
           a.waitFor = undefined;
@@ -746,7 +1110,17 @@ export class PlantSim {
         p.done = p.proc;
         p.proc = -1;
         p.stall = 0;
-        a.busy = null;
+        if (a.slots) {
+          // one of the units it holds got up: the place it had is cleared, the walkway order is restored below
+          a.count = Math.max(0, a.count - 1);
+          a.busy = a.busy === p ? P.find((q) => q !== p && q.proc === p.done) ?? null : a.busy;
+          if (venue && p.slot !== undefined && p.done === line.gate) {
+            const place = this.placeOf(line, p.slot);
+            if (place) venue.vacate(place);
+            p.slot = undefined;
+          }
+          resort = true;
+        } else a.busy = null;
         a.progress = 0;
         a.cycles++;
         this.history?.cycle(a);
@@ -777,19 +1151,22 @@ export class PlantSim {
             this.reject(line, a, i--);
             continue;
           }
-        } else if (a.measure && !this.measure(a)) {
+        } else if (a.measure && !this.measure(a, false, p)) {
           const m = a.measure;
           const v = a.reading?.v ?? null;
           const low = v !== null && m.lo !== undefined && v < m.lo;
           const type = (low ? m.defects?.lo : m.defects?.hi) ?? `${m.label}超差`;
           this.history?.defect(line, a, type, m.label, v, m.rework, p);
-          if (m.rework) {
+          venue?.rated(false);
+          // a guest who scored low still leaves through the door: it counts against the rating, nothing is scrapped
+          if (m.rework || venue) {
             p.rework = true;
             continue;
           }
           this.reject(line, a, i--);
           continue;
         }
+        else if (a.measure) venue?.rated(true);
         const rejectRate = a.machine?.rejectRate;
         if (rejectRate !== undefined && !a.measure && !this.follower) {
           const upstream = st.slice(0, p.done);
@@ -806,7 +1183,14 @@ export class PlantSim {
       }
 
       let maxS = line.len;
-      const ahead = i > 0 ? P[i - 1] : null;
+      // units held at a place (a table, a pitch) are off the walkway
+      let ahead: Product | null = null;
+      for (let j = i - 1; j >= 0; j--) {
+        const q = P[j];
+        if (q.proc >= 0 && st[q.proc].slots) continue;
+        ahead = q;
+        break;
+      }
       if (ahead) maxS = Math.min(maxS, ahead.s - line.gap);
       const n = p.done + 1;
       const next = n < st.length ? st[n] : null;
@@ -816,23 +1200,40 @@ export class PlantSim {
       if (v > 0 && p.s < maxS) p.s = Math.min(p.s + v * dt, maxS);
       p.stall = p.s === before ? p.stall + dt : 0;
 
-      if (next && p.s >= next.s - 1e-4 && !next.busy && this.ready(next)) {
-        next.busy = p;
+      if (next && p.s >= next.s - 1e-4 && this.ready(next) && (next.slots ? p.slot !== undefined || next.count < next.slots : !next.busy)) {
+        if (next.slots) {
+          next.count++;
+          next.busy ??= p;
+        } else next.busy = p;
         p.proc = n;
         p.t = 0;
         const pace = this.layout.pace ?? 0;
-        p.need = pace > 0 && !this.follower
+        p.need = this.follower ? undefined : this.stay(next, p) ?? (pace > 0
           ? next.cycle * (1 + Math.abs(Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random())) * pace)
-          : undefined;
+          : undefined);
       }
-      if (!next && p.s >= line.len - 1e-4 && line.outfeed.count < line.outfeed.cap) {
-        line.outfeed.count++;
+      if (!next && p.s >= line.len - 1e-4 && (venue || line.outfeed.count < line.outfeed.cap)) {
+        if (!venue) line.outfeed.count++;
         line.good++;
         line.doneTimes.push(this.elapsed);
         this.history?.output(line, p);
         this.jobOutput(line, p);
         this.giveInv(p);
+        venue?.left(p);
         P.splice(i--, 1);
+      }
+    }
+    if (resort) {
+      // walking units in order of how far along they are; at the same spot, those walking before those held
+      const held = (q: Product) => q.proc >= 0 && !!st[q.proc].slots;
+      for (let i = 1; i < P.length; i++) {
+        const x = P[i];
+        let j = i - 1;
+        while (j >= 0 && (P[j].s < x.s || (P[j].s === x.s && held(P[j]) && !held(x)))) {
+          P[j + 1] = P[j];
+          j--;
+        }
+        P[j + 1] = x;
       }
     }
 
@@ -841,6 +1242,7 @@ export class PlantSim {
       else if (a.changing > 0) a.state = 'changeover';
       else if (a.tool && a.tool.used >= a.tool.life && a.waitFor) a.state = 'blocked';
       else if (a.maint > 0) a.state = 'maint';
+      else if (a.pause) a.state = 'stopped';
       else if (!a.enabled) a.state = 'stopped';
       else if (a.busy) a.state = a.waitFor ? 'blocked' : 'running';
       else {
@@ -851,14 +1253,33 @@ export class PlantSim {
     cv.state = cv.fault ? 'fault' : cv.maint > 0 ? 'maint' : !cv.enabled ? 'stopped' : 'running';
 
     const inf = line.infeed;
-    inf.state = inf.stock === 0 ? 'empty' : inf.stock < 8 ? 'low' : 'ok';
-    if (inf.stock === 0) this.raise(inf, 'empty', 2, '上料缓存已空，产线缺料');
-    else this.clear(inf, 'empty');
-
     const out = line.outfeed;
-    out.state = out.count >= out.cap ? 'full' : 'ok';
-    if (out.count >= out.cap) this.raise(out, 'full', 2, '成品托盘已满，等待 AGV 取货');
-    else this.clear(out, 'full');
+    const w = this.layout.words;
+    if (venue) {
+      // the door: guests waiting outside, nobody stacks anything here
+      inf.stock = line.layout.no === this.doorLine ? venue.queue.length : 0;
+      inf.state = 'ok';
+      out.state = 'ok';
+    } else {
+      if (!this.follower && !this.agvs.length) {
+        // no vehicles inside: staff carry material from the store and finished units to the store
+        if (inf.stock < inf.cap / 2 && this.wh.stock > 0) {
+          const k = Math.min(this.wh.stock, inf.cap - inf.stock);
+          this.wh.stock -= k;
+          inf.stock += k;
+        }
+        if (out.count) {
+          this.fg.count += out.count;
+          out.count = 0;
+        }
+      }
+      inf.state = inf.stock === 0 ? 'empty' : inf.stock < 8 ? 'low' : 'ok';
+      if (inf.stock === 0) this.raise(inf, 'empty', 2, `${w.infeed}已空，${w.line}缺料`);
+      else this.clear(inf, 'empty');
+      out.state = out.count >= out.cap ? 'full' : 'ok';
+      if (out.count >= out.cap) this.raise(out, 'full', 2, `${w.outfeed}已满，等待${w.vehicle}取货`);
+      else this.clear(out, 'full');
+    }
 
     const span = countSpan(line);
     while (line.doneTimes.length && line.doneTimes[0] < this.elapsed - span) line.doneTimes.shift();
@@ -949,32 +1370,80 @@ export class PlantSim {
       a.state = a.fault ? 'fault' : a.maint > 0 ? 'maint' : 'stopped';
       return;
     }
+    const w = this.layout.words;
     if (t.phase === 'away') {
       a.state = 'away';
       t.wait -= dt;
-      const needed = t.kind === 'in' ? this.wh.stock < this.wh.cap - 500 : this.fg.count >= 30;
-      a.task = t.wait > 0 ? `预计 ${Math.ceil(t.wait)} 秒后到厂` : needed ? '' : t.kind === 'in' ? '待命：原料库位已满' : `待命：成品不足 30 ${this.layout.unit}`;
+      if (this.follower) return;
+      let needed: boolean;
+      let idle: string;
+      if (t.vehicle === 'rider') {
+        needed = this.fg.count > 0;
+        idle = '等单';
+      } else if (t.kind === 'in' && this.supplier) {
+        // the depot's van: comes when a delivery round is due here
+        const d = this.incoming[0];
+        needed = !!d && d.eta - 25_000 <= this.wall();
+        idle = d ? `${d.no} 预计 ${hhmm(((d.eta + 8 * 3600_000) % 86_400_000) / 1000)} 到店` : '没有在途配送';
+      } else if (t.kind === 'out' && this.depot) {
+        needed = !!t.go;
+        idle = '等下一趟配送';
+      } else if (t.kind === 'in' && this.inbound) {
+        needed = this.wall() >= this.inbound.at;
+        idle = `下一车${w.raw}预计 ${hhmm(((this.inbound.at + 8 * 3600_000) % 86_400_000) / 1000)} 到`;
+      } else {
+        // material in: when the store has room, or a consumable runs low (charcoal, meat sets …)
+        needed = t.kind === 'in'
+          ? this.wh.stock < this.wh.cap - 500 || this.lowConsumable
+          : this.fg.count >= 30;
+        idle = t.kind === 'in' ? `待命：${w.raw}库位已满` : `待命：${w.goods}不足 30 ${this.layout.unit}`;
+      }
+      // a vehicle sent by a schedule says when that is; the others count down to their next round
+      const scheduled = t.vehicle === 'rider' || (t.kind === 'in' && this.supplier) || (t.kind === 'out' && this.depot) || (t.kind === 'in' && this.inbound);
+      a.task = needed ? '' : scheduled || t.wait <= 0 ? idle : `预计 ${Math.ceil(t.wait)} 秒后到达`;
       if (t.wait <= 0 && needed) {
         t.phase = 'drive';
         t.idx = 1;
         t.x = t.route[0].x;
         t.z = t.route[0].z;
         t.heading = Math.atan2(t.route[1].z - t.z, t.route[1].x - t.x);
-        t.load = t.kind === 'in' ? 400 : 0;
+        t.load = t.kind === 'in' ? (this.inbound?.load ?? 400) : 0;
       }
       return;
     }
     if (t.phase === 'dock') {
       a.state = 'handling';
       t.dock += dt;
-      if (t.kind === 'in') {
+      if (this.follower) return;
+      if (t.vehicle === 'rider') {
+        if (!t.load) t.load = this.venue?.pickUp(3) ?? 0;
+        a.task = `取走 ${t.load} 单外卖`;
+        if (t.dock > 12) {
+          this.truckDone(t, `取走 ${t.load} 单外卖`);
+          t.load = 0;
+        }
+      } else if (t.kind === 'in' && this.supplier) {
+        a.task = '卸货上架';
+        if (t.dock > 20) {
+          const d = this.incoming.shift();
+          if (d) this.unload(d, a);
+          this.truckDone(t, '卸货完成');
+        }
+      } else if (t.kind === 'out' && this.depot) {
+        a.task = '冷链装车';
+        if (t.dock > 30) {
+          t.go = false;
+          this.truckDone(t, '装车完成，出发配送');
+        }
+      } else if (t.kind === 'in') {
         const n = Math.min(t.load, Math.max(0, this.wh.cap - this.wh.stock), Math.ceil((400 / 22) * dt));
         this.wh.stock += n;
         t.load -= n;
         a.task = `卸货入库，剩余 ${t.load} 件`;
         if (t.load <= 0 || t.dock > 30) {
-          this.truckDone(t, '卸货完成，原料入库');
+          this.truckDone(t, `卸货完成，${w.raw}入库`);
           this.refill(t.asset);
+          if (this.inbound) this.planInbound(this.inbound.due);
         }
       } else {
         const n = Math.min(this.fg.count, Math.ceil((120 / 22) * dt), 120 - t.load);
@@ -991,7 +1460,7 @@ export class PlantSim {
     const dz = wp.z - t.z;
     const dist = Math.hypot(dx, dz);
     a.state = 'moving';
-    a.task = t.phase === 'leave' ? '离厂' : t.kind === 'in' ? '进厂送料' : '进厂提货';
+    a.task = t.phase === 'leave' ? '离开' : t.vehicle === 'rider' ? '来取外卖' : t.kind === 'in' ? (this.supplier ? '配送到店' : `进厂送${w.raw}`) : '进场提货';
     if (dist < 0.3) {
       if (wp.act === 'dock' && t.phase === 'drive') {
         t.phase = 'dock';
@@ -1002,7 +1471,7 @@ export class PlantSim {
       t.idx++;
       if (t.idx >= t.route.length) {
         t.phase = 'away';
-        t.wait = t.kind === 'in' ? 140 : 110;
+        t.wait = t.vehicle === 'rider' ? rand(20, 150) : t.kind === 'in' ? 140 : 110;
       }
       return;
     }
@@ -1040,7 +1509,7 @@ export class PlantSim {
     if (wp.act === 'load') return '回库取料';
     if (wp.act === 'drop') return `送料至 ${line!.infeed.id}`;
     if (wp.act === 'pick') return `前往 ${line!.outfeed.id} 取货`;
-    if (wp.act === 'deliver') return g.cargo ? `成品送至 ${this.fg.id}` : '返回待命点';
+    if (wp.act === 'deliver') return g.cargo ? `${this.layout.words.goods}送至 ${this.fg.id}` : '返回待命点';
     return g.task;
   }
 
@@ -1082,26 +1551,26 @@ export class PlantSim {
       case 'load':
         if (g.cargo) return work(0.1, '');
         if (line!.infeed.stock + 20 > line!.infeed.cap) return wait(2, `待命：${line!.infeed.id} 库存充足`);
-        if (this.wh.stock < 20) return wait(2, '待命：原料库存不足');
+        if (this.wh.stock < 20) return wait(2, `待命：${this.layout.words.raw}库存不足`);
         this.wh.stock -= 20;
         g.cargo = { kind: 'raw', n: 20 };
-        return work(4, '装载原料');
+        return work(4, `装载${this.layout.words.raw}`);
       case 'drop':
         if (g.cargo) line!.infeed.stock += g.cargo.n;
         g.cargo = null;
         return work(3, `卸料至 ${line!.infeed.id}`);
       case 'pick': {
         const n = line!.outfeed.count;
-        if (n < Math.min(8, line!.outfeed.cap) && !(g.waitedT > 40 && n > 0)) return wait(2, `等待 ${line!.outfeed.id} 成品`);
+        if (n < Math.min(8, line!.outfeed.cap) && !(g.waitedT > 40 && n > 0)) return wait(2, `等待 ${line!.outfeed.id} ${this.layout.words.goods}`);
         line!.outfeed.count = 0;
         g.cargo = { kind: 'fg', n };
-        return work(4, `取走 ${n} ${this.layout.unit}成品`);
+        return work(4, `取走 ${n} ${this.layout.unit}${this.layout.words.goods}`);
       }
       case 'deliver': {
         const had = g.cargo;
         if (had) this.fg.count += had.n;
         g.cargo = null;
-        return work(had ? 3 : 0.1, had ? `卸下 ${had.n} ${this.layout.unit}成品` : '');
+        return work(had ? 3 : 0.1, had ? `卸下 ${had.n} ${this.layout.unit}${this.layout.words.goods}` : '');
       }
       default:
         return work(0.1, '');
@@ -1129,7 +1598,7 @@ export class PlantSim {
     }
     if (a.type === 'warehouse') {
       a.state = a.stock < 300 ? 'low' : 'ok';
-      if (a.stock < 300) this.raise(a, 'low', 3, `原料库存低于 300 件，当前 ${a.stock}`);
+      if (a.stock < 300) this.raise(a, 'low', 3, `${this.layout.words.raw}库存低于 300 件，当前 ${a.stock}`);
       else this.clear(a, 'low');
       return;
     }
@@ -1137,13 +1606,15 @@ export class PlantSim {
 
     const running = a.state === 'running';
     const on = this.ready(a);
+    // a station with slots works as hard as it is full (cookers on at the tables that have guests)
+    const load = a.slots ? Math.min(1, a.count / a.slots) : 1;
     let target = AMBIENT;
-    if (on) target += (running ? s.runRise : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * (s.wear ?? 18);
+    if (on) target += (running ? s.idleRise + (s.runRise - s.idleRise) * load : s.idleRise) * (0.6 + 0.4 * a.speed) + (1 - a.health) * (s.wear ?? 18);
     const k = ema(dt, s.tau ?? 40);
     a.temp += (target - a.temp) * k;
     // the model without its noise: what it predicts, to hold against what was measured
     const vibModel = running ? s.vib * (0.7 + 0.3 * a.speed) * (1 + (1 - a.health) * 2.5) : on ? s.vib * 0.06 : 0;
-    const powerModel = on ? s.pIdle + (running ? s.pRun * a.speed : 0) : a.maint > 0 ? 0 : 0.1;
+    const powerModel = on ? s.pIdle + (running ? s.pRun * a.speed * load : 0) : a.maint > 0 ? 0 : 0.1;
     // the same draws as always, so a seeded run (what-if) plays out as before
     a.vib = running ? vibModel * rand(0.9, 1.1) : on ? vibModel * rand(0.8, 1.2) : 0;
     a.power = on ? powerModel * rand(0.96, 1.04) : powerModel;
@@ -1220,7 +1691,7 @@ export class PlantSim {
   }
 
   /** The first item there is not enough of, if any. */
-  private shortOf(take: Record<string, number>) {
+  shortOf(take: Record<string, number>) {
     for (const [k, n] of Object.entries(take)) {
       const it = this.inv(k);
       if (it && it.avail < n) return it;
@@ -1228,11 +1699,51 @@ export class PlantSim {
     return null;
   }
 
+  /** What a group takes of each item: so much a person, more or less with appetite. */
+  private appetite(take: Record<string, number>, n: number) {
+    const out: Record<string, number> = {};
+    for (const [k, each] of Object.entries(take)) out[k] = Math.max(1, Math.round(n * each * rand(0.7, 1.3)));
+    return out;
+  }
+
+  /**
+   * Seconds a unit stays at a station with slots: until the hour of the day it leaves at (check-out,
+   * give or take an hour), or by the size of the group. Undefined: the usual cycle.
+   */
+  private stay(a: Asset, p: Product): number | undefined {
+    if (a.until !== undefined) {
+      const left = (((a.until * 3600 - this.clock) % 86_400) + 86_400) % 86_400;
+      // the next time it comes round, and not within the first hours (who comes at 10 stays the night)
+      return Math.max(a.cycle, (left < 4 * 3600 ? left + 86_400 : left) + rand(-0.75, 0.75) * 3600);
+    }
+    // seated after closing time (they came in just before): they eat up within half an hour
+    if (a.bySize?.length && this.closed) return rand(600, 1800);
+    if (a.bySize?.length) {
+      const base = a.bySize[Math.min(a.bySize.length, p.n ?? 1) - 1];
+      return base * (1 + Math.abs(Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random())) * Math.max(0.15, this.layout.pace ?? 0));
+    }
+    return undefined;
+  }
+
+  /** The place of a line's station with slots that a slot number names. */
+  placeOf(line: Line, slot: number) {
+    return this.places.find((a) => a.place!.line === line.id && a.place!.slot === slot);
+  }
+
+  /** Uses up inventory for something that is not a unit on a line (a delivery order). */
+  useInv(take: Record<string, number>) {
+    for (const [k, n] of Object.entries(take)) {
+      const it = this.inv(k);
+      if (it) it.avail = Math.max(0, it.avail - n);
+    }
+  }
+
   private takeInv(p: Product, take: Record<string, number>) {
     for (const [k, n] of Object.entries(take)) {
       const it = this.inv(k);
       if (!it) continue;
       it.avail -= n;
+      if (it.price) p.spend = (p.spend ?? 0) + n * it.price;
       if (it.kind === 'lend') {
         p.held ??= {};
         p.held[k] = (p.held[k] ?? 0) + n;
@@ -1263,7 +1774,13 @@ export class PlantSim {
     if (got.length) this.note(truck, `补货：${got.join('，')}`, 'info');
   }
 
+  /** a consumable the supply truck brings is running low (looked at once a second) */
+  private lowConsumable = false;
+
   private checkInventory() {
+    let low = false;
+    for (const it of this.inventory) if (it.kind === 'consume' && !it.lead && it.avail <= it.cap * Math.max(0.3, it.low * 2)) low = true;
+    this.lowConsumable = low;
     for (const it of this.inventory) {
       // bought to order: at the reorder point, `refill` more arrive after the lead time
       if (it.lead && it.avail <= Math.floor(it.cap * it.low) && !this.repairs.some(([k, , n]) => k === it.key && n)) {
@@ -1390,7 +1907,7 @@ export class PlantSim {
     this.events.push({ type: 'fault', asset: a.id });
   }
 
-  private raise(a: Asset, code: string, prio: Alarm['prio'], text: string) {
+  raise(a: Asset, code: string, prio: Alarm['prio'], text: string) {
     if (this.follower) return;
     const key = `${a.id} ${code}`;
     if (this.raised.has(key)) return;
@@ -1405,7 +1922,7 @@ export class PlantSim {
     }
   }
 
-  private clear(a: Asset, code: string) {
+  clear(a: Asset, code: string) {
     if (this.follower) return;
     if (!this.raised.delete(`${a.id} ${code}`)) return;
     for (const al of this.alarms) {
@@ -1416,7 +1933,7 @@ export class PlantSim {
     }
   }
 
-  private note(a: Asset, text: string, kind: LogEntry['kind'] = 'info', prio = 0) {
+  note(a: Asset, text: string, kind: LogEntry['kind'] = 'info', prio = 0) {
     if (this.follower) return;
     this.log.unshift({ at: this.clock, asset: a.id, text, kind, prio });
     if (this.log.length > 300) this.log.pop();
@@ -1505,12 +2022,12 @@ export class PlantSim {
       }
       case 'restock':
         a.stock = Math.min(a.cap, a.stock + 400);
-        this.note(a, '原料入库 400 件', 'op');
-        return { ok: true, msg: '原料入库 400 件' };
+        this.note(a, `${this.layout.words.raw}入库 400 件`, 'op');
+        return { ok: true, msg: `${this.layout.words.raw}入库 400 件` };
       case 'ship':
-        this.note(a, `成品发运 ${a.count} ${this.layout.unit}`, 'op');
+        this.note(a, `${this.layout.words.goods}发运 ${a.count} ${this.layout.unit}`, 'op');
         a.count = 0;
-        return { ok: true, msg: '成品已发运' };
+        return { ok: true, msg: `${this.layout.words.goods}已发运` };
     }
   }
 
@@ -1691,7 +2208,24 @@ export class PlantSim {
         throughputPerHour: r2(k.tp), good: k.good, scrap: k.scrap, powerKW: r2(k.power), energyKWh: r2(k.energy), clock: hhmm(this.clock),
         // share of the stations whose readings come from the equipment, the rest simulated
         measuredShare: r2(k.measured),
+        electricityCostToday: r2(k.cost), pricePerKWh: r2(k.price),
       },
+      // the pack's own figures, as the twin shows them (翻台率, 准时配送率 …)
+      figures: kpiValues(this).map((x) => ({ id: x.id, label: x.label, value: r2(x.value), text: x.text, sub: x.sub, measuredShare: r2(x.measured) })),
+      shift: this.shift || undefined, pause: this.pause || undefined,
+      places: this.places.length ? this.places.map((a) => ({
+        id: a.id, area: a.place!.area, seats: a.place!.seats, state: a.state, people: a.count,
+        minutes: Math.round((this.elapsed - (a.since ?? 0)) / 60), source: reported(a) ? a.live!.src : 'sim',
+      })) : undefined,
+      queue: this.venue ? this.venue.queue.map((g) => ({ people: g.n, minutes: Math.round((this.elapsed - g.at) / 60) })) : undefined,
+      venue: this.venue ? { ...this.venue.figures(), day: this.venue.day } : undefined,
+      depot: this.depot ? {
+        ...this.depot.figures(),
+        batches: this.depot.batches.map((b) => ({ no: b.no, product: b.product, qty: b.qty, made: hhmm(((b.made + 8 * 3600_000) % 86_400_000) / 1000), hoursLeft: Math.round((b.expires - this.wall()) / 360_000) / 10 })),
+      } : undefined,
+      incoming: this.supplier ? this.incoming.map((d) => ({ no: d.no, from: d.from, items: d.items, eta: hhmm(((d.eta + 8 * 3600_000) % 86_400_000) / 1000) })) : undefined,
+      inbound: this.inbound ? { supplier: this.inbound.supplier, due: hhmm(((this.inbound.due + 8 * 3600_000) % 86_400_000) / 1000), late: this.inbound.late && this.wall() >= this.inbound.due } : undefined,
+      coldChain: this.cold[1] ? r2(this.cold[0] / this.cold[1]) : undefined,
       lines: this.lines.map((l, i) => ({
         id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: r2(k.lines[i].tp), measuredShare: r2(k.lines[i].measured),
         good: l.good, scrap: l.scrap,
@@ -1723,12 +2257,15 @@ export class PlantSim {
         cycles: a.cycles, progress: p3(a.progress), busy: a.busy?.id ?? null, reading: a.reading ?? null, rejects: a.rejects,
         verdict: a.verdict ?? null, stock: a.stock, count: a.count, battery: p3(a.battery), vel: p3(a.vel), task: a.task, live: a.live ?? null,
         toolUsed: a.tool?.used, toolLimit: a.tool?.limit, changing: a.changing ? p3(a.changing) : undefined,
+        since: a.place ? p3(a.since ?? 0) : undefined,
       })),
       lines: this.lines.map((l) => ({
         id: l.id, spawnT: p3(l.spawnT), pid: l.pid, good: l.good, scrap: l.scrap, tp: l.doneTimes.length,
         lot: l.lot ? [l.lot.no, l.lot.supplier] as [string, string] : undefined,
         job: l.job ? [l.job.no, l.job.name, l.job.qty, l.job.good, l.job.issued] as [string, string, number, number, number] : undefined,
         products: l.products.map((x) => [x.id, p3(x.s), x.done, x.proc, p3(x.t), x.kind, p3(x.stall), x.held ?? null] as ProductTuple),
+        groups: l.gate !== undefined ? l.products.map((x) => x.n ?? 0) : undefined,
+        slots: l.gate !== undefined ? l.products.map((x) => x.slot ?? -1) : undefined,
       })),
       agvs: this.agvs.map((g) => ({
         id: g.asset.id, idx: g.idx, x: p3(g.x), z: p3(g.z), heading: p3(g.heading), cargo: g.cargo, mode: g.mode,
@@ -1740,6 +2277,19 @@ export class PlantSim {
       alarms: this.alarms.slice(0, 80),
       log: this.log.slice(0, 60),
       inventory: this.inventory.map((i) => [i.key, i.avail, i.cap] as [string, number, number]),
+      venue: this.venue ? {
+        q: this.venue.queue.map((g) => [g.n, p3(g.at)] as [number, number]), day: { ...this.venue.day }, rain: this.venue.rain,
+        orders: this.venue.orders.length, counter: this.venue.counter.length,
+      } : undefined,
+      depot: this.depot ? {
+        batches: this.depot.batches.map((b) => [b.no, b.product, b.qty, b.made, b.expires] as [string, string, number, number, number]),
+        samples: this.depot.samples.length, otif: [this.depot.otif.filter(Boolean).length, this.depot.otif.length], wasted: this.depot.wasted,
+      } : undefined,
+      incoming: this.supplier ? this.incoming.map((d) => [d.no, d.from, d.eta, d.items] as [string, string, number, Record<string, number>]) : undefined,
+      cold: this.cold[1] ? [this.cold[0], this.cold[1]] : undefined,
+      rhythm: { shift: this.shift, handover: this.handoverUntil > this.elapsed, pause: this.pause, cost: Math.round(this.costToday * 100) / 100, price: this.price() },
+      // whether it is late is only known once it was due
+      inbound: this.inbound ? { due: this.inbound.due, at: this.wall() >= this.inbound.due ? this.inbound.at : this.inbound.due, load: this.inbound.load, supplier: this.inbound.supplier, late: this.inbound.late && this.wall() >= this.inbound.due } : undefined,
       events: drain ? this.events.splice(0) : [],
     };
   }
@@ -1768,9 +2318,68 @@ export class PlantSim {
       repair: assets.filter((a) => a.repairAt !== undefined).map((a) => [a.id, a.repairAt!]),
       recond: this.repairs,
       later: this.later,
-      lines: this.lines.map((l) => ({ lot: l.lot, job: l.job, last: l.last, pmWeek: l.pmWeek, planEff: l.planEff })),
+      lines: this.lines.map((l) => ({
+        lot: l.lot, job: l.job, last: l.last, pmWeek: l.pmWeek, planEff: l.planEff,
+        // JSON has no Infinity: a stop still going on is saved open-ended
+        pauses: l.pauses.map(([a, b]) => [a, Number.isFinite(b) ? b : null] as [number, number | null]), shiftMark: l.shiftMark, noJobUntil: l.noJobUntil,
+      })),
+      wip: this.lines.map((l) => l.products.map((p) => {
+        const { id: _i, s: _s, done: _d, proc: _p, t: _t, kind: _k, stall: _st, held: _h, ...rest } = p;
+        return rest;
+      })),
+      venue: this.venue ? {
+        queue: this.venue.queue, orders: this.venue.orders, counter: this.venue.counter, day: this.venue.day, rain: this.venue.rain,
+        clear: this.places.filter((a) => a.clear !== undefined).map((a) => [a.id, a.clear!] as [string, number]),
+      } : undefined,
+      depot: this.depot ? { batches: this.depot.batches, samples: this.depot.samples, otif: this.depot.otif, wasted: this.depot.wasted, wastedDay: this.depot.wastedDay, next: this.depot.next } : undefined,
+      incoming: this.incoming,
+      inbound: this.inbound,
+      rhythm: {
+        shift: this.shift, handoverUntil: this.handoverUntil, pause: this.pause, pauseUntil: this.pauseUntil,
+        paused: [...this.assets.values()].filter((a) => a.pause).map((a) => a.id), cold: this.cold, costToday: this.costToday, today: this.today,
+      },
       seq: this.seq,
     };
+  }
+
+  /** Points stations with slots and places at the units they hold, from the units' own records. */
+  private relink() {
+    for (const line of this.lines) {
+      if (line.gate === undefined) continue;
+      for (const a of line.stations) {
+        if (!a.slots) continue;
+        a.count = 0;
+        a.busy = null;
+      }
+      for (const p of line.products) {
+        const a = p.proc >= 0 ? line.stations[p.proc] : null;
+        if (!a?.slots) continue;
+        a.count++;
+        a.busy ??= p;
+      }
+      for (const pl of this.places) if (pl.place!.line === line.id) pl.busy = line.products.find((p) => p.slot === pl.place!.slot) ?? null;
+    }
+  }
+
+  /**
+   * A state an outside system reported for a place (a camera, the POS, a waiter's phone): the twin
+   * shows it and seats no simulated guests there while the reports are recent. A report older than
+   * the one in force is ignored here (the server keeps it). False for no such place.
+   */
+  reportPlace(id: string, state: string, people: number, sinceMs: number, src: string): boolean {
+    const a = this.assets.get(id);
+    if (!a?.place || !['free', 'occupied', 'reserved', 'cleaning'].includes(state)) return false;
+    const prev = a.live?.f.since;
+    if (reported(a) && typeof prev === 'number' && sinceMs < prev) return true;
+    a.live = { src, at: Date.now(), f: { state, people, since: sinceMs } };
+    const since = (sinceMs - this.epoch) / 1000;
+    if (this.venue) this.venue.report(a, state, people, since);
+    else {
+      a.state = state as AssetState;
+      a.count = state === 'occupied' ? people : 0;
+      a.since = since;
+    }
+    return true;
   }
 
   /** Carries on from a saved state; false (and nothing changed) if the plant's structure differs. */
@@ -1795,8 +2404,35 @@ export class PlantSim {
     this.later = saved.later ?? [];
     this.lines.forEach((l, i) => {
       const x = saved.lines?.[i];
-      if (x) Object.assign(l, { lot: x.lot, job: x.job, last: x.last, pmWeek: x.pmWeek, planEff: x.planEff });
+      if (x) {
+        Object.assign(l, { lot: x.lot, job: x.job, last: x.last, pmWeek: x.pmWeek, planEff: x.planEff, shiftMark: x.shiftMark, noJobUntil: x.noJobUntil });
+        l.pauses = (x.pauses ?? []).map(([a, b]) => [a, b ?? Infinity]);
+      }
+      // what the units carried: their lot, flaw, the time they need here, the group and its place
+      const wip = saved.wip?.[i];
+      if (wip) l.products.forEach((p, k) => Object.assign(p, wip[k] ?? {}));
     });
+    this.relink();
+    const v = saved.venue;
+    if (v && this.venue) {
+      Object.assign(this.venue, { queue: v.queue, orders: v.orders, counter: v.counter, day: { ...this.venue.day, ...v.day }, rain: v.rain });
+      for (const [id, c] of v.clear) {
+        const a = this.assets.get(id);
+        if (a) a.clear = c;
+      }
+    }
+    const d = saved.depot;
+    if (d && this.depot) Object.assign(this.depot, { batches: d.batches, samples: d.samples, otif: d.otif, wasted: d.wasted, wastedDay: d.wastedDay, next: d.next });
+    if (saved.incoming) this.incoming = saved.incoming;
+    if (saved.inbound) this.inbound = saved.inbound;
+    const r = saved.rhythm;
+    if (r) {
+      Object.assign(this, { shift: r.shift, handoverUntil: r.handoverUntil, pause: r.pause, pauseUntil: r.pauseUntil, cold: r.cold, costToday: r.costToday, today: r.today });
+      for (const id of r.paused) {
+        const a = this.assets.get(id);
+        if (a) a.pause = r.pause || undefined;
+      }
+    }
     this.seq = saved.seq ?? this.seq;
     // carry on in the present: the plant's wall clock is now
     this.epoch = Date.now() - this.elapsed * 1000;
@@ -1822,7 +2458,7 @@ export class PlantSim {
         enabled: x.enabled, speed: x.speed, fault: x.fault, maint: x.maint, state: x.state, temp: x.temp, vib: x.vib, power: x.power,
         health: x.health, util: x.util, avail: x.avail, cycles: x.cycles, progress: x.progress, reading: x.reading ?? undefined,
         rejects: x.rejects, verdict: x.verdict ?? undefined, stock: x.stock, count: x.count, battery: x.battery, vel: x.vel, task: x.task,
-        live: x.live ?? undefined, busy: null, changing: x.changing ?? 0,
+        live: x.live ?? undefined, busy: null, changing: x.changing ?? 0, since: x.since ?? a.since,
       });
       if (a.tool && x.toolUsed !== undefined) a.tool.used = x.toolUsed;
       if (a.tool && x.toolLimit !== undefined) a.tool.limit = x.toolLimit;
@@ -1848,6 +2484,38 @@ export class PlantSim {
       });
     }
     for (const [a, id] of busy) a.busy = byId.get(id) ?? null;
+    // the groups on walk-flow lines and the places they hold
+    for (const x of s.lines) {
+      const l = this.lineById[x.id];
+      if (!l || (!x.groups && !x.slots)) continue;
+      l.products.forEach((p, k) => {
+        if (x.groups?.[k]) p.n = x.groups[k];
+        if (x.slots && x.slots[k] >= 0) p.slot = x.slots[k];
+      });
+    }
+    this.relink();
+    const v = s.venue;
+    if (v && this.venue && this.follower) {
+      this.venue.queue = v.q.map(([n, at]) => ({ n, at, until: Infinity }));
+      Object.assign(this.venue.day, v.day);
+      this.venue.rain = v.rain;
+      this.venue.counter.length = v.counter;
+    }
+    if (s.depot && this.depot && this.follower) {
+      this.depot.batches = s.depot.batches.map(([no, product, qty, made, expires]) => ({ no, product, qty, made, expires }));
+      this.depot.wasted = s.depot.wasted;
+      this.depot.otif = [...Array(s.depot.otif[1])].map((_, i) => i < s.depot!.otif[0]);
+      this.depot.samples = Array.from({ length: s.depot.samples }, () => ['', '', 0] as [string, string, number]);
+    }
+    if (s.incoming && this.follower) this.incoming = s.incoming.map(([no, from, eta, items]) => ({ no, from, to: this.layout.id, items, departed: 0, eta, planned: eta, full: true }));
+    if (s.cold) this.cold = [s.cold[0], s.cold[1]];
+    if (s.inbound && this.follower) this.inbound = { ...s.inbound };
+    if (s.rhythm && this.follower) {
+      this.shift = s.rhythm.shift;
+      this.pause = s.rhythm.pause;
+      this.handoverUntil = s.rhythm.handover ? this.elapsed + 1 : 0;
+      this.costToday = s.rhythm.cost;
+    }
     for (const x of s.agvs) {
       const g = this.agvs.find((v) => v.asset.id === x.id);
       if (g) Object.assign(g, { idx: x.idx, x: x.x, z: x.z, heading: x.heading, cargo: x.cargo, mode: x.mode, dwell: x.dwell, waiting: x.waiting, waitedT: x.waitedT, task: x.task });
@@ -1869,10 +2537,21 @@ export class PlantSim {
 
   // ---------- derived ----------
 
+  /** Seconds of the line's counting window spent in planned stops (meal breaks, closed hours). */
+  private paused(line: Line, span: number) {
+    const from = this.elapsed - span;
+    let s = 0;
+    while (line.pauses.length && line.pauses[0][1] < from) line.pauses.shift();
+    for (const [a, b] of line.pauses) s += Math.max(0, Math.min(b, this.elapsed) - Math.max(a, from));
+    return s;
+  }
+
   lineKpi(line: Line): LineKpi {
     const span = countSpan(line);
     const tp = (line.doneTimes.length * 3600) / span; // parts per hour over the counting window
-    const perf = Math.min(1, (line.doneTimes.length * Math.max(...line.stations.map((s) => s.cycle))) / span);
+    // performance over the time the line was meant to run: planned stops are not losses
+    const open = span - this.paused(line, span);
+    const perf = open < 300 ? 0 : Math.min(1, (line.doneTimes.length * Math.max(...line.stations.map((s) => s.cycle))) / open);
     const avail = line.stations.reduce((s, a) => s + a.avail, 0) / line.stations.length;
     const quality = line.good / Math.max(1, line.good + line.scrap);
     const measured = line.stations.filter((a) => liveFields(a)).length / line.stations.length;
@@ -1890,7 +2569,21 @@ export class PlantSim {
       measured: this.lines.reduce((n, l, i) => n + per[i].measured * l.stations.length, 0) / Math.max(1, stations),
       oee: avg('oee'), avail: avg('avail'), perf: avg('perf'), quality: good / Math.max(1, good + scrap),
       tp: per.reduce((s, x) => s + x.tp, 0), good, scrap,
-      power: this.powerKW, energy: this.energyKWh, span: Math.max(...this.lines.map(countSpan)),
+      power: this.powerKW, energy: this.energyKWh, span: Math.max(...this.lines.map(countSpan)), cost: this.costToday, price: this.price(),
     };
   }
+}
+
+/** Ties a company's plants together: a plant whose config names the one that keeps it stocked gets its deliveries. */
+export function linkPlants(plants: PlantSim[]) {
+  for (const p of plants) {
+    const sup = p.layout.supply;
+    if (!sup) continue;
+    const from = plants.find((x) => x.layout.id === sup.from);
+    if (!from || from === p) continue;
+    from.depot ??= new Depot(from);
+    from.depot.outlets.push(p);
+    p.supplier = from;
+  }
+  for (const p of plants) p.depot?.seed();
 }

@@ -25,6 +25,7 @@ import (
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/mqttauth"
+	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
 )
@@ -59,6 +60,8 @@ type Ops struct {
 	History map[string]PlantHistory
 	// Hints are readings unusual for their machine.
 	Hints *anomaly.Detector
+	// Tables are the restaurants' tables as reported and simulated, and their dining sessions.
+	Tables *tables.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

@@ -8,6 +8,7 @@
 //     AGVs AGV-{nn}A / AGV-{nn}B; store WH, finished goods FG, trucks TRK-IN / TRK-OUT.
 //   * Belt width and part spacing follow the product size; tall products ride a low belt.
 import type { CompanyCfg, IndustryCfg, LineCfgT, MachineCfg, MeasureCfg, PartCfg, PlantCfgT, ProductCfg, StepCfg } from '@/config/schema';
+import { wordsOf, type Words } from './terms';
 
 export interface Dims { l: number; h: number; d: number }
 
@@ -28,6 +29,9 @@ export interface ProductInfo {
   variants?: ProductCfg['variants'];
   customers?: ProductCfg['customers'];
   price?: number;
+  /** hours a batch keeps, hours its retained sample is kept */
+  shelf?: number;
+  sample?: number;
 }
 
 export interface StationLayout {
@@ -44,9 +48,15 @@ export interface StationLayout {
   measure?: MeasureCfg;
   take?: Record<string, number>;
   give?: string[];
+  /** units held at once, people per slot, seconds by group size, hour of day units leave, takes per person */
+  slots?: number;
+  seats?: number;
+  bySize?: number[];
+  until?: number;
+  perPerson?: boolean;
 }
 
-export interface InventoryLayout { key: string; label: string; unit: string; kind: 'lend' | 'consume'; cap: number; low: number; refill: number; lead?: number }
+export interface InventoryLayout { key: string; label: string; unit: string; kind: 'lend' | 'consume'; cap: number; low: number; refill: number; lead?: number; price?: number }
 
 export interface Waypoint { x: number; z: number; act?: 'load' | 'drop' | 'pick' | 'deliver' | 'dock'; line?: string }
 export interface Zone { id: string; name: string; x0: number; x1: number; z0: number; z1: number; cap: number }
@@ -74,7 +84,11 @@ export interface LineLayout {
   outfeed: { id: string; name: string; cap: number; x: number; z: number };
   lane: number;
   order: OrderInfo;
+  /** the places (tables, pitches) of its first station with slots, in slot order */
+  places: PlaceLayout[];
 }
+
+export interface PlaceLayout { id: string; area: string; seats: number; label: string; overnight: boolean; station: string; slot: number; x: number; z: number; w: number; d: number }
 
 export interface PlantLayout {
   company: { id: string; name: string; short: string };
@@ -86,7 +100,7 @@ export interface PlantLayout {
   industry: IndustryCfg;
   unit: string;
   qualityLabel: string;
-  site: 'hall' | 'outdoor';
+  site: 'hall' | 'outdoor' | 'shop';
   flow: 'belt' | 'walk';
   terms: IndustryCfg['terms'];
   calendar: IndustryCfg['calendar'];
@@ -101,7 +115,14 @@ export interface PlantLayout {
   warehouse: Zone;
   fg: Zone;
   agvs: { id: string; name: string; route: Waypoint[] }[];
-  trucks: { id: string; name: string; kind: 'in' | 'out'; carrier: string; route: Waypoint[] }[];
+  trucks: { id: string; name: string; kind: 'in' | 'out'; carrier: string; route: Waypoint[]; vehicle: 'truck' | 'van' | 'rider' }[];
+  /** the pack's words for everything the twin shows */
+  words: Words;
+  logistics: IndustryCfg['logistics'];
+  kpis: IndustryCfg['kpis'];
+  demand?: IndustryCfg['demand'];
+  /** the plant that keeps this one stocked */
+  supply?: PlantCfgT['supply'];
   roads: { front: number; left: number; right: number };
   home: { target: [number, number, number]; pos: [number, number, number] };
 }
@@ -207,7 +228,7 @@ function productInfo(industry: IndustryCfg, key: string, needsPacked: boolean): 
     dims.packed = stageDims(stages.packed);
     max = { l: Math.max(max.l, dims.packed.l), h: Math.max(max.h, dims.packed.h), d: Math.max(max.d, dims.packed.d) };
   }
-  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer, suppliers: p.suppliers, variants: p.variants, customers: p.customers, price: p.price };
+  return { key, name: p.name, stages, order, dims, max, partNo: p.partNo, material: p.material, weight: p.weight, input: p.input, customer: p.customer, suppliers: p.suppliers, variants: p.variants, customers: p.customers, price: p.price, shelf: p.shelf, sample: p.sample };
 }
 
 // ---------- plant ----------
@@ -245,6 +266,8 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
   const WH_W = 11;
   const X_START = 19; // first station area starts here; store occupies 2..13
   let zCursor = 0;
+  const words = wordsOf(industry);
+  const lg = industry.logistics;
 
   expandLines(plant, industry).forEach(({ cfg, name, steps }, li) => {
     const n = li + 1;
@@ -270,15 +293,42 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     const seq: Record<string, number> = {};
     let cursor = X_START + 1.2;
     let back = 1.6;
+    const places: PlaceLayout[] = [];
     const stations: StationLayout[] = resolved.map(({ st, machine }) => {
       const arch = machine.look.archetype;
       const base = machine.look.size ?? DEFAULT_SIZE[arch];
-      const len = r1(ENCLOSING.has(arch) ? Math.max(base[0], max.l + 0.9) : Math.max(base[0], arch === 'robot' || arch === 'manual' ? max.l + 1.6 : 0));
-      const size: [number, number, number] = [len, Math.max(base[1], beltW + 1.0), Math.max(base[2], beltY + max.h + 0.9)];
-      back = Math.max(back, beltW / 2 + (BACK[arch] ?? size[1] / 2));
+      let len = r1(ENCLOSING.has(arch) ? Math.max(base[0], max.l + 0.9) : Math.max(base[0], arch === 'robot' || arch === 'manual' ? max.l + 1.6 : 0));
+      let depth = Math.max(base[1], beltW + 1.0);
+      // the line's places: tables down both sides of the aisle, pitches either side of the path
+      const slots = ('slots' in st ? st.slots : undefined) ?? machine.slots;
+      const placeCfg = ('place' in st ? st.place : undefined) ?? machine.place;
+      let mine: Omit<PlaceLayout, 'station' | 'x' | 'z'>[] = [];
+      if (slots && placeCfg && !places.length) {
+        const t = cfg.tables;
+        const prefix = t?.prefix ?? String.fromCharCode(64 + Math.min(26, n));
+        const seat = ('seats' in st ? st.seats : undefined) ?? machine.seats ?? 4;
+        const until = ('until' in st ? st.until : undefined) ?? machine.until;
+        const list = t?.list ?? (t?.seats ?? Array.from({ length: slots }, () => seat)).map((k, i) => ({ id: `${prefix}${pad2(i + 1)}`, seats: k, area: undefined as string | undefined }));
+        mine = list.map((x, i) => ({ id: x.id, area: x.area ?? t?.area ?? name, seats: x.seats, label: placeCfg.label, overnight: until !== undefined, slot: i, w: placeCfg.size[0], d: placeCfg.size[1] }));
+        const cols = Math.ceil(mine.length / 2);
+        len = r1(Math.max(len, cols * placeCfg.size[0] + 0.6));
+        depth = Math.max(depth, beltW + 2 * placeCfg.size[1] + 0.4);
+      }
+      const size: [number, number, number] = [len, depth, Math.max(base[2], beltY + max.h + 0.9)];
+      back = Math.max(back, beltW / 2 + (mine.length ? size[1] / 2 - beltW / 2 : BACK[arch] ?? size[1] / 2));
       seq[machine.code] = (seq[machine.code] ?? 0) + 1;
       const x = cursor + len / 2;
       cursor += len + 1.4;
+      const sid = `${machine.code}-${n}${pad2((seq[machine.code] ?? 0))}`;
+      if (mine.length) {
+        const cols = Math.ceil(mine.length / 2);
+        // odd slots behind the aisle, even ones in front, left to right; z is from the line, set below
+        for (const p of mine) {
+          const c = Math.floor(p.slot / 2);
+          const side = p.slot % 2 === 0 ? -1 : 1;
+          places.push({ ...p, station: sid, x: r1(x + (c - (cols - 1) / 2) * p.w), z: r1(side * (beltW / 2 + 0.2 + p.d / 2)) });
+        }
+      }
       const makes = st.makes ?? machine.makes ?? (arch === 'packer' && product.stages.packed ? 'packed' : undefined);
       for (const k of [...Object.keys(('take' in st ? st.take : undefined) ?? machine.take ?? {}), ...(('give' in st ? st.give : undefined) ?? machine.give ?? []), ...(machine.tooling?.spare ? [machine.tooling.spare] : []), ...('tooling' in st && st.tooling?.spare ? [st.tooling.spare] : [])]) {
         if (!industry.inventory[k]) throw new Error(`${name}：${st.name ?? machine.label} 用到的库存 ${k} 没有在行业包 inventory 里定义`);
@@ -303,6 +353,11 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
         give: ('give' in st ? st.give : undefined) ?? machine.give,
         makes,
         measure: st.measure ?? machine.measure,
+        slots: ('slots' in st ? st.slots : undefined) ?? machine.slots,
+        seats: ('seats' in st ? st.seats : undefined) ?? machine.seats,
+        bySize: ('bySize' in st ? st.bySize : undefined) ?? machine.bySize,
+        until: ('until' in st ? st.until : undefined) ?? machine.until,
+        perPerson: ('perPerson' in st ? st.perPerson : undefined) ?? machine.perPerson,
       };
     });
     const x0 = X_START;
@@ -321,10 +376,11 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       id: `L${n}`, no: n, name, note: cfg.note, z, x0, x1, beltY, beltW, speed, gap,
       spawn: r1(bottleneck * 0.96),
       product, stations, input,
-      conveyor: { id: `CV-${n}`, name: `${name}输送线` },
-      infeed: { id: `BF-${n}`, name: `${name}上料缓存`, cap: 40, x: x0 + 0.6, z: z + beltW / 2 + 1.1 },
-      outfeed: { id: `OF-${n}`, name: `${name}成品托盘`, cap: max.l > 1.5 ? 6 : 18, x: x1 + 1.6, z },
+      conveyor: { id: `CV-${n}`, name: `${name}${words.conveyor}` },
+      infeed: { id: `BF-${n}`, name: `${name}${words.infeed}`, cap: 40, x: x0 + 0.6, z: z + beltW / 2 + 1.1 },
+      outfeed: { id: `OF-${n}`, name: `${name}${words.outfeed}`, cap: max.l > 1.5 ? 6 : 18, x: x1 + 1.6, z },
       lane: z + beltW / 2 + 3.2,
+      places: places.map((p) => ({ ...p, z: r1(z + p.z) })),
       order: {
         no: cfg.order?.no ?? `${industry.terms.order?.prefix ?? 'MO'}-261005-${plantIndex + 1}${pad2(n)}`,
         part: cfg.order?.part ?? product.name,
@@ -348,6 +404,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     l.infeed.x = X(l.infeed.x); l.infeed.z = Z(l.infeed.z);
     l.outfeed.x = X(l.outfeed.x); l.outfeed.z = Z(l.outfeed.z);
     for (const s of l.stations) s.x = X(s.x);
+    for (const p of l.places) { p.x = X(p.x); p.z = Z(p.z); }
   }
   const box = { x0: X(raw.x0), x1: X(raw.x1), z0: Z(raw.z0), z1: Z(raw.z1) };
   const warehouse: Zone = { id: 'WH', name: plant.warehouse, x0: X(2), x1: X(2 + WH_W), z0: box.z0 + 2.5, z1: box.z1 - 2.5, cap: 1600 * lines.length };
@@ -355,29 +412,45 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
   const whDock = X(2 + WH_W + 2);
   const fgDock = X(fgX0 - 1.6);
 
-  const agvs = lines.flatMap((l) => [
+  // forklifts drive the AGVs' rounds; with nobody driving, staff carry and guests walk
+  const vehicleName = lg.internal === 'forklift' ? '叉车' : '车';
+  const agvs = lg.internal === 'none' ? [] : lines.flatMap((l) => [
     {
-      id: `AGV-${pad2(l.no)}A`, name: `${l.name}送料车`,
+      id: `AGV-${pad2(l.no)}A`, name: `${l.name}送料${vehicleName}`,
       route: [{ x: whDock, z: l.lane, act: 'load', line: l.id }, { x: l.infeed.x, z: l.lane, act: 'drop', line: l.id }] as Waypoint[],
     },
     {
-      id: `AGV-${pad2(l.no)}B`, name: `${l.name}成品车`,
+      id: `AGV-${pad2(l.no)}B`, name: `${l.name}${words.goods}${vehicleName}`,
       route: [{ x: fgDock, z: l.lane, act: 'deliver' }, { x: l.outfeed.x, z: l.lane, act: 'pick', line: l.id }] as Waypoint[],
     },
   ]);
 
   const roads = { front: r1(box.z1 + 8), left: r1(box.x0 - 12), right: r1(box.x1 + 7) };
   const midZ = r1((box.z0 + box.z1) / 2);
-  const trucks = [
-    {
-      id: 'TRK-IN', name: '原料进厂车', kind: 'in' as const, carrier: plant.carriers[0],
-      route: [{ x: roads.left - 90, z: roads.front }, { x: roads.left, z: roads.front }, { x: roads.left, z: midZ, act: 'dock' }, { x: roads.left, z: box.z0 - 70 }] as Waypoint[],
-    },
-    {
-      id: 'TRK-OUT', name: '成品发运车', kind: 'out' as const, carrier: plant.carriers[1],
-      route: [{ x: roads.right + 100, z: roads.front }, { x: roads.right, z: roads.front }, { x: roads.right, z: midZ, act: 'dock' }, { x: roads.right, z: box.z0 - 70 }] as Waypoint[],
-    },
-  ];
+  const inV = lg.inbound.vehicle;
+  const outV = lg.outbound.vehicle;
+  const trucks: PlantLayout['trucks'] = [];
+  if (inV !== 'none') {
+    trucks.push({
+      id: 'TRK-IN', name: words.inTruck, kind: 'in', carrier: plant.carriers[0], vehicle: inV,
+      route: [{ x: roads.left - 90, z: roads.front }, { x: roads.left, z: roads.front }, { x: roads.left, z: midZ, act: 'dock' }, { x: roads.left, z: box.z0 - 70 }],
+    });
+  }
+  if (outV === 'rider') {
+    // couriers ride up to the pick-up counter by the front door and off again
+    const counter = r1(box.z1 - 1.2);
+    for (let i = 1; i <= lg.outbound.count; i++) {
+      trucks.push({
+        id: `RD-${i}`, name: `${words.outTruck} ${i}`, kind: 'out', carrier: plant.carriers[1], vehicle: 'rider',
+        route: [{ x: roads.right + 80 + i * 6, z: roads.front }, { x: r1(fg.x0 + 2 + i * 1.6), z: roads.front }, { x: r1(fg.x0 + 2 + i * 1.6), z: counter + 1.6, act: 'dock' }, { x: r1(fg.x0 + 2 + i * 1.6), z: roads.front }, { x: roads.left - 80, z: roads.front }],
+      });
+    }
+  } else if (outV !== 'none') {
+    trucks.push({
+      id: 'TRK-OUT', name: words.outTruck, kind: 'out', carrier: plant.carriers[1], vehicle: outV,
+      route: [{ x: roads.right + 100, z: roads.front }, { x: roads.right, z: roads.front }, { x: roads.right, z: midZ, act: 'dock' }, { x: roads.right, z: box.z0 - 70 }],
+    });
+  }
 
   const W = box.x1 - box.x0;
   const D = box.z1 - box.z0;
@@ -392,7 +465,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     name: plant.name,
     badge: plant.badge ?? plant.name.slice(0, 2),
     hall: plant.hall,
-    sub: plant.sub ?? `${industry.name}，${lines.length} 条产线`,
+    sub: plant.sub ?? `${industry.name}，${lines.length} ${words.lines}`,
     industry,
     unit: industry.unit,
     qualityLabel: industry.qualityLabel,
@@ -407,7 +480,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     // a plant that lists its inventory keeps only those items (a BBQ site has no tents)
     inventory: Object.entries(industry.inventory).filter(([key]) => !plant.inventory || key in plant.inventory).map(([key, it]) => {
       const cap = plant.inventory?.[key] ?? it.capacity;
-      return { key, label: it.label, unit: it.unit, kind: it.kind, cap, low: it.low, refill: it.refill ?? Math.ceil(cap / 2), lead: it.lead };
+      return { key, label: it.label, unit: it.unit, kind: it.kind, cap, low: it.low, refill: it.refill ?? Math.ceil(cap / 2), lead: it.lead, price: it.price };
     }),
     lines,
     box,
@@ -417,5 +490,10 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     trucks,
     roads,
     home,
+    words,
+    logistics: lg,
+    kpis: plant.kpis ?? industry.kpis,
+    demand: plant.demand ?? industry.demand,
+    supply: plant.supply,
   };
 }

@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils';
 import type { PlantSim } from '@/sim/plant';
 import type { Asset, Line } from '@/sim/types';
 import { goToAsset, groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
-import { groupFigures } from './group';
-import { ALERT_STATES, CHIP, STATE_LABEL, hhmm, pct, rate } from './status';
+import { companyWords, groupFigures, shortLabel } from './group';
+import { ALERT_STATES, CHIP, hhmm, pct, rate, stateLabel } from './status';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 
@@ -35,15 +35,18 @@ export function Tracker() {
     [<CheckIcon key="4" />, w[4], finished ? '已完成' : eta ? `预计 ${hhmm(eta)}` : '待定', finished ? 'now' : ''],
     [<TruckIcon key="5" />, w[5], `${layout.qualityLabel} ${pct(k.quality, 1)}`, ''],
   ];
-  const t = sim.trucks.find((x) => x.kind === 'out')!;
-  const ta = t.asset;
+  const words = layout.words;
+  // a site kept stocked by another shows its delivery van; others the vehicle taking their goods away
+  const t = (sim.supplier ? sim.trucks.find((x) => x.kind === 'in') : undefined) ?? sim.trucks.find((x) => x.kind === 'out');
+  const ta = t?.asset;
+  const next = sim.supplier ? sim.incoming[0] : undefined;
   return (
     <section className="absolute bottom-5 left-5 z-20 grid w-[min(790px,calc(100vw-560px))] grid-cols-[1fr_230px] gap-4.5 rounded-2xl bg-card px-4.5 py-4 shadow-float max-xl:grid-cols-1 max-lg:hidden">
       <div>
         <div className="mb-3.5 flex items-center gap-2.5">
           <span className="grid size-[22px] place-items-center rounded-md bg-primary text-primary-foreground"><ClipboardListIcon className="size-3.5" /></span>
           <h3 className="shrink-0 whitespace-nowrap text-[15px] font-extrabold">{layout.terms.order?.title ?? '工单跟踪'}</h3>
-          <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{line.name}  {o.no}  {o.part}{line.lot?.no ? `  炉号 ${line.lot.no}${line.lot.supplier ? `（${line.lot.supplier}）` : ''}` : ''}</span>
+          <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{line.name}  {o.no}  {o.part}{line.lot?.no ? `  ${words.lot} ${line.lot.no}${line.lot.supplier ? `（${line.lot.supplier}）` : ''}` : ''}</span>
           <div className="ml-auto flex max-w-[50%] shrink-0 gap-0.5 overflow-x-auto rounded-lg bg-muted p-[3px] [scrollbar-width:none]">
             {sim.lines.map((l) => (
               <button
@@ -70,17 +73,21 @@ export function Tracker() {
           ))}
         </ol>
       </div>
-      <button
-        type="button"
-        onClick={() => useUI.getState().select(ta.id, true)}
-        className="grid grid-cols-[1fr_auto] content-center gap-x-2 gap-y-1 rounded-2xl bg-surface px-3.5 py-3 text-left transition-colors hover:bg-brand-soft max-xl:hidden"
-      >
-        <h4 className="text-sm font-extrabold">{ta.id}</h4>
-        <ChevronRightIcon className="size-4 text-muted-foreground" />
-        <p className="col-span-2 text-xs text-muted-foreground">{ta.carrier}，{ta.state === 'away' ? '成品出厂车' : `装载 ${t.load} ${layout.unit}`}</p>
-        <span className={cn('col-span-2 justify-self-start rounded-md px-2 py-0.5 text-[11.5px] font-bold', CHIP[ta.state])}>{STATE_LABEL[ta.state]}</span>
-        <p className="col-span-2 text-xs text-muted-foreground">{ta.task}</p>
-      </button>
+      {ta && t && (
+        <button
+          type="button"
+          onClick={() => useUI.getState().select(ta.id, true)}
+          className="grid grid-cols-[1fr_auto] content-center gap-x-2 gap-y-1 rounded-2xl bg-surface px-3.5 py-3 text-left transition-colors hover:bg-brand-soft max-xl:hidden"
+        >
+          <h4 className="text-sm font-extrabold">{ta.id}</h4>
+          <ChevronRightIcon className="size-4 text-muted-foreground" />
+          <p className="col-span-2 text-xs text-muted-foreground">
+            {ta.carrier}，{next ? `${next.no}（${Object.entries(next.items).map(([k, n]) => `${sim.inventory.find((i) => i.key === k)?.label ?? k} ${n}`).join('、')}）` : ta.state === 'away' ? ta.spec?.label : `装载 ${t.load} ${layout.unit}`}
+          </p>
+          <span className={cn('col-span-2 justify-self-start rounded-md px-2 py-0.5 text-[11.5px] font-bold', CHIP[ta.state])}>{stateLabel(layout, ta.state)}</span>
+          <p className="col-span-2 text-xs text-muted-foreground">{ta.task}</p>
+        </button>
+      )}
     </section>
   );
 }
@@ -113,6 +120,7 @@ const MiniBar = ({ label, value, danger }: { label: string; value: number; dange
 
 const TABS = [
   ['machines', '设备'],
+  ['places', '桌位'],
   ['stock', '库存'],
   ['vehicles', '车辆'],
   ['alarms', '报警'],
@@ -155,15 +163,19 @@ export function Fleet() {
   const all = [...sim.assets.values()];
   const machines = all.filter(isMachine);
   const vehicles = all.filter((a) => a.type === 'agv' || a.type === 'truck');
+  const places = sim.places;
   const alarms = sim.activeAlarms();
+  const w = layout.words;
   const counts: Record<string, string> = {
     machines: `${machines.filter((a) => a.state === 'running').length}/${machines.length}`,
     vehicles: `${vehicles.filter((a) => a.state === 'moving' || a.state === 'handling').length}/${vehicles.length}`,
     alarms: `${alarms.length}`,
+    places: `${places.filter((a) => a.state === 'occupied').length}/${places.length}`,
   };
   const lowStock = sim.inventory.filter((i) => i.avail <= Math.floor(i.cap * i.low)).length;
   if (sim.inventory.length) counts.stock = lowStock ? `${lowStock} 低` : `${sim.inventory.length}`;
-  const tabs = TABS.filter(([id]) => id !== 'stock' || sim.inventory.length);
+  const tabs = TABS.filter(([id]) => (id !== 'stock' || sim.inventory.length) && (id !== 'places' || places.length) && (id !== 'vehicles' || vehicles.length));
+  const tabLabel = (id: string, d: string) => (id === 'orders' ? layout.terms.order?.tab ?? d : id === 'machines' ? w.machine : id === 'places' ? `${places[0]?.spec?.label ?? '桌位'}` : d);
   const unacked = alarms.some((x) => !x.acked);
   const pick = (t: string) => {
     const s = useUI.getState();
@@ -185,7 +197,7 @@ export function Fleet() {
         <span className="grid size-[22px] shrink-0 place-items-center rounded-md bg-primary text-primary-foreground max-md:hidden"><ListIcon className="size-3.5" /></span>
         <div role="tablist" className="flex gap-0.5 rounded-[10px] bg-muted p-[3px] max-md:flex-1 max-md:overflow-x-auto max-md:[scrollbar-width:none]">
           {tabs.map(([id, defaultLabel]) => {
-            const label = id === 'orders' ? layout.terms.order?.tab ?? defaultLabel : defaultLabel;
+            const label = tabLabel(id, defaultLabel);
             return (
             <button
               key={id}
@@ -215,23 +227,24 @@ export function Fleet() {
           <Row key={a.id} a={a}>
             <IdCell id={a.id} sub={groupName(a)} />
             <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
-              <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
+              <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{stateLabel(layout, a.state)}</span>
               <span className="tabular-nums">{a.temp.toFixed(0)}°C</span>
             </span>
-            <MiniBar label={`稼动 ${(a.util * 100).toFixed(0)}%`} value={a.util * 100} />
+            <MiniBar label={`${w.util.replace(/率$/, '')} ${(a.util * 100).toFixed(0)}%`} value={a.util * 100} />
           </Row>
         ))}
+        {tab === 'places' && <PlaceList sim={sim} />}
         {tab === 'stock' && <InventoryList sim={sim} />}
         {tab === 'vehicles' && vehicles.map((a) => (
           <Row key={a.id} a={a}>
             <IdCell id={a.id} sub={a.type === 'agv' ? a.name : a.carrier ?? ''} />
             <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
               <i className={cn('size-[7px] shrink-0 rounded-full', a.state === 'fault' ? 'bg-destructive' : a.state === 'moving' ? 'bg-primary' : 'bg-amber-400')} />
-              <span className="truncate">{a.task || STATE_LABEL[a.state]}</span>
+              <span className="truncate">{a.task || stateLabel(layout, a.state)}</span>
             </span>
             {a.type === 'agv'
               ? <MiniBar label={`${a.battery.toFixed(0)}%`} value={a.battery} danger={a.battery < 20} />
-              : <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>}
+              : <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{stateLabel(layout, a.state)}</span>}
           </Row>
         ))}
         {tab === 'alarms' && (alarms.length ? alarms.map((al) => (
@@ -245,7 +258,7 @@ export function Fleet() {
               ? <small className="text-[11.5px] text-muted-foreground">已确认</small>
               : <Button variant="outline" size="sm" className="h-[26px]" onClick={() => { sim.ack(al.id); useUI.getState().bump(); }}>确认</Button>}
           </div>
-        )) : <p className="px-2 py-4.5 text-center text-[12.5px] text-muted-foreground">没有未处理的报警。在设备详情里点“模拟故障”可以演练处置流程。</p>)}
+        )) : <p className="px-2 py-4.5 text-center text-[12.5px] text-muted-foreground">没有未处理的报警。在{w.machine}详情里点“模拟故障”可以演练处置流程。</p>)}
         {tab === 'log' && sim.log.slice(0, 40).map((x, i) => (
           <button key={i} type="button" onClick={() => useUI.getState().select(x.asset, true)} className="grid w-full grid-cols-[56px_64px_1fr] gap-1.5 border-b px-1.5 py-1.5 text-left text-xs text-muted-foreground last:border-b-0 hover:bg-surface">
             <time className="text-muted-foreground/70 tabular-nums">{hhmm(x.at, true)}</time>
@@ -280,6 +293,30 @@ const GROUP_TABS = [
   ['log', '事件'],
 ] as const;
 
+/** The places of a site (tables, pitches): who is at each, since when, and whether a system reports it. */
+export function PlaceList({ sim }: { sim: PlantSim }) {
+  const L = sim.layout;
+  return (
+    <>
+      {sim.places.map((a) => {
+        const pl = a.place!;
+        const min = Math.max(0, Math.round((sim.elapsed - (a.since ?? 0)) / 60));
+        const live = !!a.live && Date.now() - a.live.at < 3 * 3600_000;
+        return (
+          <Row key={a.id} a={a}>
+            <IdCell id={a.id} sub={`${pl.area} · ${pl.seats} 座`} />
+            <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
+              <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{stateLabel(L, a.state)}</span>
+              <span className="truncate tabular-nums">{a.state === 'occupied' ? `${a.count} 人 · ${min} 分钟` : a.state === 'free' ? '' : `${min} 分钟`}</span>
+            </span>
+            <span className={cn('rounded px-1 py-px text-[10.5px] font-bold', live ? 'bg-success-soft text-success' : 'bg-surface text-muted-foreground')}>{live ? '实测' : '仿真'}</span>
+          </Row>
+        );
+      })}
+    </>
+  );
+}
+
 /** Machines that need someone first, then the rest by plant. */
 const severity = (a: Asset) => (a.state === 'fault' ? 0 : ALERT_STATES.has(a.state) ? 1 : a.state === 'running' ? 3 : 2);
 
@@ -292,6 +329,7 @@ export function GroupFleet() {
   useTick();
   const rt = runtime();
   const g = groupFigures(rt.plants);
+  const cw = companyWords(rt.plants);
   const stored = useUI((s) => s.fleetTab);
   const tab = GROUP_TABS.some(([id]) => id === stored) ? stored : 'plants';
   const open = useUI((s) => s.sheetOpen);
@@ -324,7 +362,9 @@ export function GroupFleet() {
       <div className="flex items-center gap-2.5">
         <span className="grid size-[22px] shrink-0 place-items-center rounded-md bg-primary text-primary-foreground max-md:hidden"><ListIcon className="size-3.5" /></span>
         <div role="tablist" className="flex gap-0.5 rounded-[10px] bg-muted p-[3px] max-md:flex-1 max-md:overflow-x-auto max-md:[scrollbar-width:none]">
-          {GROUP_TABS.map(([id, label]) => (
+          {GROUP_TABS.map(([id, d]) => {
+            const label = id === 'plants' ? cw.plant : id === 'machines' ? cw.machine : d;
+            return (
             <button
               key={id}
               type="button"
@@ -336,7 +376,8 @@ export function GroupFleet() {
               {label}
               {counts[id] && <b className={cn('ml-1 font-semibold text-muted-foreground/70', id === 'alarms' && unacked && 'font-extrabold text-destructive')}>{counts[id]}</b>}
             </button>
-          ))}
+            );
+          })}
         </div>
         {tab === 'alarms' && unacked && (
           <Button variant="link" size="sm" className="ml-auto px-1 font-bold max-md:hidden" onClick={() => { for (const p of rt.plants) p.sim.ackAll(); useUI.getState().bump(); }}>全部确认</Button>
@@ -358,7 +399,7 @@ export function GroupFleet() {
                 <small className="truncate text-[11px] text-muted-foreground">{p.layout.hall}</small>
               </span>
             </span>
-            {([['OEE', pct(f.oee), false], [`${p.layout.unit}/时`, rate(f.tp), false], ['报警', `${f.alarms}`, f.alarms > 0], ['故障', `${f.faults}`, f.faults > 0]] as const).map(([label, v, bad]) => (
+            {([[shortLabel(f.head), f.head.text, !!f.head.bad], [`${p.layout.unit}/时`, rate(f.tp), false], ['报警', `${f.alarms}`, f.alarms > 0], ['故障', `${f.faults}`, f.faults > 0]] as const).map(([label, v, bad]) => (
               <span key={label} className="grid justify-items-end leading-tight">
                 <b className={cn('font-extrabold tabular-nums', bad && 'text-destructive')}>{v}</b>
                 <small className="text-[10.5px] text-muted-foreground">{label}</small>
@@ -377,10 +418,10 @@ export function GroupFleet() {
             <Badge text={p.layout.badge} />
             <IdCell id={a.id} sub={a.line?.name ?? ''} />
             <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
-              <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
+              <span className={cn('rounded-md px-2 py-0.5 text-xs font-bold', CHIP[a.state])}>{stateLabel(p.layout, a.state)}</span>
               <span className="tabular-nums">{a.temp.toFixed(0)}°C</span>
             </span>
-            <MiniBar label={`稼动 ${(a.util * 100).toFixed(0)}%`} value={a.util * 100} />
+            <MiniBar label={`${p.layout.words.util.replace(/率$/, '')} ${(a.util * 100).toFixed(0)}%`} value={a.util * 100} />
             <ChevronRightIcon className="size-3.5 text-muted-foreground" />
           </button>
         ))}

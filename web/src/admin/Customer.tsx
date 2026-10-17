@@ -22,6 +22,7 @@ import { Blueprint, BlueprintLegend } from './Blueprint';
 import { PageHead, useConsole } from './Console';
 import { Calibration } from './Calib';
 import { DevicePanel } from './Devices';
+import { TablePanel } from './Tables';
 import { ChecksPanel } from './Checks';
 import { GuardPanel } from './Guard';
 import { ValuePanel } from './Value';
@@ -251,7 +252,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
           <Suspense fallback={null}><KnowledgeBase company={c.id} admin={ov.me.role === 'admin'} /></Suspense>
         </TabsContent>
         <TabsContent value="orders"><OrderBoard c={c} /></TabsContent>
-        <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><DevicePanel c={c} /><Connect c={c} /><AnomalyPanel c={c} /></TabsContent>
+        <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><DevicePanel c={c} /><TablePanel c={c} /><Connect c={c} /><AnomalyPanel c={c} /></TabsContent>
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
         <TabsContent value="checks"><ChecksPanel c={c} /></TabsContent>

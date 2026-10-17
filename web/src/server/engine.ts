@@ -7,7 +7,8 @@ import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry,
 import { companyOntology } from '@/config/ontology';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
 import { History } from '@/sim/history';
-import { isMachineSpec, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
+import { isMachineSpec, linkPlants, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
+import { reported } from '@/sim/venue';
 import type { Calibration, Command, ExtOrder, OrderEvent } from '@/sim/types';
 import type { PlantLayout } from '@/core/layout';
 
@@ -29,6 +30,7 @@ const builtinCompanies = new Set<string>();
 
 function register(bundle: CompanyBundle) {
   const plants = bundle.plants.map((l) => new PlantSim(l));
+  linkPlants(plants);
   attachFeed(bundle.company.id, plants);
   companies.set(bundle.company.id, { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])), timeScale: 1 });
   applyCalibration(bundle.company.id);
@@ -515,6 +517,34 @@ function command(c: string, plant: string, asset: string, cmd: Command, arg: num
   return JSON.stringify(p.command(asset, cmd, arg ?? undefined));
 }
 
+// ---------- places (tables, pitches) ----------
+
+/** Every place of every plant of a company as it stands: what the simulation or the reports say. */
+function tables(c: string): string {
+  const co = get(c);
+  if (!co) return '[]';
+  return JSON.stringify(co.plants.flatMap((p) => p.places.map((a) => {
+    const rep = reported(a);
+    return {
+      plant: p.layout.id, plantName: p.layout.name, line: a.line?.id ?? '', lineName: a.line?.name ?? '', id: a.id, area: a.place!.area, seats: a.place!.seats,
+      label: a.place!.label, state: a.state, people: a.count, since: Math.round(p.epoch + (a.since ?? 0) * 1000), source: rep ? a.live!.src : 'sim', reported: rep,
+      waiting: p.venue?.queue.length ?? 0,
+    };
+  })));
+}
+
+/** One reported state of a place (a camera, the POS, a waiter's phone); false for no such place. */
+function reportTable(c: string, plant: string, table: string, state: string, people: number, since: number, source: string): boolean {
+  return get(c)?.byId[plant]?.reportPlace(table, state, people, since, source) ?? false;
+}
+
+/** Sessions the simulation opened or closed at its places since the last call. */
+function tableSessions(c: string): string {
+  const co = get(c);
+  if (!co) return '[]';
+  return JSON.stringify(co.plants.flatMap((p) => (p.venue ? p.venue.sessions.splice(0) : [])));
+}
+
 function ingest(c: string, plant: string, asset: string, field: string, value: number | string | boolean, src: string): boolean {
   return get(c)?.byId[plant]?.ingest(asset, field, value, src) ?? false;
 }
@@ -665,7 +695,10 @@ function historyDims(c: string): string {
 function setClock(c: string, ms: number): boolean {
   const co = get(c);
   if (!co) return false;
-  for (const p of co.plants) p.epoch = ms - p.elapsed * 1000;
+  for (const p of co.plants) {
+    p.epoch = ms - p.elapsed * 1000;
+    p.rewarm();
+  }
   return true;
 }
 
@@ -899,4 +932,5 @@ function list(): string {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
+  tables, reportTable, tableSessions,
 };

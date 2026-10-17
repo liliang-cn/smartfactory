@@ -83,7 +83,7 @@ export interface HistoryBatch {
   complaints: Row[];
 }
 
-interface Open { state: AssetState; since: number; short: boolean; reason: string; hits: number; life: number; limit: number; trigger: string }
+interface Open { state: AssetState; since: number; short: boolean; planned?: boolean; reason: string; hits: number; life: number; limit: number; trigger: string }
 
 export class History {
   private sim: PlantSim;
@@ -129,7 +129,8 @@ export class History {
     for (const line of this.sim.lines) {
       if (this.only && !this.only.has(line.id)) continue;
       const lh = this.lineHour(line);
-      lh.planned += dt;
+      // meal breaks and closed hours are planned stops: not production time
+      if (this.sim.planned()) lh.planned += dt;
       const neck = this.neck(line);
       if (neck.state === 'running') lh.run += dt;
       for (const a of line.stations) {
@@ -176,8 +177,8 @@ export class History {
       const t = a.tool;
       const share = t ? t.used / t.life : 0;
       this.open.set(a.id, {
-        state: a.state, since: now, short: a.state === 'fault' && /^短停：/.test(a.fault?.text ?? ''),
-        reason: a.state === 'fault' ? (a.fault?.text ?? '设备故障').replace(/^短停：/, '') : a.state === 'changeover' ? `更换${t?.label ?? '工装'}` : a.state === 'maint' ? '保养维护' : '停机',
+        state: a.state, since: now, short: a.state === 'fault' && /^短停：/.test(a.fault?.text ?? ''), planned: a.state === 'stopped' && !!a.pause,
+        reason: a.state === 'fault' ? (a.fault?.text ?? '设备故障').replace(/^短停：/, '') : a.state === 'changeover' ? `更换${t?.label ?? '工装'}` : a.state === 'maint' ? '保养维护' : a.pause ? a.pause : '停机',
         hits: t?.used ?? 0, life: t?.life ?? 0, limit: t?.limit ?? 1,
         trigger: !t ? '' : a.changeReason ? a.changeReason : share >= 1 ? '到寿命' : share >= (t.limit ?? 1) - 1e-9 ? '计划更换' : '指令更换',
       });
@@ -189,7 +190,7 @@ export class History {
 
   private close(a: Asset, line: Line, o: Open, now: number) {
     const ev = { machine: this.id(a), line: this.id(line), start: localTime(o.since), end: localTime(now) };
-    this.out.downtime.push({ ...ev, category: o.short ? '短停机' : DOWN[o.state]!, reason: o.reason });
+    this.out.downtime.push({ ...ev, category: o.short ? '短停机' : o.planned ? '计划停机' : DOWN[o.state]!, reason: o.reason });
     if (o.state === 'changeover' && a.tool) {
       // a part-number change mounts tools already paid for; a worn one costs a new or reconditioned tool
       this.out.toolChanges.push({ ...ev, machine: this.id(a), tool: a.tool.label, hits: o.hits, life: o.life, limit: o.limit, trigger: o.trigger, cost: o.trigger === '换型' ? 0 : a.tool.cost ?? 0 });

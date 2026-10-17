@@ -12,7 +12,9 @@ import type { Asset } from '@/sim/types';
 import { runtime, usePlant, useTick, useUI } from '@/state/store';
 import { fgCapacity } from '@/three/logistics';
 import { AssetIcon } from './icons';
-import { CHIP, STATE_LABEL, hhmm } from './status';
+import { CHIP, hhmm, stateLabel } from './status';
+import { useLive } from '@/live/client';
+import { reported } from '@/sim/venue';
 import { HistoryChart, RANGES, type Range, type Summary } from './History';
 import { TrendChart, spcStats, type Metric } from './TrendChart';
 import { InventoryList } from './Panels';
@@ -45,6 +47,20 @@ const Unit = ({ children }: { children: React.ReactNode }) => <u className="ml-0
 
 function Tiles({ a }: { a: Asset }) {
   const { sim, layout } = usePlant();
+  const w = layout.words;
+  if (a.type === 'table') {
+    const pl = a.place!;
+    const min = Math.max(0, Math.round((sim.elapsed - (a.since ?? 0)) / 60));
+    const rep = reported(a);
+    return (
+      <>
+        <Tile label="人数" bar={a.count / pl.seats} tone={a.count > pl.seats ? 'warn' : 'brand'}>{a.count}<Unit>/ {pl.seats} 座</Unit></Tile>
+        <Tile label={a.state === 'occupied' ? (pl.overnight ? '已住' : '已坐') : '已有'}>{min}<Unit>分钟</Unit></Tile>
+        <Tile label="区域">{pl.area}</Tile>
+        <Tile label="数据来源" wide>{rep ? <>实测<Unit>{a.live!.src}，{Math.round((Date.now() - a.live!.at) / 60000)} 分钟前上报</Unit></> : <>仿真<Unit>没有系统上报这{pl.label}</Unit></>}</Tile>
+      </>
+    );
+  }
   if (isMachine(a)) {
     const s = a.spec!;
     const m = a.measure;
@@ -60,7 +76,7 @@ function Tiles({ a }: { a: Asset }) {
               </em>
               <i className="block text-[11px] font-semibold not-italic text-muted-foreground">标准 {lim}</i>
             </Tile>
-            <Tile label="本班超差">{a.rejects}<Unit>台</Unit></Tile>
+            <Tile label="本班超差">{a.rejects}<Unit>{layout.unit}</Unit></Tile>
           </>
         )}
         <Tile label="温度" bar={(a.temp - 20) / (s.trip! - 20)} tone={a.temp > s.warn! ? 'bad' : a.temp > s.warn! - 8 ? 'warn' : 'ok'}>
@@ -70,11 +86,15 @@ function Tiles({ a }: { a: Asset }) {
         <Tile label="健康度" bar={a.health} tone={a.health < 0.35 ? 'bad' : a.health < 0.6 ? 'warn' : 'ok'}>
           {(a.health * 100).toFixed(0)}<Unit>%</Unit>
         </Tile>
-        <Tile label="稼动率" bar={a.util}>{(a.util * 100).toFixed(0)}<Unit>%</Unit></Tile>
-        <Tile label="节拍">
-          {a.cycle ? <>{(a.cycle / a.speed).toFixed(1)}<Unit>秒</Unit></> : <>{(0.55 * a.speed).toFixed(2)}<Unit>m/s</Unit></>}
-        </Tile>
-        <Tile label="累计循环">{a.cycles.toLocaleString()}<Unit>次</Unit></Tile>
+        <Tile label={w.util} bar={a.util}>{(a.util * 100).toFixed(0)}<Unit>%</Unit></Tile>
+        {a.slots ? (
+          <Tile label="在用">{a.count}<Unit>/ {a.slots}</Unit></Tile>
+        ) : (
+          <Tile label={w.cycle}>
+            {a.cycle ? a.cycle >= 600 ? <>{(a.cycle / a.speed / 60).toFixed(0)}<Unit>分钟</Unit></> : <>{(a.cycle / a.speed).toFixed(1)}<Unit>秒</Unit></> : <>{(0.55 * a.speed).toFixed(2)}<Unit>m/s</Unit></>}
+          </Tile>
+        )}
+        <Tile label="累计次数">{a.cycles.toLocaleString()}<Unit>次</Unit></Tile>
         {a.tool && (() => {
           const t = a.tool;
           const used = t.used / t.life;
@@ -97,18 +117,26 @@ function Tiles({ a }: { a: Asset }) {
         <Tile label="速度">{a.vel.toFixed(2)}<Unit>m/s</Unit></Tile>
         <Tile label="功率">{a.power.toFixed(2)}<Unit>kW</Unit></Tile>
         <Tile label="当前任务" wide>{a.task || '空闲'}</Tile>
-        <Tile label="载货">{g.cargo ? <>{g.cargo.n}<Unit>{g.cargo.kind === 'raw' ? '件原料' : `${layout.unit}成品`}</Unit></> : '空车'}</Tile>
+        <Tile label="载货">{g.cargo ? <>{g.cargo.n}<Unit>{g.cargo.kind === 'raw' ? `件${w.raw}` : `${layout.unit}${w.goods}`}</Unit></> : '空车'}</Tile>
       </>
     );
   }
   if (a.type === 'truck') {
     const t = a.truck!;
+    const next = a.kind === 'in' && sim.supplier ? sim.incoming[0] : undefined;
+    const label = (k: string) => sim.inventory.find((i) => i.key === k);
     return (
       <>
-        <Tile label="承运商">{a.carrier}</Tile>
-        <Tile label="装载">{a.kind === 'in' ? (t.phase === 'away' ? 0 : t.load) : t.load}<Unit>{a.kind === 'in' ? '件原料' : `${layout.unit}成品`}</Unit></Tile>
-        <Tile label="方向">{a.kind === 'in' ? '进厂' : '出厂'}</Tile>
-        <Tile label="当前任务" wide>{a.task || STATE_LABEL[a.state]}</Tile>
+        <Tile label="承运方">{a.carrier}</Tile>
+        {t.vehicle === 'rider' ? (
+          <Tile label="取单">{t.load}<Unit>单</Unit></Tile>
+        ) : next ? (
+          <Tile label="下一趟" wide>{next.no.slice(-4)}<Unit>{hhmm(((next.eta + 8 * 3600_000) % 86_400_000) / 1000)} 到，{Object.entries(next.items).map(([k, n]) => `${label(k)?.label ?? k} ${n}`).join('、')}</Unit></Tile>
+        ) : (
+          <Tile label="装载">{a.kind === 'in' ? (t.phase === 'away' ? 0 : t.load) : t.load}<Unit>{a.kind === 'in' ? `件${w.raw}` : `${layout.unit}${w.goods}`}</Unit></Tile>
+        )}
+        <Tile label="方向">{a.kind === 'in' ? '送来' : '取走'}</Tile>
+        <Tile label="当前任务" wide>{a.task || stateLabel(layout, a.state)}</Tile>
       </>
     );
   }
@@ -117,10 +145,51 @@ function Tiles({ a }: { a: Asset }) {
       ? sim.agvs.find((g) => g.route.some((w) => w.line === a.line!.id && w.act === 'drop'))?.asset
       : sim.trucks.find((t) => t.kind === 'in')?.asset;
     const f = a.stock / a.cap;
+    const next = sim.incoming[0];
+    const ib = sim.inbound;
+    const at = (ms: number) => hhmm(((ms + 8 * 3600_000) % 86_400_000) / 1000);
+    // a storeroom of what the site uses (shown below as its inventory): the next delivery is what matters
+    if (a.type === 'warehouse' && layout.logistics.store !== 'racks') {
+      return (
+        <>
+          <Tile label="下一趟配送" wide>{next ? <>{at(next.eta)}<Unit>{next.no}，{Object.entries(next.items).map(([k, n]) => `${sim.inventory.find((i) => i.key === k)?.label ?? k} ${n}`).join('、')}</Unit></> : sim.supplier ? '没有在途' : '按需补货'}</Tile>
+          <Tile label={w.inTruck}>{feeder?.id ?? '—'}</Tile>
+        </>
+      );
+    }
     return (
       <>
         <Tile label="库存" wide bar={f} tone={f < 0.15 ? 'bad' : f < 0.3 ? 'warn' : 'ok'}>{a.stock}<Unit>/ {a.cap} 件</Unit></Tile>
-        <Tile label={a.type === 'buffer' ? '送料车' : '进厂车'}>{feeder?.id}</Tile>
+        <Tile label={a.type === 'buffer' ? `送料${w.vehicle}` : w.inTruck}>{feeder?.id ?? '人工'}</Tile>
+        {a.type === 'warehouse' && ib && (
+          <Tile label={`下一车${w.raw}`} wide tone={ib.late ? 'bad' : 'ok'} bar={ib.late && sim.wall() >= ib.due ? 1 : undefined}>
+            {at(ib.due)}<Unit>{ib.supplier}，{ib.load} 件{ib.late && sim.wall() >= ib.due ? `，延误，约 ${at(ib.at)} 到` : ''}</Unit>
+          </Tile>
+        )}
+      </>
+    );
+  }
+  if (a.type === 'fgzone' && sim.depot) {
+    const d = sim.depot;
+    const name = (k: string) => layout.lines.find((l) => l.product.key === k)?.product.name ?? k;
+    return (
+      <>
+        <Tile label="在库">{d.batches.reduce((n, b) => n + b.qty, 0)}<Unit>{layout.unit}，{d.batches.length} 批</Unit></Tile>
+        <Tile label="留样">{d.samples.length}<Unit>批</Unit></Tile>
+        <Tile label="今日过期" tone={d.wasted ? 'bad' : 'ok'}>{d.wasted}<Unit>{layout.unit}</Unit></Tile>
+        <div className="col-span-3 grid gap-1 rounded-xl bg-surface px-2.5 py-2 text-xs">
+          <small className="text-[11.5px] text-muted-foreground">批次（先进先出，最早的先发）</small>
+          {d.batches.slice(0, 8).map((b) => {
+            const left = (b.expires - sim.wall()) / 3600_000;
+            return (
+              <span key={b.no} className="grid grid-cols-[1fr_auto_auto] gap-2 tabular-nums">
+                <span className="truncate"><b>{b.no}</b> {name(b.product)}</span>
+                <span>{b.qty} {layout.unit}</span>
+                <span className={cn(left < 12 ? 'font-bold text-destructive' : 'text-muted-foreground')}>{left > 240 ? `${Math.round(left / 24)} 天` : `${Math.max(0, left).toFixed(0)} 小时`}</span>
+              </span>
+            );
+          })}
+        </div>
       </>
     );
   }
@@ -130,18 +199,20 @@ function Tiles({ a }: { a: Asset }) {
     : sim.agvs.find((g) => g.route.some((w) => w.line === a.line!.id && w.act === 'pick'))?.asset;
   return (
     <>
-      <Tile label={a.type === 'fgzone' ? '暂存成品' : '托盘成品'} wide bar={a.count / cap} tone={a.count >= cap ? 'bad' : 'ok'}>{a.count}<Unit>/ {cap} {layout.unit}</Unit></Tile>
-      <Tile label={a.type === 'fgzone' ? '发运车' : '取货车'}>{feeder?.id}</Tile>
+      <Tile label={a.type === 'fgzone' ? `暂存${w.goods}` : w.outfeed} wide bar={a.count / cap} tone={a.count >= cap ? 'bad' : 'ok'}>{a.count}<Unit>/ {cap} {layout.unit}</Unit></Tile>
+      <Tile label={a.type === 'fgzone' ? w.outTruck : `取货${w.vehicle}`}>{feeder?.id ?? '人工'}</Tile>
     </>
   );
 }
 
 function Controls({ a }: { a: Asset }) {
   const command = useUI((s) => s.command);
+  const { layout } = usePlant();
   const [speed, setSpeed] = useState(Math.round(a.speed * 100));
   useEffect(() => setSpeed(Math.round(a.speed * 100)), [a]);
-  if (a.type === 'warehouse') return <Button className="h-9" onClick={() => command(a.id, 'restock')}>原料入库 400 件</Button>;
-  if (a.type === 'fgzone') return <Button className="h-9" onClick={() => command(a.id, 'ship')}>立即发运</Button>;
+  if (a.type === 'warehouse') return layout.logistics.store === 'racks' ? <Button className="h-9" onClick={() => command(a.id, 'restock')}>{layout.words.raw}入库 400 件</Button> : null;
+  // a counter riders take from, or a depot whose van goes out on the delivery rounds: nothing to ship by hand
+  if (a.type === 'fgzone') return layout.logistics.outbound.vehicle === 'rider' || runtime().byId[layout.id]?.sim.depot ? null : <Button className="h-9" onClick={() => command(a.id, 'ship')}>立即发运</Button>;
   if (!isMachine(a) && !isVehicle(a)) return null;
   return (
     <div className="grid gap-3">
@@ -162,10 +233,53 @@ function Controls({ a }: { a: Asset }) {
             <output className="min-w-[42px] text-right font-extrabold text-foreground tabular-nums">{speed}%</output>
           </label>
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            {a.type === 'agv' ? '提速会更快耗电。' : '提速缩短节拍，但会升温并加快磨损，故障率和超差率随之上升。'}
+            {a.type === 'agv' ? '提速会更快耗电。' : `提速缩短${layout.words.cycle}，但会升温并加快磨损，故障率和超差率随之上升。`}
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+interface Session { start: number; end: number | null; people: number; source: string }
+
+/**
+ * Today's sessions at a place: the server's record (simulated and reported alike) when the page is
+ * served by it, otherwise what the simulation in this page has seen.
+ */
+function PlaceSessions({ a }: { a: Asset }) {
+  const { sim, layout } = usePlant();
+  const { status } = useLive();
+  const [rows, setRows] = useState<Session[] | null>(null);
+  const company = runtime().bundle.company.id;
+  const day = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
+  useEffect(() => {
+    setRows(null);
+    if (status !== 'on') return;
+    let gone = false;
+    const load = () => fetch(`/api/tables/${encodeURIComponent(company)}/${encodeURIComponent(layout.id)}/${encodeURIComponent(a.id)}/sessions?day=${day}`)
+      .then((r) => (r.ok ? r.json() : null)).then((j) => { if (!gone && j) setRows(j.sessions ?? []); }).catch(() => {});
+    load();
+    const t = setInterval(load, 30_000);
+    return () => { gone = true; clearInterval(t); };
+  }, [a.id, company, layout.id, status, day]);
+  const local = (sim.venue?.sessions ?? []).filter((s) => s.table === a.id);
+  const list = (rows ?? local).slice(-12).reverse();
+  const at = (ms: number) => hhmm(((ms + 8 * 3600_000) % 86_400_000) / 1000);
+  return (
+    <div className="mt-3">
+      <h3 className="mb-1 text-[13px] font-extrabold">今天这{a.place!.label}</h3>
+      {list.length ? (
+        <ul className="grid gap-1 text-xs text-muted-foreground">
+          {list.map((s, i) => (
+            <li key={i} className="grid grid-cols-[92px_1fr_auto] gap-2 tabular-nums">
+              <span>{at(s.start)} – {s.end ? at(s.end) : '现在'}</span>
+              <span>{s.people} 人{s.end ? `，${Math.round((s.end - s.start) / 60000)} 分钟` : ''}</span>
+              <span className={cn('rounded px-1 text-[10.5px] font-bold', s.source === 'sim' ? 'bg-surface' : 'bg-success-soft text-success')}>{s.source === 'sim' ? '仿真' : s.source}</span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-xs text-muted-foreground">今天还没有{a.place!.label === '桌' ? '客人' : '入住'}记录</p>}
     </div>
   );
 }
@@ -200,10 +314,14 @@ export function Inspector() {
   if (!a) return null;
 
   const where = a.line ? `${a.line.name} ${a.line.note}` : a.group === 'LOG' ? '物流' : '仓储';
+  const venueLine = !!a.line && a.line.gate !== undefined;
   const note = a.maint > 0 ? `维护剩余 ${Math.ceil(a.maint)} 秒`
+    : a.pause ? `${a.pause}暂停`
+    : a.type === 'table' ? (a.state === 'occupied' ? `${a.count} 人` : '')
     : a.type === 'agv' ? `位置 x ${a.agv!.x.toFixed(1)}  z ${a.agv!.z.toFixed(1)}`
-    : a.state === 'running' && a.cycle ? `本件进度 ${(a.progress * 100).toFixed(0)}%`
-    : a.state === 'idle' ? '等待上游来料' : a.state === 'blocked' ? '下游未放行' : '';
+    : a.state === 'running' && a.cycle && !a.slots ? `本${venueLine ? '组' : '件'}进度 ${(a.progress * 100).toFixed(0)}%`
+    : a.type !== 'station' ? ''
+    : a.state === 'idle' ? (venueLine ? '没有客人' : '等待上游来料') : a.state === 'blocked' ? (a.waitFor ? `等${a.waitFor}` : '下游未放行') : '';
   const log = sim.log.filter((x) => x.asset === a.id).slice(0, 4);
   const spc = a.measure && metric === 'meas' ? spcStats(a) : null;
   const last = (a.hist[metric] ?? []).at(-1);
@@ -248,7 +366,7 @@ export function Inspector() {
       </div>
 
       <div className="mt-3.5 mb-3 flex items-center gap-2.5 text-[12.5px] text-muted-foreground">
-        <span className={cn('rounded-lg px-2.5 py-1 text-[12.5px] font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
+        <span className={cn('rounded-lg px-2.5 py-1 text-[12.5px] font-bold', CHIP[a.state])}>{stateLabel(layout, a.state)}</span>
         {liveFields(a) && (
           <span
             className="flex shrink-0 items-center gap-1 rounded-lg bg-brand-soft px-2 py-1 text-[12px] font-bold text-primary"
@@ -268,6 +386,7 @@ export function Inspector() {
           </div>
         )}
         <div className="grid grid-cols-3 gap-2"><Tiles a={a} /></div>
+        {a.type === 'table' && <PlaceSessions a={a} />}
         {isMachine(a) && <MachineHints plant={layout.id} asset={a.id} measured={measured} />}
         {a.type === 'warehouse' && sim.inventory.length > 0 && (
           <div className="mt-3">
@@ -276,7 +395,7 @@ export function Inspector() {
           </div>
         )}
 
-        <div className="mt-3">
+        <div className={cn('mt-3', a.type === 'table' && 'hidden')}>
           <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             {isMachine(a) ? (
               <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
@@ -312,7 +431,7 @@ export function Inspector() {
           )}
         </div>
 
-        {a.line && <ManualRecords company={runtime().bundle.company.id} plant={layout.id} asset={a.id} />}
+        {a.line && a.type !== 'table' && <ManualRecords company={runtime().bundle.company.id} plant={layout.id} asset={a.id} />}
 
         <div className="mt-3.5 border-t pt-3.5"><Controls a={a} /></div>
 

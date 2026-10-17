@@ -55,6 +55,9 @@ export type CheckSubmission = z.infer<typeof P.CheckSubmission>;
 export type AnomalyReport = z.infer<typeof P.AnomalyReport>;
 export type Anomaly = z.infer<typeof P.Anomaly>;
 export type AnomalyResetResult = z.infer<typeof P.AnomalyResetResult>;
+export type TablesOverview = z.infer<typeof P.TablesOverview>;
+export type TableNow = z.infer<typeof P.TableNow>;
+export type TableKpis = z.infer<typeof P.TableKpis>;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public problems: string[] = []) {
@@ -207,6 +210,7 @@ export const approveCommand = (c: string, id: string) => call<CommandRequest>('P
 export const denyCommand = (c: string, id: string, reason: string) => call<CommandRequest>('POST', `${guardPath(c)}/requests/${encodeURIComponent(id)}/deny`, { reason });
 const devicesPath = (c: string) => `/api/admin/devices/${encodeURIComponent(c)}`;
 export const devices = (c: string) => call<BrokerDevices>('GET', devicesPath(c));
+export const tables = (c: string) => call<TablesOverview>('GET', `/api/tables/${encodeURIComponent(c)}`);
 export const addDevice = (c: string, d: RegisterDevice) => call<DeviceCredential>('POST', devicesPath(c), d);
 export const renewDevice = (c: string, id: string) => call<DeviceCredential>('POST', `${devicesPath(c)}/${encodeURIComponent(id)}/renew`);
 export const revokeDevice = (c: string, id: string) => call<BrokerDevice>('DELETE', `${devicesPath(c)}/${encodeURIComponent(id)}`);
@@ -329,10 +333,11 @@ export async function downloadDoc(c: string, id: string, name: string, version?:
 export const DOC_ACCEPT = '.pdf,.docx,.xlsx,.xlsm,.csv,.md,.markdown,.txt';
 export const health = () => call<z.infer<typeof P.Health>>('GET', '/api/health');
 
-export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口' };
+export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
 export const ROLE_NOTE: Record<Exclude<Role, 'visitor'>, string> = {
   member: '看数据，让助手记笔记、登记工单',
   operator: '再加：下发设备指令、调全厂倍速、采纳经营建议',
   admin: '再加：搭场景、管资料和助手、发令牌',
   erp: '给 ERP 之类的系统用：只能发、查、撤这家公司的生产工单，别的都做不了',
+  reporter: '给摄像头盒子、收银系统、桌边传感器用：只能上报这家公司的桌态和用餐记录，别的都做不了',
 };

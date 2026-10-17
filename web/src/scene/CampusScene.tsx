@@ -14,7 +14,7 @@ import type { Asset } from '@/sim/types';
 import { applyTint, buildModel, initTint, type ModelHandle } from '@/three/factory';
 import { P } from '@/three/kit';
 import { buildCampus, buildWorld } from '@/three/world';
-import { plantFigures } from '@/ui/group';
+import { plantFigures, shortLabel } from '@/ui/group';
 import { rate } from '@/ui/status';
 import { CameraRig, type View } from './CameraRig';
 import { Pin } from './Markers';
@@ -248,7 +248,7 @@ const PlantCard = memo(function PlantCard({ plant, hovered, onHover, els }: { pl
         <b className="text-[14px] font-extrabold max-md:hidden">{L.name} {L.hall}</b>
       </span>
       <span className="grid grid-cols-4 gap-3 max-md:flex max-md:gap-2">
-        <Stat label="OEE" icon={<GaugeIcon />} value={`${(f.oee * 100).toFixed(0)}%`} />
+        <Stat label={shortLabel(f.head)} icon={<GaugeIcon />} value={f.head.text} />
         <Stat label={`${L.unit}/时`} icon={<PackageIcon />} value={rate(f.tp)} />
         <Stat label="报警" icon={<BellIcon />} value={f.alarms} tone={f.alarms ? 'bad' : 'muted'} />
         <Stat label="故障" icon={<OctagonAlertIcon />} value={f.faults} tone={f.faults ? 'bad' : 'muted'} />

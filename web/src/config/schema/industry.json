@@ -67,8 +67,374 @@
               }
             }
           }
+        },
+        "plant": {
+          "type": "string"
+        },
+        "lineNoun": {
+          "type": "string"
+        },
+        "machine": {
+          "type": "string"
+        },
+        "lot": {
+          "type": "string"
+        },
+        "raw": {
+          "type": "string"
+        },
+        "goods": {
+          "type": "string"
+        },
+        "infeed": {
+          "type": "string"
+        },
+        "outfeed": {
+          "type": "string"
+        },
+        "conveyor": {
+          "type": "string"
+        },
+        "cycle": {
+          "type": "string"
+        },
+        "util": {
+          "type": "string"
+        },
+        "states": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
+    },
+    "logistics": {
+      "default": {
+        "internal": "agv",
+        "store": "racks",
+        "inbound": {
+          "vehicle": "truck"
+        },
+        "outbound": {
+          "vehicle": "truck",
+          "count": 1
+        }
+      },
+      "type": "object",
+      "properties": {
+        "internal": {
+          "default": "agv",
+          "type": "string",
+          "enum": [
+            "agv",
+            "forklift",
+            "none"
+          ]
+        },
+        "store": {
+          "default": "racks",
+          "type": "string",
+          "enum": [
+            "racks",
+            "shelves",
+            "none"
+          ]
+        },
+        "inbound": {
+          "default": {
+            "vehicle": "truck"
+          },
+          "type": "object",
+          "properties": {
+            "vehicle": {
+              "default": "truck",
+              "type": "string",
+              "enum": [
+                "truck",
+                "van",
+                "none"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "every": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "delay": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        "outbound": {
+          "default": {
+            "vehicle": "truck",
+            "count": 1
+          },
+          "type": "object",
+          "properties": {
+            "vehicle": {
+              "default": "truck",
+              "type": "string",
+              "enum": [
+                "truck",
+                "van",
+                "rider",
+                "none"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "count": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
+        }
+      }
+    },
+    "kpis": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "oee",
+              "throughput",
+              "quality",
+              "power",
+              "turnover",
+              "occupancy",
+              "queue",
+              "ticket",
+              "rating",
+              "served",
+              "takeaway",
+              "checkins",
+              "inUse",
+              "weather",
+              "onTime",
+              "coldChain"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "oee",
+                  "throughput",
+                  "quality",
+                  "power",
+                  "turnover",
+                  "occupancy",
+                  "queue",
+                  "ticket",
+                  "rating",
+                  "served",
+                  "takeaway",
+                  "checkins",
+                  "inUse",
+                  "weather",
+                  "onTime",
+                  "coldChain"
+                ]
+              },
+              "item": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        ]
+      }
+    },
+    "demand": {
+      "type": "object",
+      "properties": {
+        "rate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "curve": {
+          "minItems": 2,
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 24
+              },
+              {
+                "type": "number",
+                "minimum": 0
+              }
+            ],
+            "items": false,
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "week": {
+          "minItems": 7,
+          "maxItems": 7,
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "sizes": {
+          "default": [
+            0.12,
+            0.38,
+            0.22,
+            0.16,
+            0.08,
+            0.04
+          ],
+          "minItems": 1,
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "patience": {
+          "default": [
+            20,
+            70
+          ],
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "balk": {
+          "default": 6,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "fee": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        },
+        "takeaway": {
+          "type": "object",
+          "properties": {
+            "rate": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "take": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "prep": {
+              "default": 12,
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "spend": {
+              "default": [
+                60,
+                140
+              ],
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "number",
+                  "minimum": 0
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": [
+            "rate",
+            "take"
+          ]
+        },
+        "weather": {
+          "type": "object",
+          "properties": {
+            "rain": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "factor": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
+            }
+          },
+          "required": [
+            "rain",
+            "factor"
+          ]
+        }
+      },
+      "required": [
+        "rate",
+        "curve"
+      ]
     },
     "calendar": {
       "default": {},
@@ -139,6 +505,74 @@
             "from",
             "to"
           ]
+        },
+        "shifts": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 24
+              }
+            },
+            "handover": {
+              "default": 15,
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "pace": {
+              "default": 0.5,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "at"
+          ]
+        },
+        "breaks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 24
+              },
+              "minutes": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "label": {
+                "default": "用餐",
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "minutes"
+            ]
+          }
+        },
+        "week": {
+          "minItems": 7,
+          "maxItems": 7,
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
         }
       }
     },
@@ -487,6 +921,14 @@
                 "parts"
               ]
             }
+          },
+          "shelf": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "sample": {
+            "type": "number",
+            "exclusiveMinimum": 0
           }
         },
         "required": [
@@ -755,6 +1197,23 @@
                     "size"
                   ]
                 }
+              },
+              "places": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                }
               }
             },
             "required": [
@@ -922,6 +1381,12 @@
               "rework": {
                 "default": false,
                 "type": "boolean"
+              },
+              "wait": {
+                "type": "number"
+              },
+              "heat": {
+                "type": "number"
               }
             },
             "required": [
@@ -1031,6 +1496,67 @@
               "idle",
               "run"
             ]
+          },
+          "hold": {
+            "type": "number"
+          },
+          "crew": {
+            "type": "boolean"
+          },
+          "slots": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "seats": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "bySize": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "until": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 24
+          },
+          "perPerson": {
+            "type": "boolean"
+          },
+          "place": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "default": "桌",
+                "type": "string"
+              },
+              "size": {
+                "default": [
+                  2.4,
+                  2.4
+                ],
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "items": false,
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
           },
           "upkeep": {
             "default": {
@@ -1165,6 +1691,21 @@
                   "default": 1,
                   "type": "number",
                   "minimum": 1
+                },
+                "process": {
+                  "type": "object",
+                  "properties": {
+                    "lo": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "hi": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
                 }
               },
               "required": [
@@ -1262,6 +1803,10 @@
           "lead": {
             "type": "number",
             "exclusiveMinimum": 0
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0
           }
         },
         "required": [
@@ -1384,6 +1929,12 @@
                     "rework": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "wait": {
+                      "type": "number"
+                    },
+                    "heat": {
+                      "type": "number"
                     }
                   },
                   "required": [
@@ -1466,6 +2017,61 @@
                   "type": "array",
                   "items": {
                     "type": "string"
+                  }
+                },
+                "slots": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "seats": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "bySize": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "until": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 24
+                },
+                "perPerson": {
+                  "type": "boolean"
+                },
+                "place": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "default": "桌",
+                      "type": "string"
+                    },
+                    "size": {
+                      "default": [
+                        2.4,
+                        2.4
+                      ],
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      ],
+                      "items": false,
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
                   }
                 }
               },

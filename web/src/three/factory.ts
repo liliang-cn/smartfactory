@@ -9,6 +9,7 @@ import type { ModelHandle } from './common';
 import { P, bodyMat, colorOf, ramp } from './kit';
 import { buildAGV, buildBuffer, buildConveyor, buildFG, buildOutfeed, buildTruck, buildWarehouse } from './logistics';
 import { animateParts, buildParts } from './parts';
+import { buildCounter, buildPlace, buildRider, buildShelves, buildVan } from './venue';
 
 export type { ModelHandle };
 
@@ -56,16 +57,23 @@ function buildStation(a: Asset, plant: PlantLayout): ModelHandle {
   return model;
 }
 
+/** Nothing to draw (a venue's door and exit are where its people stand, not stacks of anything). */
+const nothing = (): ModelHandle => ({ root: new THREE.Group(), tint: [], top: 1.2, update() {} });
+
 export function buildModel(a: Asset, plant: PlantLayout): ModelHandle {
   const ll = a.line ? plant.lines.find((l) => l.id === a.line!.id)! : null;
+  // a line whose guests come in through the door has no stock beside it
+  const venue = !!plant.demand && !!ll?.places.length;
+  const lg = plant.logistics;
   switch (a.type) {
     case 'conveyor': return buildConveyor(ll!, plant.flow === 'walk', plant.site === 'outdoor');
-    case 'buffer': return buildBuffer(ll!, plant.flow === 'walk');
-    case 'outfeed': return buildOutfeed(ll!, plant.flow === 'walk');
-    case 'warehouse': return buildWarehouse(plant.warehouse);
-    case 'fgzone': return buildFG(plant.fg);
-    case 'agv': return buildAGV();
-    case 'truck': return buildTruck();
+    case 'buffer': return venue ? nothing() : buildBuffer(ll!, plant.flow === 'walk');
+    case 'outfeed': return venue ? nothing() : buildOutfeed(ll!, plant.flow === 'walk');
+    case 'warehouse': return lg.store === 'racks' ? buildWarehouse(plant.warehouse) : lg.store === 'shelves' ? buildShelves(plant.warehouse) : nothing();
+    case 'fgzone': return lg.outbound.vehicle === 'rider' ? buildCounter(plant.fg) : buildFG(plant.fg);
+    case 'agv': return buildAGV(lg.internal === 'forklift');
+    case 'truck': return a.truck?.vehicle === 'rider' ? buildRider() : a.truck?.vehicle === 'van' ? buildVan() : buildTruck();
+    case 'table': return buildPlace(a);
     default: return buildStation(a, plant);
   }
 }

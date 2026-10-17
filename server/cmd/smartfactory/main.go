@@ -53,6 +53,7 @@ import (
 	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
+	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
 	sfweb "smartfactory/internal/web"
@@ -236,7 +237,8 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			case <-ctx.Done():
 				return
 			case e := <-sub.C:
-				if e.Type == "tag" {
+				// a table's state and a POS's session events go to the tables service, not the machines
+				if e.Type == "tag" && !tables.IsReport(e.Tag.Field) {
 					eng.Ingest(e.Tag.Company, e.Tag.Plant, e.Tag.Asset, e.Tag.Field, e.Tag.Value, e.Tag.Source)
 				}
 			}
@@ -466,6 +468,19 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			assistants.Checks = manual
 		}
 	}
+	// the restaurants' tables: what reports them (a camera box, the POS, the waiter page) and the
+	// twin's own sessions where nothing does
+	var dining *tables.Service
+	if cfg.Data != "" {
+		if dining, err = tables.Open(cfg.Data, eng, hub, log); err != nil {
+			return fmt.Errorf("tables: %w", err)
+		}
+		defer dining.Close()
+		go dining.Run(ctx)
+		if assistants != nil {
+			assistants.Tables = dining
+		}
+	}
 	// what happens to the machines (checks, reading hints, calibrations, AI commands), in each
 	// company's knowledge base
 	if kb != nil {
@@ -486,9 +501,12 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if manual != nil {
 		mcptools.AddChecks(ms, manual)
 	}
+	if dining != nil {
+		mcptools.AddTables(ms, dining)
+	}
 	ws := &sfweb.Server{
 		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Devices: devs, MQTT: mq, Checks: manual, Hints: hints, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
-		History: plants,
+		History: plants, Tables: dining,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
@@ -543,7 +561,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 func runToken(args []string) error {
 	fs := flag.NewFlagSet("token", flag.ExitOnError)
 	name := fs.String("name", "", "who holds it, as the audit log shows it")
-	role := fs.String("role", "member", "member | operator | admin | erp (the order API only)")
+	role := fs.String("role", "member", "member | operator | admin | erp (the order API only) | reporter (table reports only)")
 	companies := fs.String("company", "*", "companies it covers, comma-separated; * for every company")
 	expires := fs.String("expires", "", "last day it works, YYYY-MM-DD (optional)")
 	fs.Parse(args)

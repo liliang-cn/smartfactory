@@ -168,7 +168,8 @@ func TestChuanchuan(t *testing.T) {
 	until(13)
 	after, now := good(), units()
 	for _, id := range []string{"kitchen", "chunxi", "yulin"} {
-		if after[id] <= before[id] || now[id] == 0 {
+		// a shop's guests are at their tables at lunch: those who came at eleven have not all left yet
+		if (id == "kitchen" && after[id] <= before[id]) || now[id] == 0 {
 			t.Errorf("%s at 13:00: made %v → %v, %d units on its lines", id, before[id], after[id], now[id])
 		}
 	}

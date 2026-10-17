@@ -122,12 +122,18 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams", "stations", "alert", "readings"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams", "stations", "alert", "readings", "setClock"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
 		}
 		e.fn[name] = f
+	}
+	// the restaurant tables: optional, so an engine bundle built before they existed still loads
+	for _, name := range optionalFns {
+		if f, ok := goja.AssertFunction(obj.Get(name)); ok {
+			e.fn[name] = f
+		}
 	}
 	v, err := e.fn["init"](goja.Undefined())
 	if err != nil {

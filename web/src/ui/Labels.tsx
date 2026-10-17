@@ -3,7 +3,7 @@ import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import type { Asset } from '@/sim/types';
 import { labelEls, usePlant, useTick, useUI } from '@/state/store';
-import { ALERT_STATES, DOT, STATE_LABEL } from './status';
+import { ALERT_STATES, DOT, stateLabel } from './status';
 
 const Tag = memo(function Tag({ asset, crowded }: { asset: Asset; crowded: boolean }) {
   useTick();
@@ -16,7 +16,9 @@ const Tag = memo(function Tag({ asset, crowded }: { asset: Asset; crowded: boole
   // With many AGVs their tags would bury the plant, so then only trucks keep a permanent tag.
   const always = vehicle && (asset.type === 'truck' || !crowded);
   const show = !away && (showAll || ALERT_STATES.has(asset.state) || always || selected || hovered);
-  const text = vehicle ? asset.task || STATE_LABEL[asset.state] : STATE_LABEL[asset.state];
+  const { layout } = usePlant();
+  const word = stateLabel(layout, asset.state);
+  const text = vehicle ? asset.task || word : asset.type === 'table' && asset.state === 'occupied' ? `${word} ${asset.count} 人` : word;
   return (
     <button
       type="button"

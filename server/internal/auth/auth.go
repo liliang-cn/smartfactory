@@ -7,7 +7,8 @@
 //	admin     + scenes, documents, assistants themselves
 //
 // erp is not on that ladder: a business system's token that sends, reads and withdraws
-// production orders for its companies, and is a visitor everywhere else.
+// production orders for its companies, and is a visitor everywhere else. reporter is the same
+// for the tables of a restaurant: a camera box, a POS, a table sensor reports which are taken.
 package auth
 
 import (
@@ -37,10 +38,12 @@ const (
 	Admin
 	// ERP may use the order API of its companies and nothing else.
 	ERP
+	// Reporter may report the tables (and dining sessions) of its companies and nothing else.
+	Reporter
 )
 
-var roleNames = [...]string{"visitor", "member", "operator", "admin", "erp"}
-var roleLabels = [...]string{"访客", "成员", "操作员", "管理员", "ERP 接口"}
+var roleNames = [...]string{"visitor", "member", "operator", "admin", "erp", "reporter"}
+var roleLabels = [...]string{"访客", "成员", "操作员", "管理员", "ERP 接口", "桌态上报"}
 
 func (r Role) String() string { return roleNames[r] }
 
@@ -49,19 +52,20 @@ func (r Role) Label() string { return roleLabels[r] }
 
 func (r Role) MarshalJSON() ([]byte, error) { return json.Marshal(r.String()) }
 
-// ParseRole reads a role a token can carry: member, operator, admin or erp.
+// ParseRole reads a role a token can carry: member, operator, admin, erp or reporter.
 func ParseRole(s string) (Role, error) {
 	for i, n := range roleNames {
 		if n == s && i > 0 {
 			return Role(i), nil
 		}
 	}
-	return Visitor, fmt.Errorf("role %q: use member, operator, admin or erp", s)
+	return Visitor, fmt.Errorf("role %q: use member, operator, admin, erp or reporter", s)
 }
 
-// Rank is where the role stands on the visitor–admin ladder: an ERP token stands with visitors.
+// Rank is where the role stands on the visitor–admin ladder: an ERP or reporter token stands
+// with visitors.
 func (r Role) Rank() Role {
-	if r == ERP {
+	if r == ERP || r == Reporter {
 		return Visitor
 	}
 	return r
@@ -104,6 +108,18 @@ func (w Who) Orders(company string, write bool) bool {
 	}
 	return w.Can(company, Member)
 }
+
+// Reports reports whether the caller may report company's tables and dining sessions: a
+// reporter token of the company, operators and above.
+func (w Who) Reports(company string) bool {
+	if w.Role == Reporter {
+		return w.In(company)
+	}
+	return w.Can(company, Operator)
+}
+
+// Narrow reports whether the token is for one API alone (ERP orders, table reports).
+func (r Role) Narrow() bool { return r == ERP || r == Reporter }
 
 // RoleIn is the caller's role on company: their own where the token covers it, a visitor's
 // elsewhere (and an ERP token's everywhere but the order API).

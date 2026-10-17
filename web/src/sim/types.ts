@@ -2,12 +2,13 @@
 import type { MachineCfg, MeasureCfg, ToolingCfg } from '@/config/schema';
 import type { LineLayout, Waypoint } from '@/core/layout';
 
-export type AssetType = 'station' | 'conveyor' | 'buffer' | 'outfeed' | 'warehouse' | 'fgzone' | 'agv' | 'truck';
+export type AssetType = 'station' | 'conveyor' | 'buffer' | 'outfeed' | 'warehouse' | 'fgzone' | 'agv' | 'truck' | 'table';
 
 export type AssetState =
   | 'running' | 'idle' | 'blocked' | 'stopped' | 'fault' | 'maint' | 'changeover'
   | 'moving' | 'waiting' | 'handling' | 'away'
-  | 'ok' | 'empty' | 'low' | 'full';
+  | 'ok' | 'empty' | 'low' | 'full'
+  | 'free' | 'occupied' | 'reserved' | 'cleaning';
 
 /** A product stage key from the industry pack, e.g. billet, forged, packed. */
 export type ProductKind = string;
@@ -55,6 +56,18 @@ export interface Product {
   lot?: string;
   sup?: string;
   lf?: number;
+  /** a group of people (a walk-flow site): how many, elapsed when they arrived, seconds they have waited so far */
+  n?: number;
+  arr?: number;
+  w?: number;
+  /** the place it holds at a station with slots (table, pitch) */
+  slot?: number;
+  /** 元 the group has spent on what it took */
+  spend?: number;
+  /** how far the last measured step's reading was off target, in sigmas (a billet's heating) */
+  dev?: number;
+  /** what the group will take at the station it is at, once worked out */
+  want?: Record<string, number>;
 }
 
 /** Live count of one inventory item of the plant. */
@@ -69,6 +82,8 @@ export interface InventoryState {
   refill: number;
   /** hours from order to delivery for items bought to order */
   lead?: number;
+  /** 元 a guest pays per unit */
+  price?: number;
 }
 
 export interface Cargo { kind: 'raw' | 'fg'; n: number }
@@ -102,6 +117,9 @@ export interface TruckState {
   wait: number;
   dock: number;
   load: number;
+  vehicle: 'truck' | 'van' | 'rider';
+  /** sent by a schedule (a delivery round, a pick-up), not by the store's level */
+  go?: boolean;
 }
 
 export interface Asset {
@@ -139,6 +157,20 @@ export interface Asset {
   give?: string[];
   /** label of the inventory item this station is waiting for */
   waitFor?: string;
+  /** units held at once (tables, pitches), people per slot, seconds by group size, hour units leave, takes per person */
+  slots?: number;
+  seats?: number;
+  bySize?: number[];
+  until?: number;
+  perPerson?: boolean;
+  /** why a crewed machine is paused (a meal break) */
+  pause?: string;
+  /** a place of a station with slots (a table, a pitch): where it is and how many it seats */
+  place?: PlaceInfo;
+  /** elapsed the place's state began */
+  since?: number;
+  /** seconds a place takes to clear after a group left */
+  clear?: number;
   /** wearing tool (die, cutter …): units made with the current one */
   tool?: ToolingCfg & { used: number };
   /** seconds left of a tool change */
@@ -249,6 +281,14 @@ export interface Line {
   last?: Job;
   /** the efficiency the planner promises due dates by: what the line's recent orders actually ran at */
   planEff?: number;
+  /** index of the first station with slots: units come in only while it has room */
+  gate?: number;
+  /** planned stops (meal breaks, closed hours) within the counting window, [from, to] elapsed */
+  pauses: [number, number][];
+  /** elapsed before which the planner does not look for a new order again (made to stock, nothing needed) */
+  noJobUntil?: number;
+  /** good and scrap when the shift began, for the handover note */
+  shiftMark?: { good: number; scrap: number };
   layout: LineLayout;
   z: number;
   x0: number;
@@ -299,4 +339,44 @@ export interface Kpis extends Omit<LineKpi, 'oee'> {
   oee: number; lines: LineKpi[]; power: number; energy: number;
   /** the longest window output is counted over, in seconds */
   span: number;
+  /** 元 of electricity today at the company's tariff, and the price now */
+  cost: number; price: number;
 }
+
+export interface PlaceInfo {
+  line: string; station: string; slot: number; area: string; seats: number;
+  /** what a place is called (桌, 营位) */
+  label: string;
+  /** kept overnight (a pitch): stays count as check-in and check-out */
+  overnight: boolean;
+  x: number; z: number;
+}
+
+/** A business day of a walk-flow site, from its opening hour. */
+export interface VenueDay {
+  day: number;
+  /** groups and people that left, what they spent */
+  groups: number; persons: number; revenue: number;
+  /** groups seated, the seconds they waited in all; groups that left without coming in (on seeing the queue / after waiting) */
+  seated: number; waitSum: number; balked: number; reneged: number;
+  /** scores given, those in spec */
+  rated: number; liked: number;
+  /** delivery orders picked up and what they brought */
+  takeaway: number; takeawayRevenue: number;
+  /** stays that began / ended at a place kept overnight (pitches) */
+  checkins: number; checkouts: number;
+  /** sessions at places begun today, seconds of the closed ones and how many */
+  sessions: number; diningSum: number; diningN: number;
+}
+
+/** A group waiting at the door: size, elapsed it came, elapsed it gives up. */
+export interface Waiting { n: number; at: number; until: number }
+
+/** A delivery order being made: elapsed it came in, elapsed it is ready (0 until stock is there), 元. */
+export interface TakeawayOrder { at: number; ready: number; spend: number }
+
+/** A finished batch in a depot's store, oldest first. */
+export interface Batch { no: string; product: string; qty: number; made: number; expires: number }
+
+/** A delivery round on its way to a site: wall-clock departure and arrival, what it carries. */
+export interface Delivery { no: string; from: string; to: string; items: Record<string, number>; departed: number; eta: number; planned: number; full: boolean }

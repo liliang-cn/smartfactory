@@ -109,6 +109,24 @@ sf/huaduan/p1/HP-101          {"temp":67.2,"power":182.5,"t":"2026-10-11T16:26:2
 **入库和校验**：服务器有数据目录时，每个读数都会入库（见 README.md 的「设备数据」）。入库前先校验：超出这个字段的合理范围标记 1，变化比设备可能的还快标记 2。打了这两种标记的读数照样入库，但不进孪生，并计入采集源的 `flagged`。合理范围默认按设备推出：温度最高到跳闸温度加 200 °C，每秒最多变 50 °C；功率最高到运行功率的 5 倍加 10 kW；振动、健康度、速度、电量有固定上下限；测量值以目标值为中心，宽度取 100σ 和 10 倍公差中较大的。配置里的 `series.limits` 可以按公司、厂、设备（可写 `HP-*` 这样的前缀）、字段覆盖 `min`、`max`、`rate`（每秒最多变多少）。同一字段连续 3 次跳变后，新的水平按真实变化接受。
 
 
+### 2.1 餐桌
+
+饭店的桌也按这个约定上报，资产是桌号（如 `A03`），字段固定两个：
+
+| Topic | 载荷 |
+|---|---|
+| `sf/{company}/{plant}/{table}/table` | 桌态：`{"state":"occupied","people":3,"since":"2026-10-17T12:05:00+08:00","source":"cam-1"}`，`state` 是 `free`、`occupied`、`reserved`、`cleaning`；只发一个词（`occupied`）也行；`since` 不写按收到的时间 |
+| `sf/{company}/{plant}/{table}/session` | 收银的用餐事件：`{"event":"seated","people":4,"at":1792216800000,"source":"pos"}`，`event` 是 `seated`、`ordered`、`paid`、`left` |
+
+`source` 不写时用设备名。它们和 HTTP 上报（README.md 的「餐桌」）进同一个桌态库：同一条报两次只记一次，补发的旧状态按时间放进用餐记录，不回退孪生。这两个字段不当读数送进孪生的设备。摄像头盒子在后台「接入」登记成设备，资产填它看得到的桌号（或 `*` 整个门店）。
+
+```
+mosquitto_pub -h 192.168.1.20 -p 41883 -i cam-front -u cam-front -P "$SF_DEVICE_TOKEN" \
+  -t sf/qianyu/chunxi/A03/table -m '{"state":"occupied","people":4}'
+mosquitto_pub -h 192.168.1.20 -p 41883 -i pos-1 -u pos-1 -P "$SF_DEVICE_TOKEN" \
+  -t sf/qianyu/chunxi/A03/session -m '{"event":"paid"}'
+```
+
 ## 3. Modbus TCP
 
 - 设备是从站，孪生作为主站轮询。轮询间隔由数据源的 `poll` 设置，默认 1 s。站号由 `unit` 设置，默认 1。

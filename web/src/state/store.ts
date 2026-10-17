@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { requestTimeScale, sendCommand } from '@/live/client';
 import type { CompanyBundle } from '@/config/loader';
 import type { PlantLayout } from '@/core/layout';
-import { PlantSim } from '@/sim/plant';
+import { linkPlants, PlantSim } from '@/sim/plant';
 import type { Command } from '@/sim/types';
 import type { ModelHandle } from '@/three/common';
 
@@ -17,6 +17,7 @@ let rt: Runtime | null = null;
 
 export function initRuntime(bundle: CompanyBundle): Runtime {
   const plants = bundle.plants.map((layout) => ({ layout, sim: new PlantSim(layout) }));
+  linkPlants(plants.map((p) => p.sim));
   rt = { bundle, plants, byId: Object.fromEntries(plants.map((p) => [p.layout.id, p])) };
   Object.assign(window, { twin: { rt, ui: useUI, models } });
   return rt;
@@ -170,7 +171,7 @@ export function usePlant(): PlantRuntime {
 export function groupsOf(layout: PlantLayout) {
   return [
     ...layout.lines.map((l) => ({ id: l.id, name: l.name, note: l.note })),
-    { id: 'LOG', name: '物流', note: 'AGV 与货车' },
+    { id: 'LOG', name: '物流', note: [layout.agvs.length ? layout.words.vehicle : '', ...new Set(layout.trucks.map((t) => (t.kind === 'in' ? layout.words.inTruck : layout.words.outTruck)))].filter(Boolean).join('、') },
     { id: 'WH', name: '仓储', note: '' },
   ];
 }

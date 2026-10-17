@@ -1,0 +1,156 @@
+{
+  "$schema": "../schema/company.json",
+  "id": "tiankong",
+  "industry": "camping",
+  "name": "天空乐园",
+  "plants": [
+    {
+      "badge": "烧烤",
+      "carriers": [
+        "鲜到食材配送",
+        "洁美清运"
+      ],
+      "finishedGoods": "餐具垃圾回收",
+      "hall": "星空烧烤区",
+      "id": "bbq",
+      "inventory": {
+        "bbqSet": 120,
+        "charcoal": 200,
+        "tableware": 30
+      },
+      "lines": [
+        {
+          "name": "烧烤区 {n}",
+          "note": "天幕烧烤",
+          "product": "bbqGroup",
+          "repeat": 4,
+          "route": "bbq",
+          "speed": 0.7
+        }
+      ],
+      "name": "烧烤营地",
+      "site": "outdoor",
+      "sub": "天幕烧烤，4 个营区 16 个烧烤位",
+      "warehouse": "食材冷库",
+      "demand": {
+        "rate": 0.7,
+        "curve": [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            11,
+            0.4
+          ],
+          [
+            12,
+            0.9
+          ],
+          [
+            13.5,
+            0.6
+          ],
+          [
+            15,
+            0.25
+          ],
+          [
+            17,
+            0.7
+          ],
+          [
+            18.5,
+            1
+          ],
+          [
+            20,
+            0.8
+          ],
+          [
+            21.5,
+            0.2
+          ],
+          [
+            22,
+            0
+          ]
+        ],
+        "week": [
+          1.4,
+          0.5,
+          0.5,
+          0.55,
+          0.6,
+          1.1,
+          1.6
+        ],
+        "sizes": [
+          0.02,
+          0.18,
+          0.2,
+          0.3,
+          0.15,
+          0.15
+        ],
+        "patience": [
+          15,
+          45
+        ],
+        "balk": 4,
+        "fee": 10,
+        "weather": {
+          "rain": 0.2,
+          "factor": 0.4
+        }
+      },
+      "kpis": [
+        "occupancy",
+        "turnover",
+        "queue",
+        "ticket",
+        "rating",
+        {
+          "id": "inUse",
+          "item": "tableware"
+        },
+        "weather"
+      ]
+    },
+    {
+      "badge": "露营",
+      "carriers": [
+        "山野补给",
+        "洁美清运"
+      ],
+      "finishedGoods": "装备清洗区",
+      "hall": "森林露营区",
+      "id": "camp",
+      "inventory": {
+        "firewood": 150,
+        "lantern": 25,
+        "sleepingBag": 60,
+        "tent": 20
+      },
+      "lines": [
+        {
+          "name": "露营区 {n}",
+          "note": "帐篷过夜",
+          "product": "campGroup",
+          "repeat": 4,
+          "route": "camp",
+          "speed": 0.7
+        }
+      ],
+      "name": "露营基地",
+      "site": "outdoor",
+      "sub": "帐篷露营过夜，4 个营区 20 个营位，20 顶帐篷",
+      "warehouse": "露营装备库"
+    }
+  ],
+  "short": "天空"
+}
