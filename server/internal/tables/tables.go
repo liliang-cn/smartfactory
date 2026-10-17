@@ -490,6 +490,10 @@ func (s *Service) KeepSim(company string, list []engine.SimSession) error {
 		var end any
 		if x.End != nil {
 			end = *x.End
+		} else if _, err := s.db.Exec(`UPDATE sessions SET end=? WHERE company=? AND plant=? AND tbl=? AND source=? AND end IS NULL AND start<?`,
+			x.Start, company, x.Plant, x.Table, Sim, x.Start); err != nil {
+			// a table holds one group at a time: a simulated session left open (the twin restarted) ends when the next begins
+			return err
 		}
 		if _, err := s.db.Exec(`INSERT INTO sessions VALUES (?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET end=excluded.end, people=excluded.people
 			WHERE sessions.source=?`, company, x.Plant, x.Table, x.Start, end, x.People, Sim, Sim); err != nil {
