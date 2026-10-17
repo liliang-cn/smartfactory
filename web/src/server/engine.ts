@@ -666,7 +666,10 @@ function historyDims(c: string): string {
 function setClock(c: string, ms: number): boolean {
   const co = get(c);
   if (!co) return false;
-  for (const p of co.plants) p.epoch = ms - p.elapsed * 1000;
+  for (const p of co.plants) {
+    p.epoch = ms - p.elapsed * 1000;
+    p.rewarm();
+  }
   return true;
 }
 

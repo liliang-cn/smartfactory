@@ -270,6 +270,26 @@ export class PlantSim {
   }
 
   /**
+   * The plant's clock was set before it ran at all (a backfill, a test): a site guests come to
+   * starts over as that hour has it, not as the hour it was built in.
+   */
+  rewarm() {
+    if (!this.venue || this.elapsed > 0) return;
+    for (const line of this.lines) {
+      if (line.gate === undefined) continue;
+      line.products.length = 0;
+      for (const a of line.stations) {
+        a.busy = null;
+        if (a.slots) a.count = 0;
+      }
+    }
+    for (const a of this.places) Object.assign(a, { state: 'free', count: 0, since: 0, busy: null });
+    for (const it of this.inventory) if (it.kind === 'lend') it.avail = it.cap;
+    this.venue.queue.length = 0;
+    this.warmVenue();
+  }
+
+  /**
    * Warm start of a site guests come to: its places as full as the hour usually has them, the
    * groups part-way through their stay, and a queue at the door at a peak.
    */
@@ -309,6 +329,8 @@ export class PlantSim {
         n = Math.min(n, place.place!.seats);
         const p: Product = { id: `${line.id}-${++line.pid}`, s: st.s, done: line.gate - 1, proc: line.gate, t: 0, kind, stall: 0, n, arr: this.elapsed, w: rand(0, 600), slot: place.place!.slot, spend: 0 };
         p.need = this.stay(st, p) ?? st.cycle;
+        // last night's guests, before check-out: they leave this morning
+        if (st.until !== undefined && h < st.until) p.need = Math.max(600, (st.until - h) * 3600 + rand(-0.75, 0.5) * 3600);
         // a stay that ends at check-out began recently; a meal is part-way through
         p.t = st.until !== undefined ? rand(0, 3600) : p.need * rand(0.05, 0.9);
         // what they were lent and took on the way in
@@ -520,6 +542,15 @@ export class PlantSim {
     this.closed = this.shut(h);
     // closed hours are planned stops: not counted against the lines' performance
     if (this.closed && !was) for (const line of this.lines) line.pauses.push([this.elapsed, Infinity]);
+    // closing time: guests still at their tables finish up within half an hour (a stay overnight goes on)
+    if (this.closed && !was && this.venue) {
+      for (const line of this.lines) {
+        for (const p of line.products) {
+          const a = p.proc >= 0 ? line.stations[p.proc] : null;
+          if (a?.slots && a.until === undefined) p.need = Math.min(p.need ?? a.cycle, p.t + rand(600, 1800));
+        }
+      }
+    }
     if (!this.closed && was) for (const line of this.lines) { const last = line.pauses[line.pauses.length - 1]; if (last && last[1] === Infinity) last[1] = this.elapsed; }
     const pm = cal?.pm;
     if (!pm || h !== pm.start) return;
@@ -1685,6 +1716,8 @@ export class PlantSim {
       // the next time it comes round, and not within the first hours (who comes at 10 stays the night)
       return Math.max(a.cycle, (left < 4 * 3600 ? left + 86_400 : left) + rand(-0.75, 0.75) * 3600);
     }
+    // seated after closing time (they came in just before): they eat up within half an hour
+    if (a.bySize?.length && this.closed) return rand(600, 1800);
     if (a.bySize?.length) {
       const base = a.bySize[Math.min(a.bySize.length, p.n ?? 1) - 1];
       return base * (1 + Math.abs(Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random())) * Math.max(0.15, this.layout.pace ?? 0));

@@ -177,14 +177,14 @@ func TestShopDay(t *testing.T) {
 		return hours, peakQueue, s.Venue.Day["balked"] + s.Venue.Day["reneged"], s
 	}
 	sat, satQueue, satGaveUp, s := seatedBy(saturday)
-	tue, _, _, _ := seatedBy(tuesday)
+	tue, _, tueGaveUp, _ := seatedBy(tuesday)
 	t.Logf("seated by hour, Saturday %v, Tuesday %v; queue at most %d, %v gave up", sat, tue, satQueue, satGaveUp)
 	// before opening nobody; lunch and dinner beat mid-afternoon
 	if sat[10] != 0 {
 		t.Errorf("%v groups seated 10–11, before the shop opens", sat[10])
 	}
-	if sat[12] <= sat[15] || sat[18]+sat[19] <= sat[15]+sat[16] {
-		t.Errorf("lunch %v / dinner %v should beat the afternoon %v", sat[12], sat[18]+sat[19], sat[15]+sat[16])
+	if sat[12]+sat[13] <= sat[15]+sat[16] || sat[18]+sat[19] <= sat[15]+sat[16] {
+		t.Errorf("lunch %v / dinner %v should beat the afternoon %v", sat[12]+sat[13], sat[18]+sat[19], sat[15]+sat[16])
 	}
 	sum := func(m map[int]float64) (n float64) {
 		for _, v := range m {
@@ -192,8 +192,9 @@ func TestShopDay(t *testing.T) {
 		}
 		return
 	}
-	if sum(sat) <= sum(tue)*1.15 {
-		t.Errorf("Saturday seated %v, Tuesday %v: the weekend should be busier", sum(sat), sum(tue))
+	// the tables cap who gets seated: the weekend shows in who came (seated, or gave up)
+	if sum(sat)+satGaveUp <= (sum(tue)+tueGaveUp)*1.15 {
+		t.Errorf("Saturday %v came, Tuesday %v: the weekend should be busier", sum(sat)+satGaveUp, sum(tue)+tueGaveUp)
 	}
 	if satQueue == 0 || satGaveUp == 0 {
 		t.Errorf("a Saturday dinner with no queue (%d) or nobody giving up (%v)", satQueue, satGaveUp)
@@ -465,17 +466,54 @@ func TestShiftHandover(t *testing.T) {
 	if s := snapOf(t, e, "huaduan")["p1"]; s.Shift != "夜班" {
 		t.Errorf("shift after 20:00: %q", s.Shift)
 	}
-	// lunch: the lines stop taking in steel, OEE holds
-	at(t, e, "huaduan", tuesday.Add(11*time.Hour+25*time.Minute))
-	run(t, e, "huaduan", 4*time.Minute, 1)
-	before := snapOf(t, e, "huaduan")["p1"].Kpis.Oee
-	run(t, e, "huaduan", 30*time.Minute, 1)
-	during := snapOf(t, e, "huaduan")["p1"]
-	if during.Pause != "午饭" && !strings.Contains(strings.Join(logOf(t, e, "huaduan", "p1"), "\n"), "午饭") {
-		t.Errorf("no lunch break: pause %q", during.Pause)
+}
+
+// steadyForging is a forging company whose line never breaks down, wears out or stops short, so
+// what moves its figures is the calendar alone.
+func steadyForging(t *testing.T, e *Engine, id string, tweak func(pack map[string]any)) {
+	t.Helper()
+	var pack map[string]any
+	json.Unmarshal([]byte(e.Industry("forging")), &pack)
+	pack["id"] = id + "-pack"
+	for _, m := range pack["machines"].(map[string]any) {
+		m := m.(map[string]any)
+		m["upkeep"] = map[string]any{"mtbf": 1e6, "repair": []any{1, 2}, "pm": 1e6, "pmTime": []any{1, 2}}
+		if tl, ok := m["tooling"].(map[string]any); ok {
+			tl["life"] = 1e9
+		}
 	}
-	if abs(during.Kpis.Oee-before) > 0.12 {
-		t.Errorf("OEE %v before lunch, %v at the end of it: a planned stop should not count", before, during.Kpis.Oee)
+	pack["pace"] = 0
+	if tweak != nil {
+		tweak(pack)
+	}
+	raw, _ := json.Marshal(pack)
+	if v, err := e.call("addIndustry", string(raw)); err != nil || !strings.Contains(v.String(), `"ok":true`) {
+		t.Fatalf("add pack: %v %v", v, err)
+	}
+	company := `{"id":"` + id + `","name":"测试锻造","short":"测试","industry":"` + id + `-pack","plants":[{"id":"p","name":"一厂","lines":[{"name":"连杆线","product":"conrod","route":"hot-die-conrod"}]}]}`
+	if v, err := e.call("addCompany", company); err != nil || !strings.Contains(v.String(), `"ok":true`) {
+		t.Fatalf("add company: %v %v", v, err)
+	}
+}
+
+// A meal break stops the line (nothing comes off it) and is a planned stop: OEE does not count it.
+func TestLunchBreakIsPlanned(t *testing.T) {
+	e := offline(t)
+	steadyForging(t, e, "steady", nil)
+	at(t, e, "steady", tuesday.Add(10*time.Hour+15*time.Minute))
+	run(t, e, "steady", 75*time.Minute, 1)
+	before := snapOf(t, e, "steady")["p"]
+	run(t, e, "steady", 29*time.Minute, 1)
+	during := snapOf(t, e, "steady")["p"]
+	if during.Pause != "午饭" {
+		t.Fatalf("11:59, pause %q, want 午饭", during.Pause)
+	}
+	// the line ran dry of what was on it and then stood
+	if made := during.Lines[0].Good - before.Lines[0].Good; made > 60 {
+		t.Errorf("%d made during lunch", made)
+	}
+	if abs(during.Kpis.Oee-before.Kpis.Oee) > 0.06 {
+		t.Errorf("OEE %v before lunch, %v at the end of it: a planned stop should not count", before.Kpis.Oee, during.Kpis.Oee)
 	}
 }
 

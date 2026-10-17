@@ -237,7 +237,9 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 		{"table_now", "一张桌（如 A03）坐了多久：现在的状态、几个人、这次从几点坐下、坐了几分钟，今天在这张桌的每次用餐和来源。", obj(map[string]any{
 			"company": str("公司 id"), "table": str("桌号，如 A03"), "plant": str("门店 id，几家店都有这个桌号时要填"),
 		}, "company", "table"),
-			func(m map[string]any) (any, error) { return o.TableNow(who, s(m, "company"), s(m, "plant"), s(m, "table")) }},
+			func(m map[string]any) (any, error) {
+				return o.TableNow(who, s(m, "company"), s(m, "plant"), s(m, "table"))
+			}},
 		{"tables_history", "饭店按天或按小时的用餐记录：每家店开台数、客人数、平均用餐分钟、占用桌时，其中上报的多少（其余是仿真）。", obj(map[string]any{
 			"company": str("公司 id"), "from": str("开始日期 YYYY-MM-DD，默认 6 天前"), "to": str("结束日期 YYYY-MM-DD（含），默认今天"), "by": str("day 或 hour，默认 day"),
 		}, "company"),
