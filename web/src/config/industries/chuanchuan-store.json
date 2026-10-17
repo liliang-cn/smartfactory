@@ -23,6 +23,165 @@
         "盘点",
         "交班"
       ]
+    },
+    "plant": "门店",
+    "lineNoun": "区域",
+    "machine": "设施",
+    "lot": "批号",
+    "raw": "食材",
+    "goods": "出品",
+    "infeed": "门口等位区",
+    "outfeed": "出口",
+    "conveyor": "过道",
+    "cycle": "用时",
+    "util": "使用率",
+    "states": {
+      "idle": "空闲",
+      "blocked": "等待",
+      "changeover": "换台",
+      "stopped": "暂停"
+    }
+  },
+  "logistics": {
+    "internal": "none",
+    "store": "shelves",
+    "inbound": {
+      "vehicle": "van",
+      "label": "冷链配送车"
+    },
+    "outbound": {
+      "vehicle": "rider",
+      "label": "外卖骑手",
+      "count": 2
+    }
+  },
+  "kpis": [
+    "turnover",
+    "occupancy",
+    "queue",
+    "ticket",
+    "rating",
+    "served",
+    "takeaway"
+  ],
+  "demand": {
+    "rate": 0.7,
+    "curve": [
+      [
+        0,
+        0.45
+      ],
+      [
+        0.5,
+        0.35
+      ],
+      [
+        1.5,
+        0.1
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        10.5,
+        0
+      ],
+      [
+        11,
+        0.15
+      ],
+      [
+        11.5,
+        0.6
+      ],
+      [
+        12,
+        1
+      ],
+      [
+        13,
+        0.95
+      ],
+      [
+        13.5,
+        0.5
+      ],
+      [
+        14,
+        0.2
+      ],
+      [
+        15,
+        0.1
+      ],
+      [
+        16.5,
+        0.15
+      ],
+      [
+        17.5,
+        0.6
+      ],
+      [
+        18.5,
+        1
+      ],
+      [
+        20.5,
+        0.9
+      ],
+      [
+        21.5,
+        0.45
+      ],
+      [
+        22.5,
+        0.35
+      ],
+      [
+        23.5,
+        0.5
+      ]
+    ],
+    "week": [
+      1.3,
+      0.8,
+      0.8,
+      0.85,
+      0.9,
+      1.15,
+      1.4
+    ],
+    "sizes": [
+      0.1,
+      0.36,
+      0.24,
+      0.17,
+      0.08,
+      0.05
+    ],
+    "patience": [
+      15,
+      50
+    ],
+    "balk": 6,
+    "fee": 6,
+    "takeaway": {
+      "rate": 6,
+      "take": {
+        "skewers": 4,
+        "maodu": 1
+      },
+      "prep": 12,
+      "spend": [
+        70,
+        150
+      ]
+    },
+    "weather": {
+      "rain": 0.25,
+      "factor": 0.85
     }
   },
   "products": {
@@ -935,8 +1094,7 @@
         "柜门密封条老化"
       ],
       "take": {
-        "skewers": 3,
-        "maodu": 1
+        "skewers": 2
       },
       "upkeep": {
         "mtbf": 50,
@@ -949,7 +1107,9 @@
           20,
           40
         ]
-      }
+      },
+      "perPerson": true,
+      "hold": 4
     },
     "sauce-bar": {
       "label": "调料台",
@@ -1128,7 +1288,7 @@
       }
     },
     "table-zone": {
-      "label": "餐桌区（8 桌）",
+      "label": "餐桌区",
       "code": "CZ",
       "look": {
         "archetype": "frame",
@@ -1138,330 +1298,9 @@
           3.4,
           1.8
         ],
-        "color": "#ecdfc6",
+        "color": "#f3e9d6",
         "accent": "#e2412b",
-        "parts": [
-          {
-            "shape": "box",
-            "size": [
-              1.1,
-              0.05,
-              0.75
-            ],
-            "at": [
-              -1.05,
-              0.72,
-              -1.25
-            ],
-            "color": "#c79a68",
-            "round": 0.02
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.06,
-              0.72
-            ],
-            "at": [
-              -1.05,
-              0,
-              -1.25
-            ],
-            "color": "#58627a"
-          },
-          {
-            "shape": "box",
-            "size": [
-              0.36,
-              0.04,
-              0.36
-            ],
-            "at": [
-              -1.05,
-              0.77,
-              -1.25
-            ],
-            "color": "#28314b"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.18,
-              0.1
-            ],
-            "at": [
-              -1.05,
-              0.81,
-              -1.25
-            ],
-            "color": "#d0d5dd",
-            "metal": 0.6
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.165,
-              0.02
-            ],
-            "at": [
-              -1.05,
-              0.9,
-              -1.25
-            ],
-            "color": "#d9361e",
-            "anim": {
-              "type": "heat"
-            }
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.006,
-              0.26
-            ],
-            "at": [
-              -1.1,
-              0.86,
-              -1.22
-            ],
-            "rotate": [
-              12,
-              0,
-              0
-            ],
-            "color": "#d9b779"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.006,
-              0.26
-            ],
-            "at": [
-              -0.99,
-              0.86,
-              -1.3
-            ],
-            "rotate": [
-              -10,
-              0,
-              8
-            ],
-            "color": "#d9b779"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.16,
-              0.45
-            ],
-            "at": [
-              -1.8,
-              0,
-              -1.25
-            ],
-            "color": "#e2412b"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.16,
-              0.45
-            ],
-            "at": [
-              -0.3,
-              0,
-              -1.25
-            ],
-            "color": "#e2412b"
-          },
-          {
-            "shape": "sphere",
-            "size": [
-              0.17
-            ],
-            "at": [
-              -1.05,
-              1.9,
-              -1.25
-            ],
-            "color": "#e2412b",
-            "glow": "#ff6a4a"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.03,
-              0.12
-            ],
-            "at": [
-              -1.05,
-              1.78,
-              -1.25
-            ],
-            "color": "#f2c94c"
-          },
-          {
-            "shape": "box",
-            "size": [
-              1.1,
-              0.05,
-              0.75
-            ],
-            "at": [
-              1.05,
-              0.72,
-              -1.25
-            ],
-            "color": "#c79a68",
-            "round": 0.02
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.06,
-              0.72
-            ],
-            "at": [
-              1.05,
-              0,
-              -1.25
-            ],
-            "color": "#58627a"
-          },
-          {
-            "shape": "box",
-            "size": [
-              0.36,
-              0.04,
-              0.36
-            ],
-            "at": [
-              1.05,
-              0.77,
-              -1.25
-            ],
-            "color": "#28314b"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.18,
-              0.1
-            ],
-            "at": [
-              1.05,
-              0.81,
-              -1.25
-            ],
-            "color": "#d0d5dd",
-            "metal": 0.6
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.165,
-              0.02
-            ],
-            "at": [
-              1.05,
-              0.9,
-              -1.25
-            ],
-            "color": "#d9361e",
-            "anim": {
-              "type": "heat"
-            }
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.006,
-              0.26
-            ],
-            "at": [
-              1.0,
-              0.86,
-              -1.22
-            ],
-            "rotate": [
-              12,
-              0,
-              0
-            ],
-            "color": "#d9b779"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.006,
-              0.26
-            ],
-            "at": [
-              1.11,
-              0.86,
-              -1.3
-            ],
-            "rotate": [
-              -10,
-              0,
-              8
-            ],
-            "color": "#d9b779"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.16,
-              0.45
-            ],
-            "at": [
-              0.3,
-              0,
-              -1.25
-            ],
-            "color": "#e2412b"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.16,
-              0.45
-            ],
-            "at": [
-              1.8,
-              0,
-              -1.25
-            ],
-            "color": "#e2412b"
-          },
-          {
-            "shape": "sphere",
-            "size": [
-              0.17
-            ],
-            "at": [
-              1.05,
-              1.9,
-              -1.25
-            ],
-            "color": "#e2412b",
-            "glow": "#ff6a4a"
-          },
-          {
-            "shape": "cylinder",
-            "size": [
-              0.03,
-              0.12
-            ],
-            "at": [
-              1.05,
-              1.78,
-              -1.25
-            ],
-            "color": "#f2c94c"
-          }
-        ]
+        "parts": []
       },
       "cycle": 300,
       "makes": "eaten",
@@ -1482,7 +1321,8 @@
         "桌边插座跳闸"
       ],
       "take": {
-        "potBase": 1
+        "potBase": 1,
+        "maodu": 1
       },
       "upkeep": {
         "mtbf": 120,
@@ -1507,6 +1347,23 @@
             "等收台"
           ]
         }
+      },
+      "slots": 8,
+      "seats": 4,
+      "bySize": [
+        3000,
+        3600,
+        4200,
+        4800,
+        5400,
+        6000
+      ],
+      "place": {
+        "label": "桌",
+        "size": [
+          2.4,
+          2.2
+        ]
       }
     },
     "checkout": {
@@ -1611,7 +1468,8 @@
         "wear": {
           "shift": 1,
           "spread": 0.5
-        }
+        },
+        "wait": -0.12
       },
       "give": [
         "tableware"
@@ -1951,7 +1809,8 @@
       "kind": "consume",
       "capacity": 1500,
       "refill": 1500,
-      "low": 0.12
+      "low": 0.12,
+      "price": 18
     },
     "maodu": {
       "label": "毛肚",
@@ -1959,7 +1818,8 @@
       "kind": "consume",
       "capacity": 500,
       "refill": 500,
-      "low": 0.12
+      "low": 0.12,
+      "price": 28
     },
     "potBase": {
       "label": "锅底块",
@@ -1967,7 +1827,8 @@
       "kind": "consume",
       "capacity": 500,
       "refill": 500,
-      "low": 0.12
+      "low": 0.12,
+      "price": 38
     },
     "tableware": {
       "label": "餐具",
@@ -1980,7 +1841,7 @@
   "calendar": {
     "open": {
       "from": 11,
-      "to": 1
+      "to": 2
     },
     "night": {
       "from": 22,

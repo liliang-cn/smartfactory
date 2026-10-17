@@ -19,8 +19,31 @@
         "品检入库",
         "冷链配送"
       ]
+    },
+    "lot": "原料批号",
+    "raw": "食材",
+    "goods": "出品",
+    "plant": "中央厨房"
+  },
+  "logistics": {
+    "internal": "none",
+    "store": "shelves",
+    "inbound": {
+      "vehicle": "truck",
+      "label": "食材进货车"
+    },
+    "outbound": {
+      "vehicle": "van",
+      "label": "冷链配送车"
     }
   },
+  "kpis": [
+    "quality",
+    "onTime",
+    "throughput",
+    "coldChain",
+    "power"
+  ],
   "products": {
     "tallow-base": {
       "name": "牛油锅底（1.5 kg/块）",
@@ -453,7 +476,9 @@
             }
           ]
         }
-      }
+      },
+      "shelf": 720,
+      "sample": 48
     },
     "beef-skewer": {
       "name": "麻辣牛肉串（10 签/份）",
@@ -1293,7 +1318,9 @@
             }
           ]
         }
-      }
+      },
+      "shelf": 72,
+      "sample": 48
     },
     "lotus-skewer": {
       "name": "藕片串（10 签/份）",
@@ -2083,7 +2110,9 @@
             }
           ]
         }
-      }
+      },
+      "shelf": 48,
+      "sample": 48
     },
     "shrimp-paste": {
       "name": "虾滑（250 g/盒）",
@@ -2526,7 +2555,9 @@
             }
           ]
         }
-      }
+      },
+      "shelf": 2160,
+      "sample": 48
     }
   },
   "machines": {
@@ -3014,7 +3045,8 @@
             "换水"
           ]
         }
-      }
+      },
+      "crew": true
     },
     "veg-wash": {
       "label": "气泡清洗机",
@@ -3147,7 +3179,8 @@
             "磨刀"
           ]
         }
-      }
+      },
+      "crew": true
     },
     "veg-slicer": {
       "label": "切片机",
@@ -3418,7 +3451,8 @@
             "断签重穿"
           ]
         }
-      }
+      },
+      "crew": true
     },
     "count-pack": {
       "label": "计签打包机",
@@ -3537,7 +3571,8 @@
           30,
           60
         ]
-      }
+      },
+      "hold": 4
     },
     "chopper": {
       "label": "斩拌机",
@@ -3709,7 +3744,8 @@
           40,
           90
         ]
-      }
+      },
+      "hold": -18
     },
     "box-packer": {
       "label": "装盒机",
@@ -3810,7 +3846,8 @@
           30,
           60
         ]
-      }
+      },
+      "hold": -18
     }
   },
   "routes": {
@@ -3920,7 +3957,26 @@
       "to": 6,
       "stops": 1.3,
       "flaws": 1.2
-    }
+    },
+    "shifts": {
+      "at": [
+        4,
+        10
+      ],
+      "handover": 15,
+      "pace": 0.6,
+      "names": [
+        "早班",
+        "白班"
+      ]
+    },
+    "breaks": [
+      {
+        "at": 10.5,
+        "minutes": 30,
+        "label": "工作餐"
+      }
+    ]
   },
   "pace": 0.06,
   "qa": {

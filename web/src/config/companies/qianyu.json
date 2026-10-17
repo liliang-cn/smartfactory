@@ -75,6 +75,7 @@
       "name": "春熙路店",
       "badge": "春熙",
       "hall": "前厅",
+      "site": "shop",
       "sub": "堂食，大厅两个区共 16 桌",
       "industry": "chuanchuan-store",
       "warehouse": "后厨备货间",
@@ -99,6 +100,20 @@
           "route": "dining",
           "order": {
             "qty": 30
+          },
+          "tables": {
+            "prefix": "A",
+            "area": "大厅A区",
+            "seats": [
+              4,
+              4,
+              4,
+              4,
+              2,
+              2,
+              6,
+              6
+            ]
           }
         },
         {
@@ -108,15 +123,47 @@
           "route": "dining",
           "order": {
             "qty": 30
+          },
+          "tables": {
+            "prefix": "B",
+            "area": "大厅B区",
+            "seats": [
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              2,
+              2
+            ]
           }
         }
-      ]
+      ],
+      "supply": {
+        "from": "kitchen",
+        "depart": [
+          9,
+          14.5
+        ],
+        "transit": 0.75,
+        "items": {
+          "skewers": [
+            "beef-skewer",
+            "lotus-skewer"
+          ],
+          "potBase": [
+            "tallow-base"
+          ]
+        }
+      }
     },
     {
       "id": "yulin",
       "name": "玉林路店",
       "badge": "玉林",
       "hall": "前厅",
+      "site": "shop",
       "sub": "社区小店，大厅 8 桌",
       "industry": "chuanchuan-store",
       "warehouse": "后厨备货间",
@@ -141,9 +188,40 @@
           "route": "dining",
           "order": {
             "qty": 30
+          },
+          "tables": {
+            "prefix": "A",
+            "area": "大厅",
+            "seats": [
+              4,
+              4,
+              4,
+              4,
+              2,
+              2,
+              6,
+              4
+            ]
           }
         }
-      ]
+      ],
+      "supply": {
+        "from": "kitchen",
+        "depart": [
+          9,
+          14.5
+        ],
+        "transit": 0.75,
+        "items": {
+          "skewers": [
+            "beef-skewer",
+            "lotus-skewer"
+          ],
+          "potBase": [
+            "tallow-base"
+          ]
+        }
+      }
     }
   ],
   "tariff": {
