@@ -175,6 +175,8 @@ export const PlantState = z.object({
   cold: z.tuple([num, num]).optional(),
   /** the shift on now, whether it is handing over, a meal break, 元 of electricity today and the price now */
   rhythm: z.object({ shift: str, handover: z.boolean(), pause: str, cost: num, price: num }).optional(),
+  /** the next scheduled material delivery: due, expected (wall ms), units, supplier, whether it is late */
+  inbound: z.object({ due: num, at: num, load: num, supplier: str, late: z.boolean() }).optional(),
   /** what happened since the previous frame of this plant */
   events: z.array(SimEvent),
 }).meta({ description: "A plant's replicated state" });

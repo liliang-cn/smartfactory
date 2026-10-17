@@ -72,12 +72,15 @@ export class Venue {
     return new Date(this.sim.wall() + 8 * 3600_000).getUTCDay();
   }
 
+  /** places the simulation runs (not reported) and the weekday, counted once a second */
+  private simPlaces = 0;
+  private dow = 0;
+
   /** Arrivals per hour now: the curve, the weekday, the weather, for the places the simulation runs. */
   rateNow() {
     const d = this.demand;
     const h = this.sim.clock / 3600;
-    const free = this.places.filter((a) => !reported(a)).length;
-    return d.rate * free * intensity(d.curve, h) * (d.week?.[this.weekday()] ?? 1) * (this.rain ? d.weather?.factor ?? 1 : 1);
+    return d.rate * this.simPlaces * intensity(d.curve, h) * (d.week?.[this.dow] ?? 1) * (this.rain ? d.weather?.factor ?? 1 : 1);
   }
 
   step(dt: number, closed: boolean) {
@@ -100,7 +103,7 @@ export class Venue {
       // Poisson arrivals: at most one group a step at the step sizes the server runs
       if (Math.random() < (this.rateNow() / 3600) * dt) this.arrive();
       const t = this.demand.takeaway;
-      if (t && Math.random() < ((t.rate * intensity(this.demand.curve, s.clock / 3600) * (this.demand.week?.[this.weekday()] ?? 1)) / 3600) * dt) {
+      if (t && Math.random() < ((t.rate * intensity(this.demand.curve, s.clock / 3600) * (this.demand.week?.[this.dow] ?? 1)) / 3600) * dt) {
         this.orders.push({ at: s.elapsed, ready: 0, spend: Math.round(rand(t.spend[0], t.spend[1])) });
       }
     }
@@ -108,6 +111,10 @@ export class Venue {
     if (this.tick < 1) return;
     this.tick -= 1;
     // once a second: who gives up waiting, delivery orders, places being cleared
+    this.dow = this.weekday();
+    let n = 0;
+    for (const a of this.places) if (!reported(a)) n++;
+    this.simPlaces = n;
     for (let i = this.queue.length - 1; i >= 0; i--) {
       if (this.queue[i].until <= s.elapsed) {
         this.queue.splice(i, 1);
@@ -146,7 +153,11 @@ export class Venue {
     for (let i = 0; i < this.orders.length; i++) {
       const o = this.orders[i];
       if (o.ready === 0) {
-        // made as soon as the kitchen has what it needs
+        // made as soon as the kitchen has what it needs; the platform cancels one left 45 minutes
+        if (s.elapsed - o.at > 2700) {
+          this.orders.splice(i--, 1);
+          continue;
+        }
         if (s.shortOf(t.take)) continue;
         s.useInv(t.take);
         o.ready = s.elapsed + t.prep * 60 * rand(0.75, 1.35);
@@ -178,6 +189,10 @@ export class Venue {
    */
   admit(line: Line): { g: Waiting; place: Asset } | null {
     if (!this.queue.length || line.gate === undefined) return null;
+    // most steps of a busy evening find every place taken: say so without building a list
+    let any = false;
+    for (const p of this.places) if (p.state === 'free' && p.place!.line === line.id) { any = true; break; }
+    if (!any) return null;
     const free = this.places.filter((p) => p.place!.line === line.id && p.state === 'free' && !reported(p));
     if (!free.length) return null;
     const biggest = Math.max(...free.map((p) => p.place!.seats));
@@ -194,6 +209,12 @@ export class Venue {
     return null;
   }
 
+  /** Keeps a session for the server to collect; nobody collecting (no server), only the last ones. */
+  private record(x: PlaceSession) {
+    this.sessions.push(x);
+    if (this.sessions.length > 1000) this.sessions.splice(0, this.sessions.length - 800);
+  }
+
   /** A group got its place (seated at a table, checked in at a pitch). */
   seat(p: Product, place: Asset) {
     const s = this.sim;
@@ -205,7 +226,7 @@ export class Venue {
     this.day.sessions++;
     this.day.waitSum += p.w ?? 0;
     if (place.place!.overnight) this.day.checkins++;
-    this.sessions.push({ plant: s.layout.id, table: place.id, start: Math.round(s.wall()), end: null, people: place.count, source: 'sim' });
+    this.record({ plant: s.layout.id, table: place.id, start: Math.round(s.wall()), end: null, people: place.count, source: 'sim' });
   }
 
   /** A group left its place: the place is cleared before the next one gets it. */
@@ -215,7 +236,7 @@ export class Venue {
     this.day.diningSum += s.elapsed - start;
     this.day.diningN++;
     if (place.place!.overnight) this.day.checkouts++;
-    this.sessions.push({ plant: s.layout.id, table: place.id, start: Math.round(s.epoch + start * 1000), end: Math.round(s.wall()), people: place.count, source: 'sim' });
+    this.record({ plant: s.layout.id, table: place.id, start: Math.round(s.epoch + start * 1000), end: Math.round(s.wall()), people: place.count, source: 'sim' });
     place.busy = null;
     place.count = 0;
     if (reported(place)) return;
