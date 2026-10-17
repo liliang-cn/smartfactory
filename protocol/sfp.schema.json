@@ -1233,6 +1233,34 @@
           ],
           "additionalProperties": false
         },
+        "inbound": {
+          "type": "object",
+          "properties": {
+            "due": {
+              "type": "number"
+            },
+            "at": {
+              "type": "number"
+            },
+            "load": {
+              "type": "number"
+            },
+            "supplier": {
+              "type": "string"
+            },
+            "late": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "due",
+            "at",
+            "load",
+            "supplier",
+            "late"
+          ],
+          "additionalProperties": false
+        },
         "events": {
           "type": "array",
           "items": {
