@@ -261,12 +261,12 @@ func TestOntologyQianyu(t *testing.T) {
 	chilled := 0
 	for _, c := range ov.Constraints {
 		switch c.ID {
-		case "chilled-temp":
+		case "冷藏温度":
 			chilled++
 			if c.Watching != 5 {
 				t.Errorf("fridges watched: %d", c.Watching)
 			}
-		case "skewer-has-storage":
+		case "串写明存放处":
 			if len(c.Violations) != 1 || c.Violations[0].Name != "掌中宝串（新品）" {
 				t.Errorf("the skewer kept nowhere: %+v", c.Violations)
 			}

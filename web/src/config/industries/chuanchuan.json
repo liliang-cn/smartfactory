@@ -4143,7 +4143,7 @@
     },
     "rules": [
       {
-        "id": "allergen-via-ingredient",
+        "id": "过敏原随原料传递",
         "if": [
           "原料",
           "含过敏原"
@@ -4152,7 +4152,7 @@
         "note": "过敏原随原料传递：串用了含大豆的腌料，串也含大豆"
       },
       {
-        "id": "cold-chain-via-ingredient",
+        "id": "冷链要求随原料传递",
         "if": [
           "原料",
           "需冷链"
@@ -5036,7 +5036,7 @@
     },
     "constraints": [
       {
-        "id": "chilled-temp",
+        "id": "冷藏温度",
         "class": "冷藏设备",
         "field": "temp",
         "min": 0,
@@ -5044,27 +5044,27 @@
         "say": "{name} 温度 {value} ℃，冷藏要求 0–4 ℃"
       },
       {
-        "id": "frozen-temp",
+        "id": "冷冻温度",
         "class": "冷冻设备",
         "field": "temp",
         "max": -18,
         "say": "{name} 温度 {value} ℃，冷冻要求 −18 ℃ 以下"
       },
       {
-        "id": "frying-temp",
+        "id": "炒料油温",
         "class": "炒料设备",
         "field": "temp",
         "max": 180,
         "say": "{name} 油温 {value} ℃，超过 180 ℃ 牛油容易焦糊起火"
       },
       {
-        "id": "dish-has-ingredients",
+        "id": "菜品写明原料",
         "class": "菜品",
         "requires": "原料",
         "say": "{name} 没有登记原料，查不了过敏原"
       },
       {
-        "id": "skewer-has-storage",
+        "id": "串写明存放处",
         "class": "串",
         "requires": "存放于",
         "say": "{name} 没有指定存放位置"

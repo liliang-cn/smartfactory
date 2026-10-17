@@ -2054,7 +2054,7 @@
     },
     "constraints": [
       {
-        "id": "chilled-temp",
+        "id": "冷藏温度",
         "class": "冷藏设备",
         "field": "temp",
         "min": 0,
