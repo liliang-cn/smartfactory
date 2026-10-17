@@ -17,8 +17,8 @@ import { liveFields } from '@/sim/plant';
 import { ALL, goToAsset, groupsOf, runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
 import { Approvals } from './Approvals';
 import { HintChip } from './Hints';
-import { groupFigures } from './group';
-import { CHIP, STATE_LABEL, hhmm } from './status';
+import { companyWords, groupFigures, plantFigures, shortLabel } from './group';
+import { CHIP, hhmm, stateLabel } from './status';
 
 function Brand() {
   return (
@@ -56,6 +56,8 @@ function SiteSwitcher() {
   const L = plant.layout;
   const lines = rt.plants.reduce((n, p) => n + p.layout.lines.length, 0);
   const group = rt.plants.length > 1 ? groupFigures(rt.plants) : null;
+  const cw = companyWords(rt.plants);
+  const head = (h: ReturnType<typeof plantFigures>['head']) => `${shortLabel(h)} ${h.text}`;
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-1.5">
       <div className="flex h-11 items-center gap-2 rounded-xl pl-1.5 pr-2.5 max-md:h-[38px] max-md:pr-1.5" title={company.name}>
@@ -65,26 +67,26 @@ function SiteSwitcher() {
       <span className="text-muted-foreground/50 max-md:hidden">/</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-11 min-w-0 shrink gap-2.5 rounded-xl pl-1.5 pr-3 max-md:h-[38px] max-md:pr-1.5" aria-label="切换工厂">
+          <Button variant="outline" className="h-11 min-w-0 shrink gap-2.5 rounded-xl pl-1.5 pr-3 max-md:h-[38px] max-md:pr-1.5" aria-label={`切换${cw.plant}`}>
             {campus ? <AllBadge /> : <SiteBadge text={L.badge} />}
             <span className="grid min-w-0 text-left leading-tight max-lg:hidden">
-              <b className="truncate text-[13.5px]">{campus ? '全部工厂' : `${L.name} ${L.hall}`}</b>
-              <small className="truncate text-[11.5px] font-normal text-muted-foreground max-xl:hidden">{campus ? `${rt.plants.length} 个工厂 · ${lines} 条产线` : L.sub}</small>
+              <b className="truncate text-[13.5px]">{campus ? `全部${cw.plant}` : `${L.name} ${L.hall}`}</b>
+              <small className="truncate text-[11.5px] font-normal text-muted-foreground max-xl:hidden">{campus ? `${rt.plants.length} 个${cw.plant} · ${lines} ${cw.lines}` : L.sub}</small>
             </span>
             <ChevronDownIcon className="text-muted-foreground max-md:hidden" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[360px] rounded-2xl p-2 shadow-float max-md:w-[calc(100vw-20px)]">
           <DropdownMenuLabel className="flex justify-between text-xs text-muted-foreground">
-            <span>{company.name}，{rt.plants.length} 个工厂，{lines} 条产线</span>
+            <span>{company.name}，{rt.plants.length} 个{cw.plant}，{lines} {cw.lines}</span>
           </DropdownMenuLabel>
           {group && (
             <>
               <DropdownMenuItem onSelect={() => useUI.getState().setPlant(ALL)} className={cn('gap-2.5 rounded-xl p-2', campus && 'bg-accent')}>
                 <AllBadge />
-                <b className="flex-1 truncate text-[13.5px]">全部工厂</b>
+                <b className="flex-1 truncate text-[13.5px]">全部{cw.plant}</b>
                 <span className="grid justify-items-end text-[11px] leading-tight tabular-nums">
-                  <b className="text-[12.5px]">OEE {(group.oee * 100).toFixed(0)}%</b>
+                  {group.allOee && <b className="text-[12.5px]">OEE {(group.oee * 100).toFixed(0)}%</b>}
                   <span className={group.alarms ? 'font-bold text-destructive' : 'text-muted-foreground'}>{group.alarms ? `${group.alarms} 条报警` : '无报警'}</span>
                 </span>
               </DropdownMenuItem>
@@ -92,8 +94,8 @@ function SiteSwitcher() {
             </>
           )}
           {rt.plants.map((p) => {
-            const k = p.sim.kpis();
-            const alarms = p.sim.alarms.filter((a) => a.active).length;
+            const f = plantFigures(p);
+            const alarms = f.alarms;
             return (
               <DropdownMenuItem key={p.layout.id} onSelect={() => useUI.getState().setPlant(p.layout.id)} className={cn('gap-2.5 rounded-xl p-2', p === plant && !campus && 'bg-accent')}>
                 <SiteBadge text={p.layout.badge} />
@@ -102,7 +104,7 @@ function SiteSwitcher() {
                   <small className="truncate text-xs text-muted-foreground">{p.layout.sub}</small>
                 </span>
                 <span className="grid justify-items-end text-[11px] leading-tight tabular-nums">
-                  <b className="text-[12.5px]">OEE {(k.oee * 100).toFixed(0)}%</b>
+                  <b className="text-[12.5px]">{head(f.head)}</b>
                   <span className={alarms ? 'font-bold text-destructive' : 'text-muted-foreground'}>{alarms ? `${alarms} 条报警` : '无报警'}</span>
                 </span>
               </DropdownMenuItem>
@@ -131,24 +133,28 @@ function Search() {
   const assets = [...plant.sim.assets.values()];
   const example = assets.find((a) => a.type === 'station');
   const plants = campus ? runtime().plants : [plant];
+  const w = plant.layout.words;
+  // what there is to look for here, in the site's words: machines, lines, places, vehicles
+  const what = [w.machine, w.line, plant.sim.places.length ? plant.sim.places[0].spec?.label : '', plant.sim.agvs.length ? 'AGV' : plant.sim.trucks.length ? '车辆' : ''].filter(Boolean).join('、');
+  const prefixes = [...new Set(assets.filter((a) => a.type !== 'buffer' && a.type !== 'outfeed').map((a) => a.id.replace(/[-\d].*$/, '')))].slice(0, 3).join('、');
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="搜索设备、产线、AGV"
+        aria-label={`搜索${what}`}
         className="flex h-10 w-[min(300px,22vw)] min-w-0 items-center gap-2 rounded-xl border bg-background px-3 text-[13.5px] text-muted-foreground transition-colors hover:bg-surface max-md:size-[38px] max-md:shrink-0 max-md:justify-center max-md:px-0"
       >
         <SearchIcon className="size-[17px]" />
-        <span className="flex-1 truncate text-left max-md:hidden">搜索设备、产线、AGV</span>
+        <span className="flex-1 truncate text-left max-md:hidden">搜索{what}</span>
         <Kbd className="max-md:hidden">/</Kbd>
       </button>
-      <CommandDialog open={open} onOpenChange={setOpen} title="搜索" description="按编号或名称查找设备">
+      <CommandDialog open={open} onOpenChange={setOpen} title="搜索" description={`按编号或名称查找${w.machine}`}>
         {/* this CommandDialog does not provide the cmdk root itself */}
         <Command>
-          <CommandInput placeholder={`输入编号或名称，如 ${example?.id ?? 'CV-1'}、${example?.spec?.label ?? '输送线'}、AGV`} />
+          <CommandInput placeholder={`输入编号或名称，如 ${example?.id ?? 'CV-1'}、${example?.spec?.label ?? w.conveyor}`} />
           <CommandList className="max-h-[60dvh]">
-            <CommandEmpty>没有匹配的设备，试试 RB、AGV、TRK 这样的编号前缀</CommandEmpty>
+            <CommandEmpty>没有匹配的{w.machine}，试试 {prefixes} 这样的编号前缀</CommandEmpty>
             {plants.flatMap((p) => groupsOf(p.layout).map((g) => (
               <CommandGroup key={`${p.layout.id}/${g.id}`} heading={`${campus ? `${p.layout.name} · ` : ''}${g.name}${g.note ? ` ${g.note}` : ''}`}>
                 {[...p.sim.assets.values()].filter((a) => a.group === g.id).map((a) => (
@@ -158,7 +164,7 @@ function Search() {
                     onSelect={() => { setOpen(false); if (campus) goToAsset(p.layout.id, a.id); else useUI.getState().select(a.id, true); }}
                     className="gap-2.5 rounded-lg py-2"
                   >
-                    <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-bold', CHIP[a.state])}>{STATE_LABEL[a.state]}</span>
+                    <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-bold', CHIP[a.state])}>{stateLabel(p.layout, a.state)}</span>
                     <b className="font-bold">{a.id}</b>
                     <span className="truncate text-muted-foreground">{a.name}</span>
                   </CommandItem>
@@ -297,7 +303,7 @@ function LiveLinks() {
           variant="ghost"
           className={cn('h-[34px] gap-1.5 rounded-[10px] px-2.5 text-[13px] font-bold max-md:hidden', here ? 'bg-brand-soft text-primary hover:bg-brand-soft/80' : 'bg-surface text-muted-foreground hover:bg-surface/80')}
           aria-label="真实设备数据"
-          title={here ? `本厂 ${here} 台设备接入了真实数据` : '本厂设备都在仿真；真实数据接在别的厂'}
+          title={here ? `这里 ${here} 台${layout.words.machine}接入了真实数据` : `这里的${layout.words.machine}都在仿真；真实数据接在别处`}
         >
           <RadioTowerIcon className="size-4" />
           <span className="max-lg:hidden">实时</span>
@@ -309,7 +315,7 @@ function LiveLinks() {
           <span className="text-[13px] font-extrabold">真实设备数据</span>
           <span className="text-xs font-normal text-muted-foreground">
             {up.length}/{sources.length} 路连接在线 ·{' '}
-            {here ? `${layout.name}有 ${here} 台设备在用真实数据` : `${layout.name}的设备都在仿真`}
+            {here ? `${layout.name}有 ${here} 台${layout.words.machine}在用真实数据` : `${layout.name}的${layout.words.machine}都在仿真`}
           </span>
         </DropdownMenuLabel>
         {sources.map((s) => (

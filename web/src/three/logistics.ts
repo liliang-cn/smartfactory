@@ -130,11 +130,19 @@ export function buildOutfeed(line: LineLayout, walk = false): ModelHandle {
 
 const cargoRaw = new THREE.MeshStandardMaterial({ color: '#aab6d3', roughness: 0.35, metalness: 0.5 });
 
-export function buildAGV(): ModelHandle {
+export function buildAGV(forklift = false): ModelHandle {
   const root = new THREE.Group();
   const body = bodyMat(P.yellow);
   blk(root, M.ink, 1.24, 0.14, 0.8, 0, 0.05, 0, 0.05);
   blk(root, body, 1.3, 0.22, 0.86, 0, 0.12, 0, 0.1);
+  if (forklift) {
+    // a driver's forklift: mast and forks at the front, overhead guard, counterweight
+    for (const sz of [-0.3, 0.3]) blk(root, M.greyDark, 0.08, 2.0, 0.08, 0.7, 0.1, sz, 0.02);
+    for (const sz of [-0.22, 0.22]) blk(root, M.greyDark, 0.9, 0.05, 0.1, 1.1, 0.12, sz, 0.01);
+    for (const sx of [-0.45, 0.35]) for (const sz of [-0.38, 0.38]) blk(root, M.ink, 0.05, 1.6, 0.05, sx, 0.34, sz, 0.01);
+    blk(root, body, 0.95, 0.06, 0.86, -0.05, 1.94, 0, 0.02);
+    blk(root, body, 0.35, 0.5, 0.82, -0.5, 0.34, 0, 0.06);
+  }
   blk(root, M.white, 1.1, 0.04, 0.7, 0, 0.34, 0, 0.03);
   cyl(root, M.ink, 0.08, 0.1, 0.52, 0.34, 0, 16);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {

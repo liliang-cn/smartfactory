@@ -1,15 +1,18 @@
 // Floating map chrome: KPI cards, view-mode switch with legend, camera buttons, hover tip.
 import { useRef } from 'react';
-import { BadgeCheckIcon, BellIcon, GaugeIcon, OctagonAlertIcon, HomeIcon, MinusIcon, PackageIcon, PlusIcon, RotateCcwIcon, RotateCwIcon, ZapIcon } from 'lucide-react';
+import {
+  ArmchairIcon, BadgeCheckIcon, BellIcon, BikeIcon, CloudRainIcon, GaugeIcon, HourglassIcon, OctagonAlertIcon, HomeIcon, MinusIcon, PackageIcon, PlusIcon, RefreshCwIcon,
+  RotateCcwIcon, RotateCwIcon, SnowflakeIcon, SunIcon, TentIcon, ThumbsUpIcon, TruckIcon, UsersIcon, WalletIcon, ZapIcon,
+} from 'lucide-react';
+import { kpiValues, type KpiValue } from '@/sim/kpis';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { Kpis as KpiData } from '@/sim/types';
 import { runtime, useCampus, usePlant, useTick, useUI, type CamOp, type ViewMode } from '@/state/store';
 import { sourceOf } from '@/sim/history';
-import { groupFigures } from './group';
-import { STATE_LABEL, pct, rate } from './status';
+import { groupFigures, shortLabel } from './group';
+import { pct, rate, stateLabel } from './status';
 
 function KpiCard({ icon, label, value, delta, sub, tone }: { icon: React.ReactNode; label: React.ReactNode; value: string; delta?: number | null; sub: React.ReactNode; tone?: 'bad' }) {
   return (
@@ -41,25 +44,42 @@ function Provenance({ share }: { share: number }) {
   );
 }
 
+const KPI_ICON: Record<KpiValue['id'], React.ReactNode> = {
+  oee: <GaugeIcon />, throughput: <PackageIcon />, quality: <BadgeCheckIcon />, power: <ZapIcon />,
+  turnover: <RefreshCwIcon />, occupancy: <ArmchairIcon />, queue: <HourglassIcon />, ticket: <WalletIcon />, rating: <ThumbsUpIcon />,
+  served: <UsersIcon />, takeaway: <BikeIcon />, checkins: <TentIcon />, inUse: <TentIcon />, weather: <SunIcon />,
+  onTime: <TruckIcon />, coldChain: <SnowflakeIcon />,
+};
+
+/** Figures that are shares, shown with how they moved over the last sim-minute. */
+const SHARES = new Set(['oee', 'quality', 'occupancy', 'rating', 'onTime', 'coldChain']);
+
 export function Kpis() {
   useTick();
   const { sim, layout } = usePlant();
-  const k = sim.kpis();
-  // Compare against the snapshot from a sim-minute ago.
-  const prev = useRef<{ at: number; snap: KpiData; base: KpiData; plant: string } | null>(null);
-  if (!prev.current || prev.current.plant !== layout.id) prev.current = { at: sim.elapsed, snap: k, base: k, plant: layout.id };
-  if (sim.elapsed - prev.current.at >= 60) prev.current = { at: sim.elapsed, snap: k, base: prev.current.snap, plant: layout.id };
+  const list = kpiValues(sim);
+  // Compare against the figures from a sim-minute ago.
+  const prev = useRef<{ at: number; snap: KpiValue[]; base: KpiValue[]; plant: string } | null>(null);
+  if (!prev.current || prev.current.plant !== layout.id) prev.current = { at: sim.elapsed, snap: list, base: list, plant: layout.id };
+  if (sim.elapsed - prev.current.at >= 60) prev.current = { at: sim.elapsed, snap: list, base: prev.current.snap, plant: layout.id };
   const base = prev.current.base;
   return (
     <section className="absolute left-5 top-20 z-20 flex gap-3 max-md:inset-x-0 max-md:top-[calc(62px+env(safe-area-inset-top))] max-md:snap-x max-md:snap-mandatory max-md:gap-2 max-md:overflow-x-auto max-md:px-2.5 max-md:pb-2.5 max-md:[scrollbar-width:none]">
-      <KpiCard icon={<GaugeIcon />} label={<>{layout.terms.oee ?? '综合设备效率 OEE'}<Provenance share={k.measured} /></>} value={pct(k.oee, 1)} delta={(k.oee - base.oee) * 100}
-        sub={`可用 ${pct(k.avail)} 性能 ${pct(k.perf)} 质量 ${pct(k.quality)}`} />
-      <KpiCard icon={<PackageIcon />} label={layout.terms.throughput ?? '每小时产量'} value={rate(k.tp)} delta={k.tp - base.tp} sub={`${layout.unit}，${k.span > 3600 ? `近 ${Math.round(k.span / 3600)} 小时折算` : '近 60 分钟'} ${layout.lines.length} ${layout.terms.line ?? '条线'}合计`} />
-      <KpiCard icon={<BadgeCheckIcon />} label={layout.qualityLabel} value={pct(k.quality, 1)} delta={(k.quality - base.quality) * 100}
-        sub={`合格 ${k.good}，不合格 ${k.scrap}`} />
-      <div className="max-xl:hidden max-md:contents">
-        <KpiCard icon={<ZapIcon />} label={layout.terms.power ?? '实时功率'} value={`${k.power.toFixed(0)} kW`} sub={`本班能耗 ${k.energy.toFixed(1)} kWh`} />
-      </div>
+      {list.map((x, i) => {
+        const was = base.find((b) => b.id === x.id && b.label === x.label);
+        const delta = was && (SHARES.has(x.id) ? (x.value - was.value) * 100 : x.id === 'throughput' || x.id === 'served' ? x.value - was.value : null);
+        const icon = x.id === 'weather' && x.value ? <CloudRainIcon /> : KPI_ICON[x.id];
+        // the first figures fit a laptop; the rest show on wide screens, and all of them on a phone (it scrolls)
+        return (
+          <div key={`${x.id}:${x.label}`} className={cn(i >= 3 && 'max-xl:hidden max-md:contents', i >= 5 && 'max-2xl:hidden')}>
+            <KpiCard
+              icon={icon}
+              label={<>{x.label}{(i === 0 || x.measured > 0) && <Provenance share={x.measured} />}</>}
+              value={x.text} delta={delta ?? null} sub={x.sub} tone={x.bad ? 'bad' : undefined}
+            />
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -88,8 +108,12 @@ export function GroupKpis() {
     g.per.map(({ p, f }) => ({ id: p.layout.id, badge: p.layout.badge, value: fmt(f), bad: bad?.(f) }));
   return (
     <section className="absolute left-5 top-20 z-20 flex gap-3 max-md:inset-x-0 max-md:top-[calc(62px+env(safe-area-inset-top))] max-md:snap-x max-md:snap-mandatory max-md:gap-2 max-md:overflow-x-auto max-md:px-2.5 max-md:pb-2.5 max-md:[scrollbar-width:none]">
-      <KpiCard icon={<GaugeIcon />} label={`集团 ${L.terms.oee ?? '综合设备效率 OEE'}`} value={pct(g.oee, 1)} sub={<Breakdown items={items((f) => pct(f.oee))} />} />
-      <KpiCard icon={<PackageIcon />} label={L.terms.throughput ?? '每小时产量'} value={rate(g.tp)} sub={<Breakdown items={items((f) => rate(f.tp))} />} />
+      {g.allOee
+        ? <KpiCard icon={<GaugeIcon />} label={`集团 ${L.words.oee}`} value={pct(g.oee, 1)} sub={<Breakdown items={items((f) => pct(f.oee))} />} />
+        : <KpiCard icon={<GaugeIcon />} label="各处头号指标" value={`${g.per.length} 处`} sub={<Breakdown items={items((f) => `${shortLabel(f.head)} ${f.head.text}`)} />} />}
+      {g.unit
+        ? <KpiCard icon={<PackageIcon />} label={L.words.throughput} value={rate(g.tp)} sub={<Breakdown items={items((f) => rate(f.tp))} />} />
+        : <KpiCard icon={<PackageIcon />} label="每小时" value={`${g.per.length} 处`} sub={<Breakdown items={g.per.map(({ p, f }) => ({ id: p.layout.id, badge: p.layout.badge, value: `${rate(f.tp)} ${p.layout.unit}` }))} />} />}
       <KpiCard icon={<BellIcon />} label="报警" value={`${g.alarms}`} tone={g.alarms ? 'bad' : undefined} sub={<Breakdown items={items((f) => `${f.alarms}`, (f) => f.alarms > 0)} />} />
       <KpiCard icon={<OctagonAlertIcon />} label="故障设备" value={`${g.faults}`} tone={g.faults ? 'bad' : undefined} sub={<Breakdown items={items((f) => `${f.faults}`, (f) => f.faults > 0)} />} />
     </section>
@@ -102,11 +126,12 @@ export function ViewSwitch() {
   const mode = useUI((s) => s.mode);
   const labels = useUI((s) => s.labels);
   const campus = useCampus();
+  const { layout } = usePlant();
   return (
     <div className="absolute left-5 top-[166px] z-20 grid justify-items-start gap-2.5 max-md:left-2.5 max-md:top-[calc(132px+env(safe-area-inset-top))]">
       <div className="flex items-center gap-2 rounded-[13px] bg-card p-[5px] shadow-float">
         <ToggleGroup type="single" value={mode} onValueChange={(v) => v && useUI.getState().setMode(v as ViewMode)} spacing={0} aria-label="视图">
-          {([['live', '实况'], ['heat', '温度'], ['util', '稼动率']] as const).map(([v, label]) => (
+          {([['live', '实况'], ['heat', '温度'], ['util', layout.words.util]] as const).map(([v, label]) => (
             <ToggleGroupItem key={v} value={v} className="h-[30px] rounded-lg px-2.5 text-[12.5px] font-bold text-muted-foreground data-[state=on]:bg-brand-soft data-[state=on]:text-primary">
               {label}
             </ToggleGroupItem>
@@ -173,7 +198,8 @@ export function HoverTip() {
   if (!tip) return null;
   const a = sim.assets.get(tip.id);
   if (!a) return null;
-  const extra = a.spec?.runRise !== undefined ? `${a.temp.toFixed(0)}°C  ${a.power.toFixed(1)} kW`
+  const extra = a.type === 'table' ? (a.state === 'occupied' ? `${a.count} 人 · ${Math.round((sim.elapsed - (a.since ?? 0)) / 60)} 分钟` : `${a.place!.seats} 座`)
+    : a.spec?.runRise !== undefined ? `${a.temp.toFixed(0)}°C  ${a.power.toFixed(1)} kW`
     : a.type === 'agv' ? `电量 ${a.battery.toFixed(0)}%`
     : a.type === 'buffer' || a.type === 'warehouse' ? `库存 ${a.stock}`
     : a.type === 'truck' ? a.task : `${a.count} ${layout.unit}`;
@@ -181,7 +207,7 @@ export function HoverTip() {
     <div className="pointer-events-none fixed z-40 max-w-60 translate-x-3.5 translate-y-3.5 rounded-[10px] bg-foreground px-3 py-2 text-xs leading-snug text-background shadow-float max-md:hidden" style={{ left: tip.x, top: tip.y }}>
       <b className="text-[12.5px]">{a.id}</b> {a.name}
       <br />
-      <small className="text-background/70">{STATE_LABEL[a.state]}  {extra}</small>
+      <small className="text-background/70">{stateLabel(layout, a.state)}  {extra}</small>
     </div>
   );
 }

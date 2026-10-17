@@ -1,6 +1,11 @@
+import type { PlantLayout } from '@/core/layout';
+import { STATE_LABEL } from '@/sim/plant';
 import type { AssetState } from '@/sim/types';
 
-export { STATE_LABEL } from '@/sim/plant';
+export { STATE_LABEL };
+
+/** A state in the plant's own words (换台 for a shop's changeover …). */
+export const stateLabel = (L: Pick<PlantLayout, 'words'>, s: AssetState) => L.words.states[s] ?? STATE_LABEL[s];
 
 /** Chip colours: green only for "working", amber for waiting, red for fault, violet for maintenance. */
 export const CHIP: Record<AssetState, string> = {
@@ -19,6 +24,10 @@ export const CHIP: Record<AssetState, string> = {
   away: 'bg-muted text-muted-foreground',
   moving: 'bg-brand-soft text-primary',
   handling: 'bg-brand-soft text-primary',
+  free: 'bg-success-soft text-success',
+  occupied: 'bg-brand-soft text-primary',
+  reserved: 'bg-warning-soft text-warning',
+  cleaning: 'bg-muted text-muted-foreground',
 };
 
 export const DOT: Record<AssetState, string> = {
@@ -37,6 +46,10 @@ export const DOT: Record<AssetState, string> = {
   away: 'bg-slate-400',
   moving: 'bg-primary',
   handling: 'bg-primary',
+  free: 'bg-success',
+  occupied: 'bg-primary',
+  reserved: 'bg-amber-400',
+  cleaning: 'bg-slate-400',
 };
 
 export const ALERT_STATES = new Set<AssetState>(['fault', 'blocked', 'empty', 'full', 'maint', 'changeover']);

@@ -30,6 +30,7 @@ export function buildWorld(L: PlantLayout, campus = false): THREE.Group {
   floor.receiveShadow = true;
 
   if (outdoor) buildFence(g, box);
+  else if (L.site === 'shop') buildShopfront(g, L);
   else buildWalls(g, box);
   buildRoads(g, L, campus);
   buildTrees(g, L, campus);
@@ -47,9 +48,16 @@ function floorTexture(L: PlantLayout) {
     const X = (x: number) => (x - box.x0) * S;
     const Z = (z: number) => (z - box.z0) * S;
     const outdoor = L.site === 'outdoor';
-    c.fillStyle = outdoor ? '#d3eabc' : P.slab;
+    const shop = L.site === 'shop';
+    c.fillStyle = outdoor ? '#d3eabc' : shop ? '#f3ebdf' : P.slab;
     c.fillRect(0, 0, w, h);
-    if (outdoor) {
+    if (shop) {
+      // warm floor tiles
+      c.strokeStyle = 'rgba(150,110,60,0.08)';
+      c.lineWidth = 2;
+      for (let x = box.x0; x <= box.x1; x += 1.2) { c.beginPath(); c.moveTo(X(x), 0); c.lineTo(X(x), h); c.stroke(); }
+      for (let z = box.z0; z <= box.z1; z += 1.2) { c.beginPath(); c.moveTo(0, Z(z)); c.lineTo(w, Z(z)); c.stroke(); }
+    } else if (outdoor) {
       // mowing stripes
       c.fillStyle = 'rgba(255,255,255,0.12)';
       for (let x = box.x0; x <= box.x1; x += 8) c.fillRect(X(x), 0, 4 * S, h);
@@ -173,6 +181,59 @@ function buildWalls(g: THREE.Object3D, box: Box) {
   for (const sz of [-1, 1]) blk(g, M.blue, 0.3, 4.2, 0.3, x1 + 0.2, 0, midZ + sz * 2.9, 0.06);
   blk(g, M.blue, 0.9, 0.3, 6.4, x1 + 0.5, 4.2, midZ, 0.08);
   for (const x of [x0 - 0.6, x1 + 0.6]) for (const sz of [-1, 1]) blk(g, M.ink, 0.3, 0.6, 0.3, x, 0, midZ + sz * 1.8, 0.06);
+}
+
+/**
+ * A shop: warm walls with the shop's sign and menu boards at the back, a glass front onto the
+ * street with the door by the queue, the kitchen side door where deliveries come in.
+ */
+function buildShopfront(g: THREE.Object3D, L: PlantLayout) {
+  const { x0, x1, z0, z1 } = L.box;
+  const H = 4.2;
+  const wall = bodyMat('#f7efe3');
+  const trim = bodyMat('#e2412b');
+  const midZ = (z0 + z1) / 2;
+  blk(g, wall, x1 - x0 + 0.6, H, 0.3, (x0 + x1) / 2, 0, z0 - 0.15, 0.06);
+  blk(g, trim, x1 - x0 + 0.7, 0.3, 0.36, (x0 + x1) / 2, H - 0.3, z0 - 0.15, 0.06);
+  const sign = canvasTex(1024, 160, (c, w, h) => {
+    c.fillStyle = '#e2412b';
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = '#fff6e5';
+    c.font = '800 92px "Plus Jakarta Sans", sans-serif';
+    c.textAlign = 'center';
+    c.fillText(`${L.company.name} · ${L.name}`, w / 2, 112);
+  });
+  const sw = Math.min(16, (x1 - x0) * 0.6);
+  mesh(g, new THREE.PlaneGeometry(sw, sw * 0.156), new THREE.MeshStandardMaterial({ map: sign, roughness: 0.6 }), (x0 + x1) / 2, 2.7, z0 + 0.01, false);
+  // menu boards with warm lamps along the back
+  const board = new THREE.MeshStandardMaterial({ color: '#3a2a22', roughness: 0.7 });
+  const lamp = new THREE.MeshStandardMaterial({ color: '#ffe8a3', emissive: '#ffcf4d', emissiveIntensity: 0.9 });
+  for (let x = x0 + 3; x < x1 - 2; x += 7) {
+    if (Math.abs(x - (x0 + x1) / 2) < sw / 2 + 1) continue;
+    blk(g, board, 2.4, 1.3, 0.05, x, 1.8, z0 + 0.03, 0.03);
+    mesh(g, new THREE.SphereGeometry(0.16, 12, 8), lamp, x, 3.5, z0 + 0.4, false);
+  }
+  // side walls: the kitchen side (left) has the delivery door
+  const side = (x: number, za: number, zb: number) => blk(g, wall, 0.3, H, zb - za, x, 0, (za + zb) / 2, 0.06);
+  side(x0 - 0.15, z0 - 0.3, midZ - 2.2);
+  side(x0 - 0.15, midZ + 2.2, z1 + 0.3);
+  blk(g, wall, 0.3, H - 3, 4.4, x0 - 0.15, 3, midZ, 0.04);
+  blk(g, wall, 0.3, 1.0, z1 - z0 + 0.6, x1 + 0.15, 0, midZ, 0.06);
+  // the street front: a low sill with glass above, the entrance left open near the queue
+  const door = L.lines[0] ? L.lines[0].x0 + 0.6 : x0 + 4;
+  const glass = new THREE.MeshStandardMaterial({ color: '#cfe0ff', roughness: 0.08, transparent: true, opacity: 0.22, depthWrite: false });
+  const front = (xa: number, xb: number) => {
+    if (xb - xa < 0.2) return;
+    blk(g, wall, xb - xa, 0.6, 0.3, (xa + xb) / 2, 0, z1 + 0.15, 0.05);
+    blk(g, trim, xb - xa, 0.08, 0.34, (xa + xb) / 2, 0.6, z1 + 0.15, 0.02);
+    const pane = mesh(g, new THREE.BoxGeometry(xb - xa, 1.8, 0.04), glass, (xa + xb) / 2, 1.6, z1 + 0.15, false);
+    pane.castShadow = false;
+    for (let x = xa; x <= xb + 1e-6; x += Math.max(1, (xb - xa) / Math.max(1, Math.round((xb - xa) / 3)))) blk(g, M.greyDark, 0.06, 1.9, 0.06, x, 0.6, z1 + 0.15, 0.01);
+  };
+  front(x0, door - 1.2);
+  front(door + 1.2, x1);
+  for (const sx of [-1.2, 1.2]) blk(g, trim, 0.14, 2.6, 0.3, door + sx, 0, z1 + 0.15, 0.04);
+  blk(g, trim, 2.6, 0.3, 0.34, door, 2.6, z1 + 0.15, 0.04);
 }
 
 /** Outdoor sites: a low wooden fence with gates where the inbound and outbound roads meet it. */
