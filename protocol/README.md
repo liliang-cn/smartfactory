@@ -23,6 +23,7 @@
   | `admin` 管理员 | 加上：增删助手、上传删除资料、删除笔记；经 MCP 建删场景 |
 
   另有 `erp` ERP 接口：不在上面的阶梯里，给 ERP 之类的系统用，只能发、查、撤它所管公司的生产工单（`/api/erp/{company}/orders…`），别处一律按访客，也进不了 MCP。
+  `reporter` 桌态上报也一样：给摄像头盒子、收银系统、桌边传感器用，只能上报它所管公司的桌态和用餐事件（`/api/report/{company}/…`），别处一律按访客，也进不了 MCP。
 
   令牌由 `smartfactory token -name 张工 -role operator -company huaduan` 生成，服务器配置里只存它的 SHA-256。最早的单一 `token` 仍然有效，等同于所有公司的管理员。
 - **版本**：服务器在 `hello.protocol` 里声明版本号。浏览器看到版本号和自己不一致时，必须停止跟随，并提示刷新页面。
@@ -447,6 +448,42 @@ SmartFactory 由工厂或公司自己部署在自己的服务器上，一套服�
 手机页面：`/check?company=…&plant=…&asset=…` 直接打开一台设备（设备上贴的二维码就是这个链接），令牌可以带一次 `&token=`，之后存在手机上。
 
 命令行：`smartfactory checks <company>`（表单和逾期数）、`rounds [-status overdue,due]`、`results [-asset HP-101] [-bad] [-hours 24]`、`export -from 2026-10-01 -to 2026-10-12 -o 记录.csv`、`template 点检`、`save -f form.json`、`rm <编号>`、`submit -f values.json`。工作台助手有 `check_forms`、`check_rounds`、`check_results`；孪生里的研发笔记助手和售后服务助手用 `manual_records` 查人工记录。
+### 餐桌 `/api/report/{company}/…`、`/api/tables/{company}`
+
+饭店里哪些桌被占了，由店里的系统上报：摄像头盒子、收银（点餐）系统、桌边传感器、服务员手机（`/waiter`）。孪生和指标用上报的；一张桌三个小时没人报，就回到孪生的仿真。和设备读数一样，每个数都说明是实测还是仿真。
+
+- **桌**：每家门店（`plant`）的桌有自己的编号（如 `A01`、`B03`）、区域、座位数，孪生里一张桌一个位置。桌态四种：`free` 空闲、`occupied` 就餐中（带 `people`）、`reserved` 已预订、`cleaning` 清台中。
+- **上报**（`TableReport`）：一张桌从 `since` 起是什么状态。`since` 是毫秒或 RFC 3339，不写就是收到的时间，比服务器时钟快 5 分钟以上按收到的时间算。一次报一条、一列或 `{reports: […]}`。同一条（桌、状态、时间、来源都一样）报两次只记一次（`duplicate`）。比这张桌已报过的还早的（断网后补发的）照样记下，按时间放进当天的用餐记录（`late`），但孪生不回退到旧状态。没有的桌是 `unknown`，写错的是 `invalid` 并说明为什么。几家店有同一个桌号时要写 `plant`。
+- **用餐事件**（`TableEvent`）：收银系统可以报 `seated` 入座、`ordered` 点单、`paid` 结账、`left` 离开。入座开始一次用餐，结账、离开结束它（桌子转为清台中），点单只记下；没报入座就点单的，从点单算起。
+- **用餐记录**（`TableSession`）：每桌每次用餐的开始、结束、人数、来源。上报的按时间重新排出来：进入 `occupied`（或入座）开始，`free`、`cleaning`、`reserved`（或结账、离开）结束。没人报的桌用孪生仿真的记录（来源 `sim`）；一张桌被报上来以后，和上报时间重叠的仿真记录作废。
+- **指标**（`TableKpis`，营业日从 05:00 算起）：上座率 = 就餐中的桌 / 桌数（现在）；座位利用率 = 就餐人数 / 座位数（现在）；翻台率 = 今天开台次数 / 桌数；平均用餐时长 = 今天结束的用餐的平均分钟数。`source` 是 `measured`（所有桌都在上报）、`simulated`（都没报）或 `mixed`，`measuredShare` 是上报的桌占多少。
+- **令牌**：上报要这家公司的 `reporter` 令牌，或操作员以上；看桌态谁都可以（孪生对访客也公开）。后台「接入」的「桌态上报」里签发上报令牌（只显示一次），看每张桌最后是谁报的。
+- **审计**：人用操作员令牌在手机上报的记在他名下（`table.report`）；设备的上报只存在桌态库里。
+
+| 方法 路径 | 请求 → 响应 | 说明 |
+|---|---|---|
+| `POST /api/report/{company}/tables` | `TableReports` → `TableReportResult` | 桌态，一次最多 1000 条，每条单独回答 |
+| `POST /api/report/{company}/sessions` | `TableEvents` → `TableReportResult` | 收银系统的用餐事件 |
+| `GET /api/tables/{company}` | `TablesOverview` | 每张桌现在怎样、最后谁报的，今天每家店和合计的指标 |
+| `GET /api/tables/{company}/{plant}/{table}` | `TableCurrent` | 一张桌现在怎样、这次坐了多久、今天的每次用餐 |
+| `GET /api/tables/{company}/{plant}/{table}/sessions?day=YYYY-MM-DD` | `TableDay` | 一张桌某个营业日的用餐记录和收到的每条上报 |
+| `GET /api/tables/{company}/history?from=&to=&by=` | `TableHistory` | `by` 是 `hour` 或 `day`：每家店开台数、客人数、平均用餐分钟、占用桌时，其中上报的多少；默认最近 7 天按天 |
+
+例子（令牌放在环境变量里，别写进脚本）：
+
+```
+curl -X POST https://factory.example.com/api/report/qianyu/tables \
+  -H "Authorization: Bearer $SF_TOKEN" -H "Content-Type: application/json" \
+  -d '[{"plant":"chunxi","table":"A03","state":"occupied","people":4,"since":"2026-10-17T12:05:00+08:00","source":"cam-1"},
+       {"plant":"chunxi","table":"B01","state":"cleaning","since":1792217400000,"source":"cam-1"}]'
+
+curl -X POST https://factory.example.com/api/report/qianyu/sessions \
+  -H "Authorization: Bearer $SF_TOKEN" -H "Content-Type: application/json" \
+  -d '{"events":[{"plant":"chunxi","table":"A03","event":"paid","at":"2026-10-17T13:02:00+08:00","source":"pos"}]}'
+```
+
+店里局域网上的设备也可以走 MQTT，见 devices.md 的「餐桌」。服务员手机页：`/waiter?company=…`，点一张桌报入座几人、结账离开、清台完成、预订留桌，来源记为 `waiter:名字`。演示和测试用的假上报器：`go run ./cmd/tablereplay -url … -company qianyu -plant chunxi`（令牌从 `SF_TOKEN` 读），按午市、晚市、夜宵编一天的桌态，先补报到现在，再到点一条条报。工作台助手有 `tables_now`、`table_now`、`tables_history`；MCP 有 `tables_free`、`tables_kpis`、`table_now`、`tables_history`；孪生里的售后服务助手用 `dining_tables`。
+
 ### 成效 `/api/value/{company}`
 
 一段时间里孪生和它的 AI 给这家公司做了什么，每个数（`ValueFigure`）带 `n`（从多少条记录算的：计数就是它自己，比例是分母，工厂的数是产线小时）和 `basis`（依据）；没有可算的记录时 `value` 是 `null`，页面写「没有数据」，不估。
