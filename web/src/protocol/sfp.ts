@@ -611,7 +611,7 @@ export const AdminCompany = z.object({
   id: str, name: str, short: str, industry: str,
   /** shipped with the app (cannot be replaced or deleted); the others were created in the console or over MCP */
   builtin: z.boolean(),
-  plants: z.array(z.object({ id: str, name: str, hall: str, site: z.enum(['hall', 'outdoor']), lines: num, machines: num })),
+  plants: z.array(z.object({ id: str, name: str, hall: str, site: z.enum(['hall', 'outdoor', 'shop']), lines: num, machines: num })),
   /** values currently arriving from real equipment */
   liveTags: num,
   /** the company has a business advisor */
@@ -644,7 +644,7 @@ export const AdminOverview = z.object({
 /** A company the engine accepted (POST /api/admin/companies, same id replaces). */
 export const CompanyCreated = z.object({
   ok: z.literal(true), id: str, name: str,
-  plants: z.array(z.object({ id: str, name: str, site: z.enum(['hall', 'outdoor']), lines: z.array(str), machines: num })),
+  plants: z.array(z.object({ id: str, name: str, site: z.enum(['hall', 'outdoor', 'shop']), lines: z.array(str), machines: num })),
 });
 
 /** A config the engine turned down (422): each problem, and where. */
@@ -702,7 +702,7 @@ export const TemplateSummary = z.object({
   /** builtin · local (saved or imported on this installation) */
   source: z.enum(['builtin', 'local']),
   industry: str, industryName: str,
-  plants: z.array(z.object({ id: str, name: str, site: z.enum(['hall', 'outdoor']), lines: z.array(str), machines: num })),
+  plants: z.array(z.object({ id: str, name: str, site: z.enum(['hall', 'outdoor', 'shop']), lines: z.array(str), machines: num })),
   created: time.optional(),
 });
 export const Templates = z.array(TemplateSummary).meta({ description: 'GET /api/admin/templates' });
@@ -1125,6 +1125,8 @@ export const TableNow = z.object({
   source: str,
   /** reports govern the table (reported within the last 3 hours) */
   reported: z.boolean(),
+  /** groups waiting at the door of the table's site now */
+  waiting: num.optional(),
   lastSource: str.optional(), lastAt: num.optional(),
   /** minutes in this state */
   minutes: num,

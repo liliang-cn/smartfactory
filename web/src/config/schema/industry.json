@@ -165,6 +165,22 @@
             "every": {
               "type": "number",
               "exclusiveMinimum": 0
+            },
+            "delay": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
             }
           }
         },

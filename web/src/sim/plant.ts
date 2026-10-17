@@ -371,6 +371,11 @@ export class PlantSim {
 
   wall() { return this.epoch + this.elapsed * 1000; }
 
+  /** Whether the lines are meant to be running now: not closed, not on a meal break (what OEE counts time over). */
+  planned() {
+    return !this.closed && !this.pause;
+  }
+
   /** 元/kWh of the company's tariff now. */
   price() {
     const t = this.layout.tariff;
@@ -409,7 +414,7 @@ export class PlantSim {
       this.pauseUntil = this.elapsed + b.minutes * 60;
       for (const line of this.lines) {
         line.pauses.push([this.elapsed, this.pauseUntil]);
-        for (const a of line.stations) if (a.machine?.crew || a.machine?.look.archetype === 'manual') a.pause = b.label;
+        for (const a of line.stations) if (a.machine?.crew !== false) a.pause = b.label;
       }
       this.note(this.lines[0]?.stations[0] ?? this.wh, `${b.label} ${b.minutes} 分钟：各${this.layout.words.line}暂停投料，人工${this.layout.words.machine}停下`, 'op');
     }
@@ -437,14 +442,16 @@ export class PlantSim {
     const s = pickShare(sups) ?? { name: '', late: 0.1, share: 1 };
     const late = Math.random() < (s.late ?? 0.1);
     const due = after + every * 3600_000;
-    const use = this.lines.reduce((n, l) => n + (every * 3600) / Math.max(...l.stations.map((a) => a.cycle)), 0);
-    this.inbound = { due, at: due + (late ? rand(1.5, 6) * 3600_000 : rand(-10, 10) * 60_000), load: Math.round(use * 1.02), supplier: s.name, late };
+    // what the lines use over the interval at the pace they really run (their orders' efficiency)
+    const use = this.lines.reduce((n, l) => n + ((every * 3600) / Math.max(...l.stations.map((a) => a.cycle))) * (l.planEff ?? 0.75), 0);
+    const [d0, d1] = this.layout.logistics.inbound.delay ?? [1.5, 6];
+    this.inbound = { due, at: due + (late ? rand(d0, d1) * 3600_000 : rand(-10, 10) * 60_000), load: Math.round(use * 1.02), supplier: s.name, late };
   }
 
-  /** Material this plant keeps to cover a late delivery: `buffer` hours of use on top of a delivery's worth. */
+  /** Material this plant keeps to cover a late delivery: two hours of use on top of a delivery's worth. */
   private stockTarget() {
     const lg = this.layout.logistics.inbound;
-    const use = this.lines.reduce((n, l) => n + 3600 / Math.max(...l.stations.map((a) => a.cycle)), 0);
+    const use = this.lines.reduce((n, l) => n + (3600 / Math.max(...l.stations.map((a) => a.cycle))) * (l.planEff ?? 0.75), 0);
     return Math.round(use * ((lg.every ?? 0) + 2));
   }
 
@@ -474,6 +481,9 @@ export class PlantSim {
         this.cold = [0, 0];
         this.costToday = 0;
       }
+      // the plant's clock was moved (a backfill, a test): the delivery plan starts over from now
+      const every = this.layout.logistics.inbound.every;
+      if (this.inbound && every && Math.abs(this.inbound.due - this.wall()) > (every + 8) * 3600_000) this.planInbound(this.wall() - every * 0.5 * 3600_000);
       const ib = this.inbound;
       if (ib?.late && !ib.told && this.wall() >= ib.due) {
         ib.told = true;

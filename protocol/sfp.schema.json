@@ -3512,7 +3512,8 @@
                       "type": "string",
                       "enum": [
                         "hall",
-                        "outdoor"
+                        "outdoor",
+                        "shop"
                       ]
                     },
                     "lines": {
@@ -3664,7 +3665,8 @@
                 "type": "string",
                 "enum": [
                   "hall",
-                  "outdoor"
+                  "outdoor",
+                  "shop"
                 ]
               },
               "lines": {
@@ -4626,7 +4628,8 @@
                 "type": "string",
                 "enum": [
                   "hall",
-                  "outdoor"
+                  "outdoor",
+                  "shop"
                 ]
               },
               "lines": {
@@ -8152,6 +8155,9 @@
               "reported": {
                 "type": "boolean"
               },
+              "waiting": {
+                "type": "number"
+              },
               "lastSource": {
                 "type": "string"
               },
@@ -8520,6 +8526,9 @@
             },
             "reported": {
               "type": "boolean"
+            },
+            "waiting": {
+              "type": "number"
             },
             "lastSource": {
               "type": "string"

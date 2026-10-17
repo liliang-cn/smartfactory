@@ -320,7 +320,7 @@ export const Machine = z.object({
   fuel: z.object({ label: z.string(), unit: z.string(), idle: z.number().min(0), run: z.number().min(0) }).optional(),
   /** a cold-chain machine (a cold room, a freezer): the highest °C its goods may be kept at; counts towards 冷链达标率 */
   hold: z.number().optional(),
-  /** a crew works it by hand: it pauses for meal breaks and slows down at shift handover */
+  /** false: it runs on through meal breaks and shift handovers (a freezer, an unmanned cell); a crewed line stops for them */
   crew: z.boolean().optional(),
   ...Slotted,
   /** how often it breaks down and how long the crew takes; defaults suit a demo, real plants are slower */
@@ -464,6 +464,8 @@ export const Industry = z.object({
        * comes whenever the store has room.
        */
       every: z.number().positive().optional(),
+      /** hours a late delivery comes after it was due, [min, max] (default 1.5 to 6) */
+      delay: z.tuple([z.number().min(0), z.number().positive()]).optional(),
     }).default({ vehicle: 'truck' }),
     outbound: z.object({
       /** rider: couriers on motorbikes picking orders up at the counter */
@@ -505,7 +507,7 @@ export const Industry = z.object({
       /** names of the shifts in the order of `at`, default 早班 / 中班 / 夜班 or 白班 / 夜班 */
       names: z.array(z.string()).optional(),
     }).optional(),
-    /** meal breaks: lines take in nothing new and crewed machines pause (planned stops, not counted against OEE) */
+    /** meal breaks: the lines stop, crews eat (planned stops, not counted against OEE) */
     breaks: z.array(z.object({ at: z.number().min(0).max(24), minutes: z.number().positive(), label: z.string().default('用餐') })).optional(),
     /**
      * the week's order mix: work-order size by weekday (Sunday first), and the part number each

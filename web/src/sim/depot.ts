@@ -64,8 +64,11 @@ export class Depot {
       const qty = Math.round(this.par(pr.key) * 0.7);
       if (!qty) continue;
       const made = now - rand(4, 14) * HOUR;
+      if (pr.sample) this.samples.push([`${line.layout.order.no.split('-')[0]}-${this.sim.ymd(made)}-${line.layout.no}00`, pr.key, made + pr.sample * HOUR]);
       this.batches.push({ no: `${line.layout.order.no.split('-')[0]}-${this.sim.ymd(made)}-${line.layout.no}00`, product: pr.key, qty, made, expires: pr.shelf ? made + pr.shelf * HOUR : made + 3650 * 24 * HOUR });
     }
+    // oldest first: the order they go out in
+    this.batches.sort((a, b) => a.made - b.made);
     this.count();
   }
 
@@ -130,7 +133,9 @@ export class Depot {
     if (this.samples.length && this.samples[0][2] <= now) this.samples = this.samples.filter((x) => x[2] > now);
     for (const o of this.outlets) {
       const sup = o.layout.supply!;
-      this.next[o.layout.id] ??= Math.min(...sup.depart.map((h) => this.nextAt(h, now)));
+      // planned from now when there is no plan, or the clock was moved far from it (a backfill, a test)
+      const planned = this.next[o.layout.id];
+      if (planned === undefined || planned - now > 25 * HOUR || now - planned > 25 * HOUR) this.next[o.layout.id] = Math.min(...sup.depart.map((h) => this.nextAt(h, now)));
       if (now < this.next[o.layout.id]) continue;
       this.next[o.layout.id] = Math.min(...sup.depart.map((h) => this.nextAt(h, now + 60_000)));
       this.dispatch(o);
