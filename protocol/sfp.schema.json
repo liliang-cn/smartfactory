@@ -4126,6 +4126,361 @@
       ],
       "description": "One server-sent event of the scene architect: `data: <ComposeEvent JSON>`"
     },
+    "ShapeRequest": {
+      "type": "object",
+      "properties": {
+        "industry": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "enum": [
+            "machine",
+            "product"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "brief": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "industry",
+        "target",
+        "key",
+        "brief"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeAttempt": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "program": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "n",
+        "max",
+        "ok"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeDrawing": {
+      "type": "object",
+      "properties": {
+        "drawing": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "attempts": {
+              "type": "number"
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "size": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "min": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "max": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "answer": {
+              "type": "string"
+            },
+            "report": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "attempts",
+            "parts",
+            "size",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "enum": [
+                "machine",
+                "product"
+              ]
+            },
+            "envelope": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "beltY": {
+              "type": "number"
+            },
+            "beltW": {
+              "type": "number"
+            },
+            "clear": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "target",
+            "envelope",
+            "beltY",
+            "beltW",
+            "clear"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "drawing",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tool_call"
+            },
+            "tool": {
+              "type": "string",
+              "const": "build_shape"
+            }
+          },
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "attempt"
+            },
+            "tool": {
+              "type": "string",
+              "const": "build_shape"
+            },
+            "result": {
+              "$ref": "#/$defs/ShapeAttempt"
+            }
+          },
+          "required": [
+            "kind",
+            "tool",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "shape"
+            },
+            "result": {
+              "$ref": "#/$defs/ShapeDrawing"
+            }
+          },
+          "required": [
+            "kind",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "complete"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "error"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "One server-sent event of the shape drawer: `data: <ShapeEvent JSON>`"
+    },
+    "SaveShape": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "enum": [
+            "machine",
+            "product"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "size": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "target",
+        "key",
+        "parts"
+      ],
+      "additionalProperties": false
+    },
     "KnowledgeOverview": {
       "type": "object",
       "properties": {

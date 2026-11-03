@@ -281,6 +281,8 @@
 | `GET /api/admin/industries/{id}` | — | 行业包配置（默认值已填） | |
 | `POST /api/admin/industries` | 行业包配置 | 行业包摘要 | 新建或替换，用它的公司按新的重建；要管理所有公司 |
 | `POST /api/admin/compose` | `ComposeRequest {kind?, brief, base?}` | SSE，`ComposeEvent` 流 | 搭建员：按一段描述（`base` 是现在的配置，在它上面改）写公司配置（`kind: company`，默认）或单独一个行业包（`kind: industry`）。现有行业包里没有要的产品或工序时它写一个新行业包。每版都经引擎检查（不创建、不装）：通过的行业包作为 `industry` 事件、公司配置作为 `draft` 事件发出；用新行业包的公司配置和它一起检查，建的时候先装行业包。没有配置大模型时 503，同一个令牌同一时间只能跑一个 |
+| `POST /api/admin/shape` | `ShapeRequest {industry, target, key, stage?, brief}` | SSE，`ShapeEvent` 流 | 画外形：按一句描述画一种设备（`target: machine`）或产品的一个工序状态（`product`）。AI 写程序搭出零件，服务器检查（设备放得进它的外框、不挡传送带、不陷到地下，零件不超过 48 个；产品大小合理、不超过 20 个零件；没有埋在别的零件里看不见的），没通过就改，最多 6 次。每次检查是一个 `attempt` 事件（`ShapeAttempt`），画好的是 `shape` 事件（`ShapeDrawing`：零件，设备的 `look.size`，画的外框和传送带）。什么都不保存；管理员，没有配置大模型时 503，同一个令牌同一时间只能画一个 |
+| `POST /api/admin/industries/{id}/shape` | `SaveShape {target, key, stage?, parts, size?}` | 行业包摘要 | 把画好的外形存进行业包：设备的 `look` 换成 `archetype: frame`、`size` 和这些零件，产品换掉那个工序状态的零件。整包检查后保存，记一条 `industry.shape`；要管理所有公司，内置行业包要先复制 |
 | `GET /api/admin/tokens` | — | `Accounts` | 令牌：`from` 是 `legacy`（最初的共用令牌）、`config`（配置文件里的，只能在那里改）或 `issued`（后台发的）；撤销过的也列出 |
 | `POST /api/admin/tokens` | `IssueToken {name, role, companies, expires?}` | `IssuedToken {token, account}` | 发令牌，立即生效；`companies` 为 `null` 是所有公司（要管理所有公司）。令牌只在这个响应里出现一次，服务器只存 SHA-256 |
 | `DELETE /api/admin/tokens/{key}` | — | `Done` | 撤销后台发的令牌，立即生效（页面、实时通道里的下一次操作、MCP 都按访客对待）；配置文件里的 409，自己正在用的 409 |

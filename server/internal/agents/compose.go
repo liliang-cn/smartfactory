@@ -32,6 +32,7 @@ const architectPrompt = `你是 SmartFactory 的场景搭建员。管理员用�
    - 产品 1～3 个，每个 2～4 个阶段（stages，每个阶段用几个 parts 画出样子）；设备 4～10 种，每种选合适的 look.archetype，cycle、power、thermal 按行业常识；每个产品一条 routes，3～8 步，makes 指向后面的阶段；
    - 有料号就写 partNo（或 variants），有客户、供应商就写 customers、suppliers，这样工单、质量追溯和知识库都能用上；
    - 写 stores.categories（库房放什么，见指南「库房」）；靠模具成形的设备写 tooling，工厂的模具台账才有东西管；
+   - 现有的 archetype 画不出来的设备（比如带顶冠的开式冲床）或产品（比如曲轴），用 draw_shape 画（见下面「画外形」）；
    - propose_industry 检查；没通过就按它说的改，直到通过（通过一次就够，不要重复提交）。通过后它会放进管理员那边，建公司时一起装上。
 3. list_companies / get_company 看现成的公司怎么写产线（product + route 的组合、repeat、名字），照着写最稳。
 4. 按描述定工厂（plants）和每个工厂的产线（lines）：工厂 id 用 p1、p2…，name 像「一厂」「常州工厂」，hall 写厂房或车间名，badge 两三个字；同样的线用 repeat 加 {n}，比如 "曲轴 {n} 线"。
@@ -43,7 +44,7 @@ const architectPrompt = `你是 SmartFactory 的场景搭建员。管理员用�
 
 最后用两三句中文告诉管理员：建了什么（几个工厂、几条线、生产什么；新写了行业包就说它有哪些产品和设备），以及你做了哪些假设。不要贴 JSON。
 描述太少、连做什么都看不出来（比如只有“工厂”两个字）时，不要编一个工厂，直接问清楚：做什么产品、几个厂、大概几条线。
-回答写纯文字：称呼用“你”，不用“您”；不用 ** 加粗、# 标题这类标记；不提颜色、模型、id 这些显示和配置上的细节。`
+回答写纯文字：称呼用“你”，不用“您”；不用 ** 加粗、# 标题这类标记；不提颜色、模型、id 这些显示和配置上的细节。` + shapeHowTo
 
 const industryPrompt = `你是 SmartFactory 的行业包编写员。管理员描述一类工厂（或场景）由什么组成，你写成一个行业包（industry）：产品长什么样、有哪些设备、工艺路线怎么走。
 
@@ -53,9 +54,20 @@ const industryPrompt = `你是 SmartFactory 的行业包编写员。管理员描
 3. 产品 1～3 个，每个 2～4 个阶段（stages，每个阶段用几个 parts 画出样子）；设备 4～10 种，选合适的 look.archetype，cycle、power、thermal 按行业常识；每个产品一条 routes，3～8 步，makes 指向后面的阶段。
 4. 有料号就写 partNo（或 variants），有客户、供应商就写 customers、suppliers；质检工位写 measure（目标值、上下限、sigma）；写 stores.categories（库房放什么）；靠模具成形的设备写 tooling。
    管理员讲到原料、配方、过敏原、设备分类、温度要求这类知识时，写进 ontology（本体，格式照 food 的）：classes 类和上级类，relations 关系，rules 规则，individuals 有名字的东西，bind 把产品、设备种类绑到类上，constraints 约束（读数限值或必须有的关系）。
-5. propose_industry 检查；没通过就按它说的改，直到通过。通过的那一版交给管理员确认：通过一次就停，不要再改了重复提交。
+5. 现有的 archetype 画不出来的设备（比如带顶冠的开式冲床、左边带飞轮）或产品（比如曲轴、齿轮），用 draw_shape 画（见下面「画外形」）。
+6. propose_industry 检查；没通过就按它说的改，直到通过。通过的那一版交给管理员确认：通过一次就停，不要再改了重复提交。
 
-最后用两三句中文说清楚：有哪些产品、哪些设备、几条路线，以及你按常识定的数（节拍、功率、公差）。不要贴 JSON。`
+最后用两三句中文说清楚：有哪些产品、哪些设备、几条路线，以及你按常识定的数（节拍、功率、公差）。不要贴 JSON。` + shapeHowTo
+
+// shapeHowTo is how the pack authors use draw_shape.
+const shapeHowTo = `
+
+# 画外形
+draw_shape 让另一个助手按中文描述画出外形，自己检查过（放得进外框、不挡传送带、零件不多），返回 parts：
+- 设备：target 写 machine，size 写 [长, 深, 高]（米，长是沿传送带方向）。把返回的 parts 原样放进这台设备的 look.parts，look.archetype 写 frame，look.size 写返回的 size。
+- 产品：target 写 product，把返回的 parts 原样放进那个阶段（stages 里的一项）的 parts。
+- description 写清楚样子和大小，比如「带顶冠的开式冲床，C 形机身，左边有飞轮，滑块在传送带上方」。
+- 只画 archetype 和几个简单零件画不好的；一个外形画一次就够，没通过也用它返回的 parts。`
 
 // ComposeKind is what the architect writes: a company (and the packs it needs), or a pack alone.
 type ComposeKind string
@@ -149,6 +161,14 @@ func (r *Runner) Compose(ctx context.Context, who auth.Who, kind ComposeKind, br
 			return res.Detail, nil
 		}},
 	}
+	tools = append(tools, tl{"draw_shape", "按中文描述画一台设备或一个产品的外形（另一个助手写程序画，检查过放得进外框、不挡传送带），返回 parts 和 size。", obj(map[string]any{
+		"target":      map[string]any{"type": "string", "enum": []string{"machine", "product"}},
+		"name":        map[string]any{"type": "string", "description": "设备或产品的名字，比如 开式冲床、曲轴"},
+		"description": map[string]any{"type": "string", "description": "长什么样、各部分多大"},
+		"size":        map[string]any{"type": "array", "items": map[string]any{"type": "number"}, "description": "设备：[长, 深, 高]，米；产品不用填"},
+	}, "target", "name", "description"), func(a args) (any, error) {
+		return r.drawForPack(ctx, who, a)
+	}})
 	if kind != ComposeIndustry {
 		tools = append(tools,
 			tl{"list_companies", "现有的公司：工厂、产线数和设备数。", obj(map[string]any{}), func(args) (any, error) { return raw(eng.List()) }},
@@ -198,7 +218,7 @@ func (r *Runner) Compose(ctx context.Context, who auth.Who, kind ComposeKind, br
 		names[i] = t.name
 		run := t.run
 		svc.AddToolWithMetadata(t.name, t.desc, t.params, func(_ context.Context, m map[string]any) (any, error) { return run(args(m)) },
-			agentpkg.ToolMetadata{ReadOnly: true, ConcurrencySafe: !strings.HasPrefix(t.name, "propose_")})
+			agentpkg.ToolMetadata{ReadOnly: true, ConcurrencySafe: !strings.HasPrefix(t.name, "propose_") && t.name != "draw_shape"})
 	}
 
 	goal := "管理员的描述：\n" + brief

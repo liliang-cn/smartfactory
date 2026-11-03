@@ -15,6 +15,11 @@ export type AuditEntry = z.infer<typeof P.AuditEntry>;
 export type Role = z.infer<typeof P.Role>;
 export type ComposeEvent = z.infer<typeof P.ComposeEvent>;
 export type ConsoleEvent = z.infer<typeof P.ConsoleEvent>;
+export type ShapeRequest = z.infer<typeof P.ShapeRequest>;
+export type ShapeEvent = z.infer<typeof P.ShapeEvent>;
+export type ShapeAttempt = z.infer<typeof P.ShapeAttempt>;
+export type ShapeDrawing = z.infer<typeof P.ShapeDrawing>;
+export type SaveShape = z.infer<typeof P.SaveShape>;
 export type ConsoleAction = z.infer<typeof P.ConsoleAction>;
 export type KnowledgeOverview = z.infer<typeof P.KnowledgeOverview>;
 export type KnowledgeAnswer = z.infer<typeof P.KnowledgeAnswer>;
@@ -153,6 +158,11 @@ export const activity = (company: string, before?: number) => {
 /** The scene architect: brief in, events out (server-sent), until it ends or signal aborts. */
 export const compose = (brief: string, base: unknown, signal: AbortSignal, on: (ev: ComposeEvent) => void, kind: 'company' | 'industry' = 'company') =>
   stream('/api/admin/compose', { kind, brief, ...(base ? { base } : {}) }, signal, on);
+
+/** The shape drawer: a description in, the attempts and then a checked drawing out (nothing saved). */
+export const drawShape = (req: ShapeRequest, signal: AbortSignal, on: (ev: ShapeEvent) => void) => stream('/api/admin/shape', req, signal, on);
+/** Keep a drawing in an industry pack: a machine kind's look or a product stage. */
+export const saveShape = (industry: string, s: SaveShape) => call<unknown>('POST', `/api/admin/industries/${encodeURIComponent(industry)}/shape`, s);
 
 /** The console agent: one turn of a conversation; changes come back as actions to confirm. */
 export const agent = (conversation: string | null, text: string, signal: AbortSignal, on: (ev: ConsoleEvent) => void) =>

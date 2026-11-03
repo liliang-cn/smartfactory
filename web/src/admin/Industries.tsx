@@ -4,7 +4,7 @@
 import { stepLines, THINKING } from './steps';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckIcon, CircleAlertIcon, CopyIcon, FootprintsIcon, LoaderCircleIcon, PencilIcon, SparklesIcon, UploadIcon, WaypointsIcon } from 'lucide-react';
+import { CheckIcon, CircleAlertIcon, CopyIcon, FootprintsIcon, LoaderCircleIcon, PencilIcon, ShapesIcon, SparklesIcon, UploadIcon, WaypointsIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,6 +15,7 @@ import { stageOrder } from '@/core/layout';
 import * as api from './api';
 import { link, PageHead, useConsole } from './Console';
 import { go } from './router';
+import ShapeDrawer, { type ShapeTarget } from './ShapeDrawer';
 
 /** Paste a pack, or edit one: the same id again replaces it. */
 function Import({ open, onOpenChange, initial = '', title = '导入行业包' }: { open: boolean; onOpenChange(o: boolean): void; initial?: string; title?: string }) {
@@ -176,10 +177,18 @@ function Detail({ id }: { id: string }) {
   const [cfg, setCfg] = useState<IndustryCfg | null>(null);
   const [error, setError] = useState<string>();
   const [editing, setEditing] = useState<'json' | 'copy' | 'ai' | null>(null);
+  const [drawing, setDrawing] = useState<ShapeTarget | null>(null);
   useEffect(() => { setCfg(null); api.industry(id).then(setCfg, (e: Error) => setError(e.message)); }, [id, ov]);
   const summary = ov.industries.find((i) => i.id === id);
   const users = ov.companies.filter((c) => c.industry === id);
   if (error) return <PageHead title="找不到这个行业包" sub={error} back={{ to: '/admin/industries', label: '行业包' }} />;
+  // the AI draws a shape into a pack this installation keeps (a built-in one is copied first)
+  const canDraw = !!ov.assistants && ov.me.everywhere && !summary?.builtin;
+  const drawButton = (target: ShapeTarget['target'], key: string) => canDraw && (
+    <Button variant="ghost" size="sm" className="-ml-2 mt-0.5 h-7 rounded-lg px-2 text-[12px] font-bold text-primary" onClick={() => setDrawing({ target, key })}>
+      <ShapesIcon className="size-3.5" />让 AI 画外形
+    </Button>
+  );
   return (
     <>
       <PageHead back={{ to: '/admin/industries', label: '行业包' }} title={summary?.name ?? id}
@@ -199,6 +208,7 @@ function Detail({ id }: { id: string }) {
             title={editing === 'copy' ? `复制 ${cfg.name}` : `改 ${cfg.name}`}
             initial={JSON.stringify(editing === 'copy' ? { ...cfg, id: `${cfg.id}-2`, name: `${cfg.name}（自定义）` } : cfg, null, 2)} />
           <Writer open={editing === 'ai'} onOpenChange={(o) => !o && setEditing(null)} base={cfg} />
+          <ShapeDrawer cfg={cfg} what={drawing} onClose={() => setDrawing(null)} />
         </>
       )}
       {cfg && (
@@ -232,7 +242,7 @@ function Detail({ id }: { id: string }) {
               <TableBody>
                 {Object.entries(cfg.products).map(([k, p]) => (
                   <TableRow key={k} className="text-[13px]">
-                    <TableCell className="pl-5"><b>{p.name}</b><div className="font-mono text-[11px] text-muted-foreground">{k}</div></TableCell>
+                    <TableCell className="pl-5"><b>{p.name}</b><div className="font-mono text-[11px] text-muted-foreground">{k}</div>{drawButton('product', k)}</TableCell>
                     <TableCell className="text-muted-foreground">{stageOrder(cfg, k).join(' › ')}</TableCell>
                     <TableCell className="pr-5 text-right text-muted-foreground">{p.customers?.map((c) => c.name).join('、') ?? ''}</TableCell>
                   </TableRow>
@@ -247,7 +257,7 @@ function Detail({ id }: { id: string }) {
               <TableBody>
                 {Object.entries(cfg.machines).map(([k, m]) => (
                   <TableRow key={k} className="text-[13px]">
-                    <TableCell className="pl-5"><b>{m.label}</b><div className="font-mono text-[11px] text-muted-foreground">{k}</div></TableCell>
+                    <TableCell className="pl-5"><b>{m.label}</b><div className="font-mono text-[11px] text-muted-foreground">{k}</div>{drawButton('machine', k)}</TableCell>
                     <TableCell className="font-mono text-[12px]">{m.code}</TableCell>
                     <TableCell className="text-right tabular-nums">{m.cycle} 秒</TableCell>
                     <TableCell className="pr-5 text-right tabular-nums text-muted-foreground">{m.power ? `${m.power.run} kW` : ''}</TableCell>

@@ -605,7 +605,7 @@ export const AuditEntry = z.object({
   via: z.enum(['page', 'live', 'assistant', 'mcp', 'cli', 'api', 'guard', 'anomaly', 'ontology']),
   /** the company it happened in; * for what every company shares */
   company: str,
-  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · device.add / device.renew / device.revoke (a device on the embedded broker; target its name) */
+  /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · industry.shape · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · device.add / device.renew / device.revoke (a device on the embedded broker; target its name) */
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · check.form / check.form.delete (target the form id) · check.submit (a form filled in: target plant/asset and the submission id; context every value) */
   /** command · clock · note/ticket writes by an assistant (save_note, update_note, create_ticket, update_ticket) · ticket.status · doc.add · doc.update · doc.delete · note.delete · assistant.create/update/delete · advisor.<verb> · company.create/delete · industry.create · token.issue/revoke · knowledge.rebuild · calib.fit · calib.apply · calib.revert · erp.config · erp.secret · erp.pull · erp.orders · erp.cancel · command.refused / command.pending / command.approved / command.denied / command.expired (the guard; target plant/asset and the request id) · guard.config · anomaly / anomaly.end (a hint raised and over; target plant/asset) · anomaly.reset · ontology.violation / ontology.violation.end (a reading out of an ontology constraint and back; target plant/asset) */
   action: str,
@@ -733,6 +733,43 @@ export const ComposeEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('complete'), text: str.optional() }),
   z.object({ kind: z.literal('error'), text: str }),
 ]).meta({ description: 'One server-sent event of the scene architect: `data: <ComposeEvent JSON>`' });
+
+/** The shape drawer: what to draw (a machine kind, or a stage of a product, of an industry pack) and how it looks. */
+export const ShapeRequest = z.object({
+  industry: str, target: z.enum(['machine', 'product']), key: str,
+  /** the product stage (target product) */
+  stage: str.optional(),
+  /** how it looks, in words: 带顶冠的开式冲床，左边有飞轮 */
+  brief: str,
+});
+/** One checked program: n of max, passed or not, what the checks found by kind (overlap, envelope, belt, floor, count, size, empty), or the program's own error. */
+export const ShapeAttempt = z.object({
+  n: num, max: num, ok: z.boolean(), errors: z.record(str, num).optional(), program: str.optional(), line: num.optional(),
+});
+/** A drawing: the parts (Part, see the industry schema), and for a machine the look size they were drawn in. */
+export const ShapeDrawing = z.object({
+  drawing: z.object({
+    ok: z.boolean(), attempts: num, parts: z.array(z.record(str, z.unknown())),
+    /** machine: look.size [L, D, H]; product: the unit's [l, d, h] */
+    size: z.tuple([num, num, num]), min: z.tuple([num, num, num]), max: z.tuple([num, num, num]),
+    answer: str.optional(), report: str.optional(),
+  }),
+  /** the frame it was drawn in: the envelope [L, D, H], and the belt through a machine */
+  spec: z.object({ target: z.enum(['machine', 'product']), envelope: z.tuple([num, num, num]), beltY: num, beltW: num, clear: num }),
+});
+export const ShapeEvent = z.discriminatedUnion('kind', [
+  /** a program is about to run */
+  z.object({ kind: z.literal('tool_call'), tool: z.literal('build_shape') }),
+  z.object({ kind: z.literal('attempt'), tool: z.literal('build_shape'), result: ShapeAttempt }),
+  z.object({ kind: z.literal('shape'), result: ShapeDrawing }),
+  z.object({ kind: z.literal('complete'), text: str.optional() }),
+  z.object({ kind: z.literal('error'), text: str }),
+]).meta({ description: 'One server-sent event of the shape drawer: `data: <ShapeEvent JSON>`' });
+/** Keep a drawing: into machine kind `key`'s look (archetype frame, `size`, `parts`) or product `key`'s stage `stage`. */
+export const SaveShape = z.object({
+  target: z.enum(['machine', 'product']), key: str, stage: str.optional(),
+  parts: z.array(z.record(str, z.unknown())), size: z.tuple([num, num, num]).optional(),
+});
 
 // ---------- templates (/api/admin/templates) ----------
 
@@ -1407,6 +1444,7 @@ export const DEFS = {
   Docs, Doc, DocView, DocUpload, DocVersions, UploadResults, Notes, Note, Tickets, Ticket, TicketPatch, Done,
   AuditLog,
   AdminOverview, CompanyCreated, ConfigProblem, Accounts, Account, IssueToken, IssuedToken, ComposeRequest, ComposeEvent,
+  ShapeRequest, ShapeAttempt, ShapeDrawing, ShapeEvent, SaveShape,
   KnowledgeOverview, KnowledgeAnswer, EntityAnswer, KnowledgeGraph, Ontology, OntologyInstances, OntologyThing, OntologyGraph, SPARQLAnswer, ConsoleAction, ConsoleEvent,
   Templates, TemplateSummary, Template, SaveTemplate,
   Order, Orders, OrderInput, OrderResults, OrderCallback, ERPConfig, ERPOverview, PullResult,

@@ -11,6 +11,7 @@ import (
 
 	"smartfactory/internal/agents"
 	"smartfactory/internal/ops"
+	"smartfactory/internal/shapes"
 	"smartfactory/internal/templates"
 )
 
@@ -129,6 +130,53 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 			}
 			send(agents.Event{Kind: "error", Text: err.Error()})
 		}
+	})
+
+	// the shape drawer: a description in, a checked drawing of a machine or product out (nothing saved)
+	mux.HandleFunc("POST /api/admin/shape", func(w http.ResponseWriter, r *http.Request) {
+		who := s.caller(r)
+		var in ops.ShapeRequest
+		if !read(w, r, &in) {
+			return
+		}
+		if err := ops.Admin(who); err != nil {
+			writeOpError(w, err)
+			return
+		}
+		if _, busy := agentBusy.LoadOrStore("shape:"+who.Key, true); busy {
+			writeError(w, http.StatusTooManyRequests, "上一个外形还没画完")
+			return
+		}
+		defer agentBusy.Delete("shape:" + who.Key)
+		var send func(agents.Event)
+		emit := func(e agents.Event) {
+			if send == nil {
+				send = stream(w)
+			}
+			send(e)
+		}
+		if err := o.DrawShape(r.Context(), who, in, emit); err != nil {
+			if send == nil {
+				writeOpError(w, err)
+				return
+			}
+			send(agents.Event{Kind: "error", Text: err.Error()})
+		}
+	})
+	// keep a drawing: into a machine kind's look or a product stage of the pack
+	mux.HandleFunc("POST /api/admin/industries/{id}/shape", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Target string        `json:"target"`
+			Key    string        `json:"key"`
+			Stage  string        `json:"stage"`
+			Parts  []shapes.Part `json:"parts"`
+			Size   *[3]float64   `json:"size"`
+		}
+		if !read(w, r, &in) {
+			return
+		}
+		v, err := o.SaveShape(s.caller(r), via(r), r.PathValue("id"), in.Target, in.Key, in.Stage, in.Parts, in.Size)
+		answer(w, v, err)
 	})
 
 	// the console agent: a conversation in words; changes come back as actions to confirm
