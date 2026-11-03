@@ -58,17 +58,17 @@ func TestAreaItems(t *testing.T) {
 	if strings.Contains(dc.text, "MF-101") {
 		t.Errorf("压铸车间 names the melting furnace: %s", dc.text)
 	}
-	if !hasRel(dc, "一厂", RHasArea, "压铸车间") || !hasRel(dc, "压铸车间", RHasLine, "压铸 1 线") || !hasRel(dc, "压铸车间", RHasLine, "压铸 2 线") {
+	if !hasRel(dc, "压铸车间", RHasLine, "压铸 1 线") || !hasRel(dc, "压铸车间", RHasLine, "压铸 2 线") {
 		t.Errorf("压铸车间 relations: %+v", dc.rels)
 	}
 	if fg := itemByID(items, "proc:area:p1:FG"); fg == nil || !strings.Contains(fg.text, "没有产线") {
 		t.Errorf("an empty area: %+v", fg)
 	}
 	pl := itemByID(items, "proc:plant:p1")
-	if !strings.Contains(pl.text, "分 3 个车间") || !hasRel(pl, "一厂", RHasArea, "熔化车间") {
+	if !strings.Contains(pl.text, "分 3 个车间") || !hasRel(pl, "一厂", RHasArea, "熔化车间") || !hasRel(pl, "一厂", RHasArea, "压铸车间") {
 		t.Errorf("plant passage: %s %+v", pl.text, pl.rels)
 	}
-	if l := itemByID(items, "proc:line:p1:L2"); !strings.Contains(l.text, "在压铸车间") || l.meta["area"] != "DC" || !hasRel(l, "压铸车间", RHasLine, "压铸 1 线") {
+	if l := itemByID(items, "proc:line:p1:L2"); !strings.Contains(l.text, "在压铸车间") || l.meta["area"] != "DC" || hasRel(l, "压铸车间", RHasLine, "压铸 1 线") {
 		t.Errorf("line passage: %s %v", l.text, l.meta)
 	}
 	if s := itemByID(items, "proc:station:p1:TR-201"); !strings.Contains(s.text, "压铸车间") || s.meta["area"] != "DC" {
@@ -88,7 +88,7 @@ func TestAreaDefaultItems(t *testing.T) {
 	}
 	items := processItems(m)
 	it := itemByID(items, "proc:area:p2:A1")
-	if it == nil || !hasRel(it, "二厂", RHasArea, "二厂 生产车间") || !strings.Contains(it.text, "3 条线") {
+	if it == nil || !hasRel(itemByID(items, "proc:plant:p2"), "二厂", RHasArea, "二厂 生产车间") || !strings.Contains(it.text, "3 条线") {
 		t.Fatalf("default area passage: %+v", it)
 	}
 	if pl := itemByID(items, "proc:plant:p1"); !strings.Contains(pl.text, "车间「生产车间」") {

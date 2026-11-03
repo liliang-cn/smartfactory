@@ -463,8 +463,8 @@ func processItems(m *Model) []item {
 			an := n.area[p.ID+"/"+ar.Code]
 			it := item{id: "proc:line:" + p.ID + ":" + l.ID, title: p.Name + " " + l.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "area": ar.Code, "line": l.ID}}
 			it.ent(ln, TLine, l.Note)
+			// the area's passage declares its lines (declared twice, a relation shows twice)
 			it.ent(an, TArea, ar.Note)
-			it.rel(an, RHasLine, ln)
 			it.ent(l.Product.Name, TProduct, l.Product.PartNo)
 			it.rel(ln, RMakes, l.Product.Name)
 			var steps []string
@@ -554,7 +554,6 @@ func areaItems(m *Model, n names, p Plant) []item {
 		it := item{id: "proc:area:" + p.ID + ":" + a.Code, title: p.Name + " " + a.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "area": a.Code}}
 		it.ent(an, TArea, a.Note)
 		it.ent(p.Name, TPlant, p.Hall)
-		it.rel(p.Name, RHasArea, an)
 		var lines, machines []string
 		count := 0
 		for _, l := range p.Lines {
@@ -652,7 +651,7 @@ func uniq(s []string) []string {
 }
 
 // processFormat changes whenever processItems writes differently, so every base is written again.
-const processFormat = "6"
+const processFormat = "7"
 
 // processState is what was last written for a company's process, so an unchanged process is not
 // written again.
