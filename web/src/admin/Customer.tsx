@@ -33,6 +33,7 @@ import { GuardPanel } from './Guard';
 import { HealthPanel } from './Health';
 import { ValuePanel } from './Value';
 import { OrderBoard, ERPPanel } from './Orders';
+import { PlanPanel } from './Plan';
 import { Panel } from './Panel';
 import { Badge, totals } from './Customers';
 import { forget, useCompany } from './layouts';
@@ -260,6 +261,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
           <Suspense fallback={null}><KnowledgeBase company={c.id} admin={ov.me.role === 'admin'} /></Suspense>
         </TabsContent>
         <TabsContent value="orders"><OrderBoard c={c} /></TabsContent>
+        <TabsContent value="plan"><PlanPanel c={c} /></TabsContent>
         <TabsContent value="connect" className="grid gap-5"><ERPPanel c={c} /><DevicePanel c={c} /><TablePanel c={c} /><Connect c={c} /><AnomalyPanel c={c} /></TabsContent>
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>

@@ -1,6 +1,6 @@
 // A company's pages: the sidebar lists them in these groups, the company page shows the one picked.
 import {
-  BookOpenTextIcon, BotIcon, BoxIcon, ClipboardCheckIcon, ClipboardListIcon, KeyRoundIcon, PlugZapIcon, ScrollTextIcon, ShieldCheckIcon,
+  BookOpenTextIcon, BotIcon, BoxIcon, CalendarRangeIcon, ClipboardCheckIcon, ClipboardListIcon, KeyRoundIcon, PlugZapIcon, ScrollTextIcon, ShieldCheckIcon,
   FlaskConicalIcon, GaugeIcon, HammerIcon, ListTreeIcon, SlidersHorizontalIcon, TrendingUpIcon, WarehouseIcon,
 } from 'lucide-react';
 
@@ -8,6 +8,7 @@ export const SECTIONS = [
   { group: '生产', tabs: [
     { id: 'scene', label: '场景', icon: BoxIcon },
     { id: 'orders', label: '工单', icon: ClipboardListIcon },
+    { id: 'plan', label: '生产计划', icon: CalendarRangeIcon },
     { id: 'checks', label: '点检', icon: ClipboardCheckIcon },
     { id: 'guard', label: '指令', icon: ShieldCheckIcon },
   ] },
