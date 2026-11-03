@@ -190,7 +190,7 @@ function Remove({ c, open, onOpenChange }: { c: api.Company; open: boolean; onOp
         <AlertDialogHeader>
           <AlertDialogTitle>删除 {c.name}？</AlertDialogTitle>
           <AlertDialogDescription>
-            {ov.single ? `它的 ${c.plants.length} 个工厂停止仿真，配置删掉，工作台回到「建你的工厂」。助手、资料和操作记录留着，用同一个标识重建会接上。` : `它的 ${c.plants.length} 个工厂停止仿真，配置删掉，打开它的链接会回到默认公司。助手、资料和操作记录留着，用同一个标识重建会接上。`}
+            {ov.single ? `它的 ${c.plants.length} 个工厂停止仿真，配置删掉，工作台回到「新建你的数字工厂」。助手、资料和操作记录留着，用同一个标识重建会接上。` : `它的 ${c.plants.length} 个工厂停止仿真，配置删掉，打开它的链接会回到默认公司。助手、资料和操作记录留着，用同一个标识重建会接上。`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

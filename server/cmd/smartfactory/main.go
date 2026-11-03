@@ -19,6 +19,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 	"io"
 	"log/slog"
 	"net"
@@ -368,6 +369,11 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			return fmt.Errorf("knowledge: %w", err)
 		}
 		defer kb.Close()
+		// passages get vectors when an embedding model is configured (CORTEXDB_EMBED_*), and
+		// questions then find them by meaning as well as by words and the graph
+		if kb.Embedder = cortexdb.EmbedderFromEnv(); kb.Embedder != nil {
+			log.Info("knowledge: searching by meaning", "model", kb.Embedder.Model(), "dims", kb.Embedder.Dim())
+		}
 		if assistants != nil {
 			assistants.KB = kb
 		}

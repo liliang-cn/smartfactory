@@ -1,6 +1,7 @@
 // 建工厂 / 改场景: a company built from an existing one — its industry, plants and lines —
 // edited into the customer's own, with the floor plans laid out as you type by the same code the
 // twin uses, and checked by the same schema the server checks.
+import { stepLines, THINKING, type Step } from './steps';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
@@ -207,16 +208,6 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
   );
 }
 
-const TOOL_LABEL: Record<string, (a?: Record<string, unknown>) => string> = {
-  list_industries: () => '看已有哪些行业的设备和工艺',
-  get_industry: () => '读这个行业的设备和工艺',
-  list_companies: () => '看已经建好的工厂',
-  get_company: () => '参考一份现成的配置',
-  propose_company: () => '检查配置',
-  propose_industry: () => '检查新写的设备和工艺',
-};
-
-interface Step { tool: string; args?: Record<string, unknown>; done: boolean; failed?: string }
 
 /** 描述工厂: the scene architect writes the config from a few sentences; each version that passes
  * the engine's check lands in the form below. */
@@ -282,24 +273,24 @@ function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; 
           <span className="text-[12px] text-muted-foreground max-sm:hidden">⌘ Enter 发送</span>
           {busy
             ? <Button variant="outline" className="ml-auto h-9 rounded-xl font-bold" onClick={() => ctrl?.abort()}><CircleStopIcon />停下</Button>
-            : <Button className="ml-auto h-9 rounded-xl font-bold" disabled={!brief.trim()} onClick={run}><SparklesIcon />{edit ? '让 AI 改' : '让 AI 搭'}</Button>}
+            : <Button className="ml-auto h-9 rounded-xl font-bold" disabled={!brief.trim()} onClick={run}><SparklesIcon />{edit ? '让 AI 修改' : '让 AI 生成'}</Button>}
         </div>
       </div>
       {(steps.length > 0 || busy || answer || error) && (
         <div className="grid gap-2 border-t bg-surface/50 px-5 py-4 max-sm:px-4">
           <ol className="grid gap-1">
-            {steps.map((st, i) => (
+            {stepLines(steps).map((st, i) => (
               <li key={i} className="flex items-start gap-2 text-[12.5px]">
-                {!st.done ? <LoaderCircleIcon className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
-                  : st.failed ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                {st.state === 'doing' ? <LoaderCircleIcon className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
+                  : st.state === 'failed' ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                     : <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />}
                 <span className="min-w-0">
-                  <span className={cn('font-bold', st.failed && 'text-destructive')}>{(TOOL_LABEL[st.tool] ?? (() => st.tool))(st.args)}{st.done && !st.failed ? { propose_company: '：通过，已放进表单', propose_industry: '：通过，建的时候一起用上' }[st.tool] ?? '' : ''}</span>
-                  {st.failed && <span className="block whitespace-pre-line text-muted-foreground">{st.failed.replace(/^没通过：\n?/, '').slice(0, 300)}</span>}
+                  <span className={cn('font-bold', st.state === 'failed' && 'text-destructive')}>{st.text}</span>
+                  {st.detail && <span className="block whitespace-pre-line text-muted-foreground">{st.detail}</span>}
                 </span>
               </li>
             ))}
-            {busy && !steps.some((st) => !st.done) && <li className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-3.5 animate-spin" />在想</li>}
+            {busy && !steps.some((st) => !st.done) && <li className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-3.5 animate-spin" />{THINKING}</li>}
           </ol>
           {answer && <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{answer.replace(/\*\*(.+?)\*\*/g, '$1')}</p>}
           {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-[13px] text-destructive">{error}</p>}
@@ -503,7 +494,7 @@ export default function Builder({ edit }: { edit?: string }) {
   }, [draft, industries]);
 
   // first, before the checks below: once built, the company is here and they would hide the result
-  if (done) return <><PageHead title={edit ? '改场景' : ov.single ? '建你的工厂' : '新建公司'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
+  if (done) return <><PageHead title={edit ? '修改场景' : ov.single ? '新建你的数字工厂' : '新建公司'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
   if (edit && !ov.companies.some((c) => c.id === edit && !c.builtin)) {
     return <PageHead title="这家公司不能在这里改" sub="随应用内置的公司改不了，可以照它新建一个" back={{ to: `/admin/customers/${encodeURIComponent(edit)}`, label: '公司' }} />;
   }
@@ -630,7 +621,7 @@ export default function Builder({ edit }: { edit?: string }) {
   const templateName = (id: string) => ov.companies.find((c) => c.id === id)?.name ?? id;
   return (
     <>
-      <PageHead title={edit ? `改场景：${templateName(edit)}` : ov.single ? '建你的工厂' : '新建公司'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '返回' : '公司' }}
+      <PageHead title={edit ? `修改场景：${templateName(edit)}` : ov.single ? '新建你的数字工厂' : '新建公司'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '返回' : '公司' }}
         sub={edit ? '保存后仿真按新场景从头开始，仿真里的工单重新编号；点检、资料库、助手对话和操作记录都留着' : aiFirst && !draft ? '说说你的工厂：几个厂、做什么、几条线。AI 写好放进表单，你确认后再建' : '从一个模板起步，改成你公司的名字、工厂和产线'}>
         <ToggleGroup type="single" value={mode} onValueChange={(v) => { if (v === 'json' && mode === 'form') toJson(); if (v === 'form' && mode === 'json') fromJson(); }} className="rounded-xl bg-card p-0.5 shadow-float">
           <ToggleGroupItem value="form" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><ListIcon className="size-4" />表单</ToggleGroupItem>

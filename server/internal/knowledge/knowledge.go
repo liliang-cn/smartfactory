@@ -40,6 +40,10 @@ type Base struct {
 
 	mu  sync.Mutex
 	dbs map[string]*company
+
+	// Embedder, when set, gives passages vectors, so a question finds them by meaning as well
+	// as by words and the graph (CortexDB searches both). Set it before the first company opens.
+	Embedder *cortexdb.OpenAIEmbedder
 	// each company's ontology (ontology.go)
 	ontos map[string]*ontoDB
 	// Live checks the ontology's limits on readings (live.go); nil checks none.
@@ -104,14 +108,50 @@ func (b *Base) open(id string) (*company, error) {
 	if c, ok := b.dbs[id]; ok {
 		return c, nil
 	}
+	// a base written with another embedding model (or none) has vectors this one cannot compare
+	// with: it is written again from scratch, from the process, the orders, the events and the
+	// documents, which all come back by themselves once their state files are gone
+	sig, mark := b.embedSig(), filepath.Join(b.dir, id+".embed")
+	prev, _ := os.ReadFile(mark)
+	reset := strings.TrimSpace(string(prev)) != sig
+	if reset {
+		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json"} {
+			os.Remove(filepath.Join(b.dir, f))
+		}
+	}
 	// no inference rules are declared: the maintainer would only poll the change feed
-	db, err := cortexdb.Open(cortexdb.DefaultConfig(filepath.Join(b.dir, id+".db")), cortexdb.WithAutoInference(false))
+	opts := []cortexdb.Option{cortexdb.WithAutoInference(false)}
+	if b.Embedder != nil {
+		opts = append(opts, cortexdb.WithEmbedder(b.Embedder))
+	}
+	db, err := cortexdb.Open(cortexdb.DefaultConfig(filepath.Join(b.dir, id+".db")), opts...)
 	if err != nil {
 		return nil, err
+	}
+	if reset {
+		if err := os.WriteFile(mark, []byte(sig), 0o644); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if sig != "" || len(prev) > 0 {
+			b.log.Info("knowledge: written again for the embedding model", "company", id, "model", cmp.Or(sig, "none"))
+		}
+		go func() {
+			b.OrdersChanged(id)
+			b.EventsChanged(id)
+		}()
 	}
 	c := &company{db: db}
 	b.dbs[id] = c
 	return c, nil
+}
+
+// embedSig names the embedding model the base is written with, "" for none.
+func (b *Base) embedSig() string {
+	if b.Embedder == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s %d", b.Embedder.Model(), b.Embedder.Dim())
 }
 
 // Drop forgets a deleted company's knowledge.
@@ -127,7 +167,7 @@ func (b *Base) Drop(id string) {
 		b.Live.Set(id, nil)
 	}
 	if engine.ValidID.MatchString(id) {
-		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json"} {
+		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json", id + ".embed"} {
 			os.Remove(filepath.Join(b.dir, f))
 		}
 	}

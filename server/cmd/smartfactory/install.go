@@ -89,6 +89,10 @@ const envFile = `# SmartFactory 的环境变量（systemd 启动时读）。改�
 # 别的模型（换成它的地址、密钥和型号；上下文长度写在 LLM_CONTEXT_TOKENS，不写按 6 万算）：
 # LLM_BASE_URL=https://api.example.com/v1
 # LLM_CONTEXT_TOKENS=128000
+# 按意思检索资料（可选，不配就按字词和知识图谱检索）：任何 OpenAI 兼容的 embeddings 接口，例如本机 Ollama 的 embeddinggemma
+# CORTEXDB_EMBED_BASE_URL=http://localhost:11434/v1
+# CORTEXDB_EMBED_MODEL=embeddinggemma
+# CORTEXDB_EMBED_DIM=768
 #
 # 要经代理才能出网的（大模型、ERP 接口）：
 # HTTPS_PROXY=http://代理地址:端口

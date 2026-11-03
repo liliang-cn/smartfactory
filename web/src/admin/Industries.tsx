@@ -1,6 +1,7 @@
 // 行业包: what a kind of site is made of — its products, its machines and the routes between
 // them. Every company is built from one; a company writes its own (by hand or with the AI) when
 // none of the built-in ones fits, or copies a built-in one to change it.
+import { stepLines, THINKING } from './steps';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { CheckIcon, CircleAlertIcon, CopyIcon, FootprintsIcon, LoaderCircleIcon, PencilIcon, SparklesIcon, UploadIcon, WaypointsIcon } from 'lucide-react';
@@ -118,7 +119,6 @@ function Writer({ open, onOpenChange, base }: { open: boolean; onOpenChange(o: b
       setSaving(false);
     }
   };
-  const LABEL: Record<string, string> = { list_industries: '看有哪些行业包', get_industry: '参考一个行业包', propose_industry: '检查写好的行业包' };
   const products = pack ? Object.values(pack.products as Record<string, { name: string }>).map((p) => p.name) : [];
   const machines = pack ? Object.values(pack.machines as Record<string, { label: string }>).map((m) => m.label) : [];
   return (
@@ -135,17 +135,17 @@ function Writer({ open, onOpenChange, base }: { open: boolean; onOpenChange(o: b
         {(steps.length > 0 || ctrl || answer || error) && (
           <div className="grid gap-2 rounded-xl bg-surface/60 px-4 py-3">
             <ol className="grid gap-1">
-              {steps.map((st, i) => (
+              {stepLines(steps).map((st, i) => (
                 <li key={i} className="flex items-start gap-2 text-[12.5px]">
-                  {!st.done ? <LoaderCircleIcon className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
-                    : st.failed ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" /> : <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />}
+                  {st.state === 'doing' ? <LoaderCircleIcon className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
+                    : st.state === 'failed' ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" /> : <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />}
                   <span className="min-w-0">
-                    <span className={cn('font-bold', st.failed && 'text-destructive')}>{LABEL[st.tool] ?? st.tool}{st.tool === 'propose_industry' && st.done && !st.failed ? '：通过' : ''}</span>
-                    {st.failed && <span className="block whitespace-pre-line text-muted-foreground">{st.failed.replace(/^没通过：\n?/, '').slice(0, 300)}</span>}
+                    <span className={cn('font-bold', st.state === 'failed' && 'text-destructive')}>{st.text}</span>
+                    {st.detail && <span className="block whitespace-pre-line text-muted-foreground">{st.detail}</span>}
                   </span>
                 </li>
               ))}
-              {ctrl && !steps.some((st) => !st.done) && <li className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-3.5 animate-spin" />在想</li>}
+              {ctrl && !steps.some((st) => !st.done) && <li className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-3.5 animate-spin" />{THINKING}</li>}
             </ol>
             {answer && <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{answer}</p>}
             {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-[13px] text-destructive">{error}</p>}

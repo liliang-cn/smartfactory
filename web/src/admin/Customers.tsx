@@ -79,7 +79,7 @@ export default function Customers() {
   if (ov.single) {
     return (
       <>
-        <PageHead title="建你的工厂" sub="这台服务器还没有工厂。从一个模板起步，或者把工厂描述给 AI，之后都能改">
+        <PageHead title="新建你的数字工厂" sub="这台服务器还没有工厂。从一个模板起步，或者把工厂描述给 AI，之后都能改">
           <Button asChild variant="outline" className="h-10 rounded-xl font-bold"><a {...link('/admin/new?ai=1')}><SparklesIcon />描述给 AI</a></Button>
         </PageHead>
         <Suspense fallback={null}><Gallery embedded /></Suspense>

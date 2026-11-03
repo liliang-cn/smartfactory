@@ -33,7 +33,7 @@ macOS、Windows：`smartfactory -config smartfactory.json`，不带配置时数�
 | 位置 | |
 |---|---|
 | `/etc/smartfactory/smartfactory.json` | `http` 监听地址，`mqtt.users` 设备账号，`sources` Modbus / OPC UA / MQTT 数据源 |
-| `/etc/smartfactory/env` | `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`（OpenAI 兼容接口），`HTTPS_PROXY` |
+| `/etc/smartfactory/env` | `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`（OpenAI 兼容接口），`HTTPS_PROXY`；可选 `CORTEXDB_EMBED_BASE_URL`、`CORTEXDB_EMBED_MODEL`、`CORTEXDB_EMBED_DIM`（向量模型，资料按意思检索） |
 | `/var/lib/smartfactory` | 全部数据，备份它 |
 
 改完 `sudo systemctl restart smartfactory`。
