@@ -52,10 +52,10 @@ export function shapeLines(attempts: ShapeStep[], running: boolean): { text: str
   return attempts.map((a, i) => {
     const last = i === attempts.length - 1;
     const head = `第 ${a.n || i + 1} 次：`;
-    if (a.ok) return { text: a.n > 1 ? `${head}外形检查通过` : '外形检查通过', state: 'done' };
+    if (a.ok) return { text: attempts.length > 1 ? `${head}外形检查通过` : '外形检查通过', state: 'done' };
     const what = a.program
       ? (a.line ? `程序第 ${a.line} 行出错` : '程序出错')
-      : `有${Object.entries(a.errors ?? {}).filter(([, n]) => n > 0).map(([k, n]) => (PROBLEM[k] ?? ((m: number) => `${m} 处问题`))(n)).join('、') || '没通过的检查'}`;
+      : `有 ${Object.entries(a.errors ?? {}).filter(([, n]) => n > 0).map(([k, n]) => (PROBLEM[k] ?? ((m: number) => `${m} 处问题`))(n)).join('、') || '没通过的检查'}`;
     const fixing = last && running;
     return { text: `${head}${what}${fixing ? '，正在改' : ''}`, state: fixing ? 'doing' : 'failed', detail: a.program?.slice(0, 200) };
   });

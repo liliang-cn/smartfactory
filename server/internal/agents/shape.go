@@ -33,7 +33,9 @@ const shapePrompt = `你是 SmartFactory 的外形设计员。别人用中文说
 - 设备要撑满给它的外框，看起来才是真实大小；传送带那一条通道不能挡（工作台、底座放在带子下面或旁边，滑块、刀头悬在上面）。
 - 零件数有上限：一个工厂有几十台设备，每个零件都要画，用少量大块零件勾出轮廓就好，不要做螺丝这种细节。
 - 颜色优先用调色板里的名字（blue、blueDeep、white、metal、greyDark、yellow……），和工厂里其他设备一个风格。
-- 产品是一件工件在线上的样子：放在原点、底面贴着 y = 0，长度方向沿 x。`
+- 产品是一件工件在线上的样子：放在原点、底面贴着 y = 0，长度方向沿 x。
+- 各部分要连成一个整体：相邻零件贴合或稍微插进去一点，不要悬空、不要留缝。
+- 最后的话写纯文字，称呼用“你”，不用“您”，一两句就够。`
 
 // ShapeAttempt is one checked program, for the console's progress lines.
 type ShapeAttempt struct {

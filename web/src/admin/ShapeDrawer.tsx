@@ -81,7 +81,7 @@ export default function ShapeDrawer({ cfg, what, onClose }: { cfg: IndustryCfg; 
   const d = drawing?.drawing;
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[760px] rounded-[20px]">
+      <DialogContent className="max-h-[94vh] overflow-y-auto rounded-[20px] sm:max-w-[760px]">
         <DialogHeader>
           <DialogTitle className="text-[17px] font-extrabold">让 AI 画外形：{name}</DialogTitle>
           <DialogDescription>
