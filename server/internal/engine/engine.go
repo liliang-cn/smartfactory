@@ -55,6 +55,8 @@ type Engine struct {
 	only []string
 	// single: a self-hosted instance, empty until its one company is created
 	single bool
+	// earlier configs of the companies, without a Dir (guarded by mu)
+	memVersions map[string][]Version
 
 	// values from equipment waiting for the loop, which applies all of them at once
 	inMu    sync.Mutex
@@ -122,7 +124,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams", "stations", "alert", "readings", "setClock"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "scopeModel", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams", "stations", "alert", "readings", "setClock"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -702,14 +704,32 @@ func (e *Engine) CreateCompany(raw []byte) ConfigResult {
 	if !e.allowed(configID(raw)) {
 		return ConfigResult{Errors: []string{e.refusal()}, Where: "id"}
 	}
+	return e.install(raw, true)
+}
+
+// install runs raw (its id checked) in place of the company of that id, and keeps it; with keep,
+// the config the company ran until now is kept as a version first.
+func (e *Engine) install(raw []byte, keep bool) ConfigResult {
+	id := configID(raw)
+	before := e.CompanyConfig(id)
 	r := e.verdict(e.str("addCompany", string(raw)))
 	if r.OK {
-		id := configID(raw)
 		e.mu.Lock()
-		if !slices.Contains(e.companies, id) {
+		existed := slices.Contains(e.companies, id)
+		if !existed {
 			e.companies = append(e.companies, id)
 		}
 		e.mu.Unlock()
+		if keep && existed && before != "null" {
+			prev := []byte(before)
+			if e.Dir != "" {
+				// the file as it was given, rather than the config with its defaults filled in
+				if b, err := os.ReadFile(filepath.Join(e.configDir("companies"), id+".json")); err == nil {
+					prev = b
+				}
+			}
+			e.keepVersion(id, prev)
+		}
 		if err := e.persistConfig("companies", id, raw); err != nil {
 			e.log.Error("keep company", "err", err)
 		}
@@ -735,6 +755,12 @@ func (e *Engine) CheckCompany(raw []byte) ConfigResult {
 		return ConfigResult{Errors: []string{e.refusal()}, Where: "id"}
 	}
 	return e.verdict(e.str("checkCompany", string(raw)))
+}
+
+// ScopeModel is a company config as the scoped editor works on it (scopeModel in the engine):
+// validated, its lines' routings written out as steps, and its stations' tags. Detail holds it.
+func (e *Engine) ScopeModel(raw []byte) ConfigResult {
+	return e.verdict(e.str("scopeModel", string(raw)))
 }
 
 // CompanyConfig is a running company's config (JSON), or "null".
@@ -775,7 +801,11 @@ func (e *Engine) DeleteCompany(id string) ConfigResult {
 		if e.Dir != "" {
 			os.Remove(filepath.Join(e.configDir("companies"), id+".json"))
 			os.Remove(filepath.Join(e.Dir, id+".json"))
+			os.RemoveAll(e.versionDir(id))
 		}
+		e.mu.Lock()
+		delete(e.memVersions, id)
+		e.mu.Unlock()
 		e.changed(id, true)
 	}
 	return r

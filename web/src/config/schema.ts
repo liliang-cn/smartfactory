@@ -382,6 +382,8 @@ export const Step = z.union([
     power: z.object({ idle: z.number(), run: z.number() }).optional(),
     /** tooling overrides for this step (a smaller die lasts longer …) */
     tooling: ToolingPatch.optional(),
+    /** this station's own temperature limits (absolute °C) in place of its machine's: warn (报警) and trip (停机) */
+    thermal: z.object({ warn: z.number().optional(), trip: z.number().optional() }).optional(),
     /** inventory lent out (or used up) when a unit finishes this step; the unit waits if there is not enough */
     take: Take.optional(),
     /** lent inventory the unit hands back at this step (anything still held is returned when it leaves) */

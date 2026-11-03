@@ -354,8 +354,13 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       // per-step overrides make this station's own machine (a heavier billet needs a bigger heater …)
       const power = 'power' in st ? st.power : undefined;
       const tooling = 'tooling' in st ? st.tooling : undefined;
-      const own: MachineCfg = power || tooling
-        ? { ...machine, power: power ?? machine.power, tooling: tooling && machine.tooling ? { ...machine.tooling, ...tooling } : machine.tooling }
+      const heat = 'thermal' in st ? st.thermal : undefined;
+      const thermal = heat ? { ...machine.thermal, ...heat } : machine.thermal;
+      if (heat && !(thermal.warn >= 22 + thermal.run + 6 && thermal.trip > thermal.warn)) {
+        throw new Error(`${name}：${st.name ?? machine.label} 的报警温度 ${thermal.warn}°C 要比运行温度（${22 + thermal.run}°C）高至少 6°C，停机温度 ${thermal.trip}°C 要高于报警温度`);
+      }
+      const own: MachineCfg = power || tooling || heat
+        ? { ...machine, power: power ?? machine.power, tooling: tooling && machine.tooling ? { ...machine.tooling, ...tooling } : machine.tooling, thermal }
         : machine;
       return {
         id: `${machine.code}-${n}${pad2(seq[machine.code])}`,

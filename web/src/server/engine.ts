@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
 import { companyOntology } from '@/config/ontology';
-import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg } from '@/config/schema';
+import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg, type StepCfg } from '@/config/schema';
 import { History } from '@/sim/history';
 import { isMachineSpec, linkPlants, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
 import { reported } from '@/sim/venue';
@@ -186,6 +186,59 @@ function checkCompany(json: string): string {
     return {
       id: cfg.id, name: cfg.name,
       plants: plants.map((p) => ({ id: p.id, name: p.name, site: p.site, lines: p.lines.map((l) => l.name), machines: p.lines.reduce((n, l) => n + l.stations.length, 0) })),
+    };
+  });
+}
+
+/**
+ * A company config as the scoped editor works on it (one part changed at a time): validated, with
+ * each line's routing written out as its own steps (each step an object, `$route` naming the
+ * routing it came from), and what it lays out to — every line's cfg entry and repeat, every
+ * station's tag (位号), name and limits — and the machine kinds of its packs.
+ */
+function scopeModel(json: string): string {
+  return result(() => {
+    const raw = JSON.parse(json) as { id?: string };
+    const cfg = validateCompany(raw, `公司 ${raw?.id ?? ''}`);
+    const plants = layoutCompany(cfg, industries, `公司 ${cfg.id}`);
+    const copy = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+    const step = (s: StepCfg) => (typeof s === 'string' ? { machine: s } : copy(s));
+    const config = copy(cfg);
+    const routes: Record<string, Record<string, unknown[]>> = {};
+    const machines: Record<string, Record<string, unknown>> = {};
+    config.plants.forEach((p) => {
+      const ind = industries.get(p.industry ?? cfg.industry)!;
+      routes[ind.id] ??= Object.fromEntries(Object.entries(ind.routes).map(([k, r]) => [k, r.map(step)]));
+      machines[ind.id] ??= Object.fromEntries(Object.entries(ind.machines).map(([k, m]) => [k, {
+        label: m.label, code: m.code, cycle: m.cycle, archetype: m.look.archetype, warn: m.thermal.warn, trip: m.thermal.trip, run: 22 + m.thermal.run,
+      }]));
+      for (const l of p.lines) {
+        if (!l.steps && l.route) {
+          (l as Record<string, unknown>).$route = l.route;
+          l.steps = ind.routes[l.route].map(step);
+          delete l.route;
+        } else if (l.steps) l.steps = l.steps.map(step);
+      }
+    });
+    return {
+      config, routes, machines,
+      plants: plants.map((L, pi) => {
+        const pc = cfg.plants[pi];
+        // which cfg entry (and which of its repeats) each laid-out line is
+        const from: { cfg: number; rep: number }[] = [];
+        pc.lines.forEach((l, ci) => { for (let r = 1; r <= l.repeat; r++) from.push({ cfg: ci, rep: r }); });
+        return {
+          id: L.id, name: L.name, industry: L.industry.id, hall: L.hall,
+          areas: L.areas.map((a, i) => ({ code: a.code, name: a.name, note: a.note, index: pc.areas?.length ? i : -1 })),
+          lines: L.lines.map((l, i) => ({
+            id: l.id, no: l.no, name: l.name, cfg: from[i].cfg, rep: from[i].rep, area: l.area, speed: l.speed,
+            stations: l.stations.map((st) => ({
+              id: st.id, key: st.key, name: st.name, label: st.machine.label, code: st.machine.code, cycle: st.cycle,
+              warn: st.machine.thermal.warn, trip: st.machine.thermal.trip,
+            })),
+          })),
+        };
+      }),
     };
   });
 }
@@ -984,7 +1037,7 @@ function list(): string {
 
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
-  addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
+  addIndustry, addCompany, checkIndustry, checkCompany, scopeModel, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
   tables, reportTable, tableSessions, materials, setHeats, mountTool,
 };

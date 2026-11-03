@@ -322,6 +322,17 @@
                               }
                             }
                           },
+                          "thermal": {
+                            "type": "object",
+                            "properties": {
+                              "warn": {
+                                "type": "number"
+                              },
+                              "trip": {
+                                "type": "number"
+                              }
+                            }
+                          },
                           "take": {
                             "type": "object",
                             "propertyNames": {
