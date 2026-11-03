@@ -775,8 +775,11 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 	names = uniq(append(slices.Clone(names), found...))
 	// more than asked for, to put the passages about the things named first
 	pool := max(k*3, 12)
+	// a station is also the machine it is: a card about 中频感应加热炉 answers "IH-101 的始锻温度",
+	// and CortexDB keeps a passage the walk reaches only if it shares enough words with the question
+	words := uniq(append(append(slices.Clone(keywords), found...), b.machinesOf(ctx, c, found)...))
 	req := cortexdb.KnowledgeSearchRequest{
-		Query: query, EntityNames: names, Keywords: uniq(append(slices.Clone(keywords), found...)), TopK: pool, MaxContextChunks: pool, RetrievalMode: "auto",
+		Query: query, EntityNames: names, Keywords: words, TopK: pool, MaxContextChunks: pool, RetrievalMode: "auto",
 		// the whole pool, not as much as fits CortexDB's context budget: a long line or document
 		// passage would leave out the short ones about what happened that go first here
 		MaxContextChars: 1 << 20,
@@ -839,6 +842,28 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 		out.Passages = out.Passages[:k]
 	}
 	return out, nil
+}
+
+// machinesOf is the machines the stations among names are.
+func (b *Base) machinesOf(ctx context.Context, c *company, names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	r, err := c.db.QueryCypher(ctx, cortexdb.CypherQueryRequest{
+		Query:  `MATCH (s:` + TStation + `)-[:` + RIsA + `]->(m:` + TMachine + `) WHERE s.name IN $names RETURN DISTINCT m.name`,
+		Params: map[string]any{"names": names}, MaxRows: 50,
+	})
+	if err != nil {
+		b.log.Warn("knowledge cypher", "err", err)
+		return nil
+	}
+	var out []string
+	for _, row := range r.Rows {
+		if s, _ := row[0].(string); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // aboutFirst puts first what happened to a station the question names of the kinds it asks about

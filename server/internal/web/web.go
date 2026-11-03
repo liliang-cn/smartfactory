@@ -30,11 +30,13 @@ import (
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/guard"
+	"smartfactory/internal/health"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
+	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
@@ -45,8 +47,11 @@ import (
 const Protocol = 1
 
 type Server struct {
-	Hub    *tags.Hub
-	Engine *engine.Engine
+	// FirstToken is where a new installation wrote its first administrator's token: the sign-in
+	// page points to it while it is there, and it is removed once an administrator has signed in.
+	FirstToken string
+	Hub        *tags.Hub
+	Engine     *engine.Engine
 	// Keys are the tokens the server accepts; without one, everyone is a visitor.
 	Keys *auth.Keyring
 	// Audit keeps who changed what.
@@ -89,6 +94,12 @@ type Server struct {
 	Hints *anomaly.Detector
 	// Tables are the restaurants' tables as reported and simulated (nil without data).
 	Tables *tables.Service
+	// Stores are the companies' stores, dies and new parts (nil without data).
+	Stores *stores.Service
+	// Health is the server's own vitals (nil: the 运行状况 page says it is off); Model names the
+	// language model the assistants use, false when none is set.
+	Health *health.Sampler
+	Model  func() (string, bool)
 
 	namesOnce sync.Once
 	names     map[string]string
@@ -99,7 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/live", s.live)
 	// what this server is: the companies it runs, so a page opened without ?company shows its own
 	mux.HandleFunc("GET /api/site", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, map[string]any{"companies": append([]string{}, s.Engine.CompanyIDs()...)})
+		writeJSON(w, map[string]any{"companies": append([]string{}, s.Engine.CompanyIDs()...), "mustLogin": s.MustLogin()})
 	})
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		// each customer's factory is its own: the companies and equipment listed are the caller's
@@ -163,12 +174,15 @@ func (s *Server) Handler() http.Handler {
 	s.deviceRoutes(mux)
 	s.checkRoutes(mux)
 	s.tableRoutes(mux)
+	s.storeRoutes(mux)
 	s.valueRoutes(mux)
 	s.anomalyRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
+	s.healthRoutes(mux)
+	s.sessionRoutes(mux)
 	mux.Handle("/", s.static())
-	return mux
+	return s.gate(mux)
 }
 
 // caller is who made the request.
@@ -217,8 +231,21 @@ var revertOf = map[string]string{"stop": "start", "fault": "reset", "speed": "sp
 // gets frames of the plant it is looking at (and the others now and then), sends commands, and
 // as an operator of the company can also change the plant clock and reach real equipment.
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
-	tok := auth.Token(r)
-	who, _ := s.Keys.Lookup(tok)
+	// a system's token, or a person's session: looked up again before a command and every few
+	// seconds, so a token revoked or an account disabled stops counting at once
+	tok, sess := auth.Token(r), auth.SessionOf(r)
+	resolve := func() auth.Who {
+		if tok != "" {
+			w, _ := s.Keys.Lookup(tok)
+			return w
+		}
+		if sess != "" {
+			w, _ := s.Keys.Session(sess)
+			return w
+		}
+		return auth.Anonymous
+	}
+	who := resolve()
 	// the page says which company it shows, so the greeting can say what the caller may do there
 	first := r.URL.Query().Get("company")
 	op := who.Can(first, auth.Operator)
@@ -238,7 +265,10 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "role": who.RoleIn(first), "name": who.Name, "sim": true, "version": s.Version, "sources": s.sourcesFor(func(c string) bool { return c == first })})
+	// visitors work the demo's machines (their commands undo themselves); a company's own
+	// factory lets only its operators and administrators
+	commands := func(op bool) bool { return op || !s.Engine.IsSingle() }
+	send(map[string]any{"type": "hello", "protocol": Protocol, "operator": op, "commands": commands(op), "role": who.RoleIn(first), "name": who.Name, "sim": true, "version": s.Version, "sources": s.sourcesFor(func(c string) bool { return c == first })})
 
 	var (
 		company  string
@@ -270,7 +300,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	handle := func(m clientMsg) {
 		if m.Type == "cmd" || m.Type == "time" {
 			// a token revoked or expired since the link opened stops counting at once
-			if now, _ := s.Keys.Lookup(tok); now.Key != who.Key {
+			if now := resolve(); now.Key != who.Key {
 				who, op = now, now.Can(company, auth.Operator)
 			}
 		}
@@ -290,6 +320,11 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 			}
 		case "cmd":
 			if company == "" || m.Asset == "" {
+				return
+			}
+			if !op && s.Engine.IsSingle() {
+				// a company's own factory: only its operators and administrators work the machines
+				send(map[string]any{"type": "result", "ok": false, "msg": "只有操作员和管理员能操作设备，" + who.RoleIn(company).Label() + "只能看"})
 				return
 			}
 			if !op {
@@ -375,6 +410,18 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		case <-status.C:
+			// a session ended or a token revoked since the link opened: the page learns at once,
+			// and a private factory closes the link
+			if now := resolve(); now.Key != who.Key {
+				who, op = now, now.Can(company, auth.Operator)
+				if err := wsjson.Write(ctx, c, map[string]any{"type": "who", "operator": op, "commands": commands(op), "role": who.RoleIn(company), "name": who.Name}); err != nil {
+					return
+				}
+				if who.Key == "" && s.MustLogin() {
+					c.Close(websocket.StatusPolicyViolation, "要先登录")
+					return
+				}
+			}
 			watching := company
 			if watching == "" {
 				watching = first

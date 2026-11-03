@@ -39,6 +39,12 @@ const guide = `# 用配置搭一个新的数字孪生场景
 - 设备上写 tooling: { label: "锻模", life: 5000（次）, change: 900（换模秒数）, spare?: "库存key"（换模消耗一副备件）, drift?: 3 }
 - 每加工一件计一次；寿命后 40% 测量值往公差边漂（drift 个 sigma），90% 报「准备更换」，到寿命自动停机换模（状态「换模」），没有备件就等并报「缺备用锻模」。
 - 指令 retool 可提前换模；数据源可发 toolUsed / toolLife 覆盖计数。
+- 锻造、冲压、压铸、注塑这类靠模具成形的行业：成形、切边、冲孔的设备都要写 tooling，工厂的「模具台账」按它管每一副模具。
+
+## 库房（行业包声明库房里放什么）
+- industry.stores.categories: [{ key, label, kind: "bar"（按炉号收发的钢棒料，产线按件数×投料重量自动扣）| "part"（备件、标准件）| "product"（成品）| "other", unit, fields: [要记的项] }]
+- 用钢材做原料的（锻造、机加工棒料）：{key:"bar", label:"棒料", kind:"bar", unit:"t", fields:["牌号","规格"]}，产品写 material（牌号，如 42CrMo）和 input（每件投料 kg）；再加 {key:"part", label:"标准件", kind:"part", fields:["规格","用在"]} 和 {key:"product", label:"成品", kind:"product"}。
+- 其他行业按自己的原料写（kind 用 part 或 other），原料批次在看板上叫什么写 terms.lot（默认：产品有 material 时叫「炉号」，否则「批号」）。
 
 ## 接真实数据（任何场景）
 数据源按约定 topic sf/{公司}/{厂}/{设备id}/{字段} 发：

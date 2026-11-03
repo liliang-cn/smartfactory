@@ -155,6 +155,11 @@ type Broker struct {
 	Users map[string]string `json:"users"`
 	// Public: devices on this broker are emulated, so visitors' commands are published too.
 	Public bool `json:"public"`
+	// OpenLocal keeps the old trust of any client on this machine (no credentials) even after
+	// devices are registered: for development and the demo's emulated equipment. Off, a client
+	// on this machine is let in without credentials only while no device is registered on a
+	// server installed before accounts existed.
+	OpenLocal bool `json:"openLocal,omitempty"`
 	// TLS is a second listener, for devices that connect over TLS: with a certificate the
 	// server issued them (no password), or with their token.
 	TLS *BrokerTLS `json:"tls,omitempty"`

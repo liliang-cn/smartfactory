@@ -278,7 +278,7 @@ function Chat({ company, a, info, docs }: { company: string; a: Assistant; info:
             }}
             rows={1}
             disabled={!info.ready}
-            placeholder={info.ready ? `问${a.name}` : '服务器没有配置大模型'}
+            placeholder={info.ready ? `问${a.name}` : '还没有配置大模型，问不了'}
             aria-label="消息"
             className="max-h-36 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[14px] shadow-none focus-visible:ring-0"
           />

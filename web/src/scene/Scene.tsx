@@ -12,6 +12,7 @@ import { AssetNode } from './AssetNode';
 import { CameraRig } from './CameraRig';
 import { LabelProjector } from './LabelProjector';
 import { Products } from './Products';
+import { PerfProbe } from '@/perf/perf';
 
 export const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
@@ -73,6 +74,7 @@ export function Scene({ plant }: { plant: PlantRuntime }) {
       }}
       onPointerMissed={() => useUI.getState().select(null)}
     >
+      <PerfProbe />
       <color attach="background" args={[P.ground]} />
       <fog attach="fog" args={[P.ground, size * 2.2, size * 4.5]} />
       <Environment />

@@ -24,13 +24,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/liliang-cn/agent-go/v3/pkg/pool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"smartfactory/internal/adapters"
@@ -46,6 +49,7 @@ import (
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/guard"
+	"smartfactory/internal/health"
 	"smartfactory/internal/history"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
@@ -53,6 +57,7 @@ import (
 	"smartfactory/internal/ops"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
+	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
@@ -256,6 +261,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	var broker *adapters.Broker
 	if cfg.MQTT.Listen != "" {
 		if broker, err = adapters.StartBroker(cfg.MQTT, hub, devs, log); err != nil {
+			if errors.Is(err, syscall.EADDRINUSE) {
+				return fmt.Errorf("设备上报用的 MQTT 端口 %s 被别的程序占着（同一台机器上开了两个 SmartFactory？）：在配置文件里把 \"mqtt\": {\"listen\": …} 换一个端口，不用设备接入就写成 \"\"：%w", cfg.MQTT.Listen, err)
+			}
 			return fmt.Errorf("mqtt broker: %w", err)
 		}
 		defer broker.Close()
@@ -332,7 +340,16 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			if err := os.WriteFile(p, []byte(token+"\n"), 0o600); err != nil {
 				return err
 			}
-			log.Warn("new installation: the administrator's token is in "+p+"; sign in at /admin with it, then delete the file", "file", p)
+			log.Warn("new installation: open /admin to set up the administrator; the installation code is in "+p, "file", p)
+			// one company's private factory: visitors see the sign-in, and equipment on this
+			// machine shows credentials like any other
+			if !cfg.Demo {
+				accounts.SetSetting(sfweb.SettingMustLogin, "1")
+				accounts.SetSetting("mqtt_local", "closed")
+			}
+		}
+		if v, _ := accounts.Setting("mqtt_local"); v == "closed" {
+			broker.CloseLocal()
 		}
 	}
 	if assistants != nil {
@@ -481,6 +498,25 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			assistants.Tables = dining
 		}
 	}
+	// the stores (bar by heat, standard parts, finished parts), the dies, and new parts in development
+	var store *stores.Service
+	if cfg.Data != "" {
+		if store, err = stores.Open(cfg.Data, eng, log); err != nil {
+			return fmt.Errorf("stores: %w", err)
+		}
+		defer store.Close()
+		store.Categories = func(company string) []stores.Category { return storeCategories(eng, company) }
+		if trail != nil {
+			system := auth.Who{Name: "库房"}
+			store.Event = func(company, kind, target, text string) {
+				trail.Record(system, "stores", company, kind, target, text, nil)
+			}
+		}
+		go store.Run(ctx)
+		if assistants != nil {
+			assistants.Stores = store
+		}
+	}
 	// what happens to the machines (checks, reading hints, calibrations, AI commands), in each
 	// company's knowledge base
 	if kb != nil {
@@ -506,12 +542,15 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	ws := &sfweb.Server{
 		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Devices: devs, MQTT: mq, Checks: manual, Hints: hints, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
-		History: plants, Tables: dining,
+		History: plants, Tables: dining, Stores: store,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
 			Stateless: true, JSONResponse: true, DisableLocalhostProtection: true,
 		}),
+	}
+	if cfg.Data != "" {
+		ws.FirstToken = filepath.Join(cfg.Data, "initial-admin-token")
 	}
 	mcptools.AddValueTool(ms, ws.Operations().ValueTool)
 	if kb != nil {
@@ -531,6 +570,11 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		if assistants != nil {
 			assistants.Hints = report
 		}
+	}
+	// the server's own vitals for the console's 运行状况: sampled every 10 s, the last hour kept
+	ws.Health = vitals(ctx, cfg.Data, eng, broker)
+	if assistants != nil && assistants.Ready() {
+		ws.Model = func() (string, bool) { return os.Getenv("LLM_MODEL"), true }
 	}
 	srv := &http.Server{Addr: cfg.HTTP, Handler: ws.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -726,4 +770,31 @@ func loadHistory(ctx context.Context, st *history.Store, log *slog.Logger) error
 	}
 	log.Info("history loaded", "lines", n, "db", st.Summary(ctx))
 	return nil
+}
+
+// vitals samples the server's vitals until ctx ends. Requests to the language model are counted
+// where every model client's connection picks its proxy, which stays the environment's.
+func vitals(ctx context.Context, data string, eng *engine.Engine, broker *adapters.Broker) *health.Sampler {
+	var calls atomic.Int64
+	pool.SetProxy(func(r *http.Request) (*url.URL, error) {
+		calls.Add(1)
+		return http.ProxyFromEnvironment(r)
+	})
+	p := health.Probes{
+		StepMs: func() float64 { return eng.StepCost().Seconds() * 1000 },
+		Viewers: func() int {
+			n := 0
+			for _, v := range eng.Watchers() {
+				n += v
+			}
+			return n
+		},
+		ModelCalls: calls.Load,
+	}
+	if broker != nil {
+		p.Devices = func() int { return int(atomic.LoadInt64(&broker.Info.ClientsConnected)) }
+	}
+	h := health.New(data, p)
+	go h.Run(ctx.Done())
+	return h
 }

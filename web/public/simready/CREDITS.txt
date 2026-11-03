@@ -1,0 +1,27 @@
+3D models by NVIDIA SimReady (https://huggingface.co/datasets/nvidia/simready-assets),
+licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+Web copies from https://huggingface.co/datasets/codepawl/simready-glb, then reduced
+(fewer triangles, 512 px textures) by scripts/simready.mjs.
+
+arm.glb: robotic_system_arm_b01
+amr.glb: robotics_small_bot_a01
+forklift.glb: vehicle_forklift_blue_a01
+roller.glb: conveyor_belt_a05
+rack.glb: rack_large_empty_a01
+pallet.glb: pallet_a01
+loaded.glb: pallet_assembly_brown_e04
+crate.glb: crate_blue_a01
+bench.glb: furniture_workbench_standard_e01
+bins.glb: equipment_multi_tier_bin_cart_c01
+tools.glb: equipment_rolling_tool_cabinet_a01
+ibc.glb: ibcTank_steel_stainless_a01
+booth.glb: equipment_sprayBooth_painting_a01
+guard.glb: machineGuard_a01
+extinguisher.glb: fireProtection_extinguisher_portable_a01
+column.glb: structure_wall_column_a01
+compressor.glb: equipment_airCompressor_a01
+packtable.glb: table_packing_heavyduty_c01
+drum.glb: drum_steel_a01
+fan.glb: climate_shopFan_floorAxial_a01
+rail.glb: rail_guard_a09
+firestand.glb: fireExtinguisher_stand_a01

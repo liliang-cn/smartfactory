@@ -180,7 +180,7 @@ export function GuardPanel({ c }: { c: api.Company }) {
           </ul>
           {admin && <Button variant="ghost" size="sm" className="mt-2 w-fit rounded-lg text-[12.5px]" onClick={() => set({ rules: [...draft.rules, { cmd: 'start', when: '', say: '' }] })}><PlusIcon />加一条规则</Button>}
           <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-            条件写成 字段 比较 值，多个用 and 连接。字段：<code className="font-mono">state</code>（running、idle、fault、stopped…）、<code className="font-mono">temp</code>、<code className="font-mono">warn</code>、<code className="font-mono">trip</code>、<code className="font-mono">speed</code>、<code className="font-mono">health</code>、<code className="font-mono">alarms</code>（在报警的条数）、<code className="font-mono">arg</code>（指令的参数）、<code className="font-mono">maint</code>、<code className="font-mono">changing</code>。
+            条件举例：<code className="font-mono">state == fault</code>（设备故障时）、<code className="font-mono">temp &gt; 80</code>（温度高于 80 ℃），几个条件用 <code className="font-mono">and</code> 连起来。能用的有：state 设备状态（running 运行、idle 待机、fault 故障、stopped 停机）、temp 温度、warn 和 trip 温度的报警线和停机线、speed 速度、health 健康度、alarms 正在报警的条数、arg 指令带的数值、maint 在保养、changing 在换型。
           </p>
           {problems.length > 0 && <ul className="mt-3 grid gap-1 rounded-xl bg-danger-soft px-3 py-2 text-[12.5px] text-destructive">{problems.map((p, i) => <li key={i}>{p}</li>)}</ul>}
           {admin && (

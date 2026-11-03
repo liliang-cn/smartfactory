@@ -20,6 +20,56 @@ import { ago } from './Accounts';
 import { useCompany } from './layouts';
 import { Panel } from './Panel';
 
+// What a device sends: the fields the twin understands (protocol/devices.md, DeviceFields)
+const FIELDS: [string, string, string][] = [
+  ['state', 'running 运行、idle 待机、stopped 停机、fault 故障、maint 保养、changeover 换型', '状态'],
+  ['fault', '故障文字；发 "" 清除', '故障'],
+  ['temp', '°C', '温度'],
+  ['power', 'kW', '功率'],
+  ['vib', 'mm/s', '振动'],
+  ['speed', '倍率 0.5–1.5', '速度'],
+  ['health', '0–1', '健康度'],
+  ['toolUsed / toolLife', '件', '模具已打 / 寿命'],
+  ['count', '件', '计数'],
+];
+
+/** How to send readings for a machine: the topics, the fields and a command to try it with. */
+export function PublishHelp({ prefix, company, plant, asset, host, port, user }: {
+  prefix: string; company: string; plant: string; asset: string; host: string; port: string; user?: string;
+}) {
+  const base = `${prefix}/${company}/${plant}/${asset}`;
+  const auth = user ? ` -u ${user} -P '<令牌>'` : '';
+  const one = `mosquitto_pub -h ${host} -p ${port}${auth} -t ${base} -m '{"state":"running","temp":62.5,"power":18.2}'`;
+  const field = `mosquitto_pub -h ${host} -p ${port}${auth} -t ${base}/temp -m 62.5`;
+  const copy = (t: string) => { navigator.clipboard.writeText(t).then(() => toast.success('已复制')); };
+  return (
+    <div className="grid gap-2 text-[12.5px]">
+      <p className="text-muted-foreground">
+        两种发法都行：一条 JSON 发到 <code className="font-mono">{base}</code>，字段名是下面这些；或者每个字段单独发到 <code className="font-mono">{base}/字段名</code>，内容就是数字。
+        {asset === '设备' && ' 「设备」换成设备编号，比如 HP-101。'}
+      </p>
+      <table className="w-full text-left">
+        <tbody>
+          {FIELDS.map(([k, unit, label]) => (
+            <tr key={k} className="border-t first:border-t-0">
+              <td className="py-1 pr-3 font-mono whitespace-nowrap">{k}</td>
+              <td className="py-1 pr-3 whitespace-nowrap">{label}</td>
+              <td className="py-1 text-muted-foreground">{unit}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {[one, field].map((cmd) => (
+        <button key={cmd} type="button" onClick={() => copy(cmd)}
+          className="flex items-start gap-2 rounded-lg bg-surface px-3 py-2 text-left font-mono text-[12px] break-all hover:bg-brand-soft">
+          <span className="min-w-0 flex-1">{cmd}</span><CopyIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      ))}
+      <p className="text-muted-foreground">发上来几秒内，孪生里这台设备会标「实时」，读数换成你发的。其他字段（检测值、库存、车辆位置）见安装包里的 protocol/devices.md。</p>
+    </div>
+  );
+}
+
 type Kind = api.BrokerDevice['kind'];
 const KIND: Record<Kind, { label: string; note: string }> = {
   token: { label: '令牌', note: '设备连 MQTT 时用令牌当密码。大多数设备用这个' },
@@ -66,6 +116,14 @@ export function DevicePanel({ c }: { c: api.Company }) {
             <span>主题 <code className="font-mono">{b.prefix}/{c.id}/厂/设备/字段</code></span>
             {b.local && <span className="flex items-center gap-1 text-warning"><CircleAlertIcon className="size-3.5" />现在只接受本机连接，登记第一台设备后对网络开放</span>}
           </div>
+        )}
+        {b.listen && (
+          <details className="rounded-xl border px-3 py-2">
+            <summary className="cursor-pointer text-[13px] font-bold">怎么发读数</summary>
+            <div className="mt-2">
+              <PublishHelp prefix={b.prefix} company={c.id} plant={c.plants[0]?.id ?? '厂'} asset="设备" host={location.hostname} port={port(b.listen)} user="设备名" />
+            </div>
+          </details>
         )}
 
         {live.length === 0 && !ov.shared.length && <p className="text-[13px] text-muted-foreground">还没有登记设备。</p>}
@@ -329,6 +387,15 @@ function Issued({ c, cred: open, broker, onClose }: { c: api.Company; cred: api.
             </>
           )}
         </dl>
+        {cred?.token && d && (
+          <details className="rounded-xl border px-3 py-2" open>
+            <summary className="cursor-pointer text-[13px] font-bold">怎么发读数</summary>
+            <div className="mt-2">
+              <PublishHelp prefix={broker.prefix} company={c.id} plant={d.plant} asset={d.assets[0] && d.assets[0] !== '*' ? d.assets[0] : '设备'}
+                host={host} port={port(broker.listen)} user={d.name} />
+            </div>
+          </details>
+        )}
         {cred?.bundle && (
           <p className="text-[12.5px] leading-relaxed text-muted-foreground">
             设备信任 ca.crt，用 {d!.name}.crt 和 {d!.name}.key 连 TLS 端口。边缘网关在配置的 mqtt 里写 <code className="font-mono">"url": "tls://{host}:{port(broker.tls)}", "cert", "key", "ca"</code> 三个文件的路径。

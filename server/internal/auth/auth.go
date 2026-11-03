@@ -3,6 +3,7 @@
 //
 //	visitor   watch; demo commands that undo themselves; assistants answer and draft
 //	member    + record through the assistants: notes, tickets, ticket status
+//	inspector + fill in checks and first-article inspections
 //	operator  + commands that reach equipment, the plant clock, the advisor's decisions
 //	admin     + scenes, documents, assistants themselves
 //
@@ -34,6 +35,8 @@ type Role int
 const (
 	Visitor Role = iota
 	Member
+	// Inspector fills in checks and inspections but does not command machines.
+	Inspector
 	Operator
 	Admin
 	// ERP may use the order API of its companies and nothing else.
@@ -42,8 +45,8 @@ const (
 	Reporter
 )
 
-var roleNames = [...]string{"visitor", "member", "operator", "admin", "erp", "reporter"}
-var roleLabels = [...]string{"访客", "成员", "操作员", "管理员", "ERP 接口", "桌态上报"}
+var roleNames = [...]string{"visitor", "member", "inspector", "operator", "admin", "erp", "reporter"}
+var roleLabels = [...]string{"访客", "成员", "质检员", "操作员", "管理员", "ERP 接口", "桌态上报"}
 
 func (r Role) String() string { return roleNames[r] }
 
@@ -52,14 +55,15 @@ func (r Role) Label() string { return roleLabels[r] }
 
 func (r Role) MarshalJSON() ([]byte, error) { return json.Marshal(r.String()) }
 
-// ParseRole reads a role a token can carry: member, operator, admin, erp or reporter.
+// ParseRole reads a role a token or account can carry: member, inspector, operator, admin, erp
+// or reporter.
 func ParseRole(s string) (Role, error) {
 	for i, n := range roleNames {
 		if n == s && i > 0 {
 			return Role(i), nil
 		}
 	}
-	return Visitor, fmt.Errorf("role %q: use member, operator, admin, erp or reporter", s)
+	return Visitor, fmt.Errorf("role %q: use member, inspector, operator, admin, erp or reporter", s)
 }
 
 // Rank is where the role stands on the visitor–admin ladder: an ERP or reporter token stands
@@ -77,8 +81,11 @@ type Who struct {
 	Role Role
 	// Companies the token covers; nil is every company.
 	Companies []string
-	// Key names the token (the start of its hash), "" for a visitor.
+	// Key names the token (the start of its hash), or "u:" and the account for a person signed
+	// in with a password; "" for a visitor.
 	Key string
+	// User is the account of a person signed in with a password, "" for a token or a visitor.
+	User string
 }
 
 // Anonymous is a caller with no token.
@@ -145,6 +152,8 @@ type Keyring struct {
 	keys  []key
 	store *Store
 	used  map[string]time.Time
+	// throttle holds back logins and addresses after wrong passwords
+	throttle throttle
 }
 
 // NewKeyring reads the configured tokens. legacy is the original single token, kept working
@@ -247,10 +256,17 @@ func Token(r *http.Request) string {
 	return r.URL.Query().Get("token")
 }
 
-// Of is the caller of an HTTP request.
+// Of is the caller of an HTTP request: a system's token, or else a person's session cookie.
 func (k *Keyring) Of(r *http.Request) Who {
-	w, _ := k.Lookup(Token(r))
-	return w
+	if t := Token(r); t != "" {
+		w, _ := k.Lookup(t)
+		return w
+	}
+	if id := SessionOf(r); id != "" {
+		w, _ := k.Session(id)
+		return w
+	}
+	return Anonymous
 }
 
 type ctxKey struct{}

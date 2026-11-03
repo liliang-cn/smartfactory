@@ -4,6 +4,7 @@ import './index.css';
 import { ConfigError, loadCompany } from '@/config/loader';
 import { ALL, initRuntime, useUI } from '@/state/store';
 import { startLive } from '@/live/client';
+import { fetchAuthState, SignInPage } from '@/ui/SignIn';
 
 const root = createRoot(document.getElementById('root')!);
 
@@ -25,7 +26,18 @@ function ConfigProblem({ error }: { error: unknown }) {
 }
 
 const params = new URLSearchParams(location.search);
-loadCompany(params.get('company'))
+
+// a private factory: sign in first (served without the server, there is nothing to ask)
+async function signedInOrAsk(): Promise<void> {
+  if (params.get('token')) return;
+  const a = await fetchAuthState();
+  if (!a?.mustLogin || a.me) return;
+  await new Promise<void>((done) => {
+    root.render(<SignInPage title="SmartFactory" sub="这个工厂只给自己人看，先登录。" onDone={() => done()} />);
+  });
+}
+
+signedInOrAsk().then(() => loadCompany(params.get('company')))
   .then(async (bundle) => {
     const rt = initRuntime(bundle);
     const wanted = params.get('plant') ?? '';

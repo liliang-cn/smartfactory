@@ -1,5 +1,5 @@
 // 公司: every company this server runs (one, on a company's own installation), each with its first plant drawn as a plan.
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { PlusIcon, RadioTowerIcon, SearchIcon, SparklesIcon, TrendingUpIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,13 +8,13 @@ import type * as api from './api';
 import { Blueprint } from './Blueprint';
 import { link, ownCompany, PageHead, useConsole } from './Console';
 import { useCompany } from './layouts';
-import { go } from './router';
+import { Redirect } from './router';
 
 const Customer = lazy(() => import('./Customer'));
 const Gallery = lazy(() => import('./Templates').then((m) => ({ default: m.TemplateGallery })));
 
 export function Badge({ text, className }: { text: string; className?: string }) {
-  return <span className={cn('grid h-9 min-w-10 shrink-0 place-items-center rounded-[10px] bg-foreground px-1.5 text-[13px] font-extrabold text-background', className)}>{text}</span>;
+  return <span className={cn('grid h-9 min-w-10 shrink-0 place-items-center rounded-[10px] bg-foreground px-1.5 text-[13px] whitespace-nowrap font-extrabold text-background', className)}>{text}</span>;
 }
 
 export const totals = (c: api.Company) => ({
@@ -69,11 +69,6 @@ function Card({ c, industry }: { c: api.Company; industry?: api.IndustrySummary 
   );
 }
 
-function Redirect({ to }: { to: string }) {
-  useEffect(() => { go(to, true); }, [to]);
-  return null;
-}
-
 export default function Customers() {
   const { ov } = useConsole();
   // a self-hosted instance: its one factory, or, before there is one, where to start it from
@@ -85,7 +80,7 @@ export default function Customers() {
     return (
       <>
         <PageHead title="建你的工厂" sub="这台服务器还没有工厂。从一个模板起步，或者把工厂描述给 AI，之后都能改">
-          <Button asChild variant="outline" className="h-10 rounded-xl font-bold"><a {...link('/admin/new')}><SparklesIcon />描述给 AI</a></Button>
+          <Button asChild variant="outline" className="h-10 rounded-xl font-bold"><a {...link('/admin/new?ai=1')}><SparklesIcon />描述给 AI</a></Button>
         </PageHead>
         <Suspense fallback={null}><Gallery embedded /></Suspense>
       </>

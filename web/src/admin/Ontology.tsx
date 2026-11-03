@@ -319,8 +319,8 @@ export function OntologyView({ company, admin, picked, onPick }: { company: stri
     <div className="grid gap-5">
       <p className="text-[12.5px] text-muted-foreground">
         {o.declared
-          ? <>行业包声明了 <b className="text-foreground tabular-nums">{declared}</b> 个类、<b className="text-foreground tabular-nums">{own.length}</b> 个关系、<b className="text-foreground tabular-nums">{o.rules.length}</b> 条规则；给定的事实 <b className="text-foreground tabular-nums">{o.explicit}</b> 条，推理出 <b className="text-primary tabular-nums">{o.inferred}</b> 条。</>
-          : '这家公司的行业包还没有声明本体，下面只有内置的类和关系。在行业包里加 ontology（类、关系、规则、约束）就有了。'}
+          ? <>行业设定里有 <b className="text-foreground tabular-nums">{declared}</b> 个类、<b className="text-foreground tabular-nums">{own.length}</b> 个关系、<b className="text-foreground tabular-nums">{o.rules.length}</b> 条规则；给定的事实 <b className="text-foreground tabular-nums">{o.explicit}</b> 条，推理出 <b className="text-primary tabular-nums">{o.inferred}</b> 条。</>
+          : '这个工厂的行业设定里还没有本体，下面只有内置的类和关系。'}
       </p>
       {o.inconsistencies?.length ? <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12.5px] text-warning">推理发现矛盾：{o.inconsistencies.join('；')}</p> : null}
       {o.constraints.length > 0 && <Section title="约束"><Constraints o={o} onPick={onPick} /></Section>}

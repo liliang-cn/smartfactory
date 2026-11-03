@@ -4,8 +4,15 @@
   "name": "锻造",
   "unit": "件",
   "qualityLabel": "一次合格率",
+  "stores": {
+    "categories": [
+      { "key": "bar", "label": "棒料", "kind": "bar", "unit": "t", "fields": ["牌号", "规格"] },
+      { "key": "part", "label": "标准件", "kind": "part", "unit": "件", "fields": ["规格", "用在"] },
+      { "key": "product", "label": "成品", "kind": "product", "unit": "件", "fields": ["零件号"] }
+    ]
+  },
   "logistics": {
-    "internal": "agv",
+    "internal": "forklift",
     "store": "racks",
     "inbound": {
       "vehicle": "truck",

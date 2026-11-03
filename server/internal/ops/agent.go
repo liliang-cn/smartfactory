@@ -36,13 +36,14 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 成效：value_report（一段时间里顾问的计划提了多少、采纳多少、采纳后量出来变了多少，你提出的改动和 AI 的设备指令后来怎样，校准，工单按期率，工厂每周的 OEE、产量、停机）。问“这个系统给我们带来了什么”就用它：每个数字带上 n 和依据；value 是 null 就说没有数据，不要估；标着仿真的数字要说明不是真实工厂；采纳前后的对比只说明同时发生，不能说成是计划带来的。
 - 读数异常：anomalies（接了真实设备的机器，哪些读数和它自己平常不一样：现在的、最近的，每台设备各字段在各状态下的平常值 均值±标准差）。这是提示不是报警，设备照常运行。设备检修后读数本来就会变，可以 propose_reset_baseline 让它重新学习。
 - 写配置：check_company 检查一份公司配置（不创建）；check_industry 检查一个行业包（不保存）。
-- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_cancel_order、propose_apply_calibration、propose_approve_command、propose_deny_command、propose_reset_baseline。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
+- 改动：propose_create_company、propose_delete_company、propose_create_industry、propose_issue_token、propose_revoke_token、propose_rebuild_knowledge、propose_create_order、propose_cancel_order、propose_apply_calibration、propose_approve_command、propose_deny_command、propose_reset_baseline。这些不会直接执行，而是作为一张待确认的卡片交给管理员，管理员点确认后才执行。提出后告诉管理员卡片上是什么，等他确认；不要说已经做了。
 
 规则：
 - 用中文，简洁。数字、编号、名称以工具返回为准，不要编。
 - 建或改工厂：先 get_customer 看一个同行业的现有公司怎么写，照着写，check_company 通过后再 propose_create_company。
 - 现有行业包里没有要的产品或工序：get_industry 读一个结构最像的，照着写一个新行业包（新 id，不能和已有的重复），check_industry 通过后 propose_create_industry；它保存了，公司配置才能用它。
 - 发令牌：问清楚给谁、什么角色（member 成员 / operator 操作员 / admin 管理员）、哪些公司；不说就按最小权限（成员、只给提到的那家公司）。
+- 问设备现在怎么样（在不在跑、哪台停了、哪台故障、温度），先用 machines_now 查孪生的实时状态再答；读数异常提示和校准只是补充，不能代替它。
 - 删除、撤销这类改动，提出前说清后果。
 - 管理员的令牌只能管它自己管的公司，工具会拒绝越权的操作，照实转告。`
 
@@ -93,6 +94,14 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 	tools := []tool{
 		{"list_customers", "这台服务器上的公司（一家公司自己部署的只有它自己）：工厂、产线、设备数，是否内置，实时数据点数。", obj(map[string]any{}),
 			func(map[string]any) (any, error) { return o.Companies(who) }},
+		{"machines_now", "一家公司的设备现在怎么样（孪生里的实时状态）：各状态各几台，出问题的排在前面（故障原因、温度、健康度、稼动率、正在响的报警）。query 可按设备编号、名称、产线或状态（“故障”“停”“报警”）找，空字符串看全部。问到设备现在的情况一定先用它，别用异常提示或校准去猜。", obj(map[string]any{"company": str("公司 id"), "query": str("设备、产线或状态，可空")}, "company"),
+			func(m map[string]any) (any, error) {
+				c := s(m, "company")
+				if !who.In(c) {
+					return nil, fmt.Errorf("你的令牌管不到 %s", c)
+				}
+				return agents.Machines(o.Engine, c, s(m, "query"))
+			}},
 		{"get_customer", "一家公司的完整配置，和它知识库里有多少工艺节点、文档。", obj(map[string]any{"id": str("公司 id")}, "id"),
 			func(m map[string]any) (any, error) {
 				cfg, err := raw(o.CompanyConfig(who, s(m, "id")))
@@ -302,6 +311,17 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			func(m map[string]any) (any, error) {
 				return propose(Action{Kind: "deny_command", Args: map[string]any{"company": s(m, "company"), "id": s(m, "id"), "reason": s(m, "reason")}})
 			}},
+		{"propose_create_order", "提出录一张生产工单（没接 ERP 也能录，产线会先做它），交管理员确认。order 的字段：no 工单号（不给就按今天日期编一个）、partNo 料号或 product 产品名、qty 数量、due 交期（\"2026-11-01 17:00\"）、customer 客户（可省）、line 产线名（可省，不给按料号排到最闲的线）。", obj(map[string]any{"company": str("公司 id"), "order": map[string]any{"type": "object"}}, "company", "order"),
+			func(m map[string]any) (any, error) {
+				order, ok := m["order"].(map[string]any)
+				if !ok {
+					return nil, errors.New("order 要是对象")
+				}
+				if fmt.Sprint(order["no"]) == "" || order["no"] == nil {
+					order["no"] = "MO-" + time.Now().Format("060102-150405")
+				}
+				return propose(Action{Kind: "create_order", Args: map[string]any{"company": s(m, "company"), "order": order}, Detail: "确认后进产线排队；在做的是仿真自己编的工单时，产线会先停下它做这张"})
+			}},
 		{"propose_cancel_order", "提出撤回一张工单（在做的产线会停下它转做下一张），交管理员确认。", obj(map[string]any{"company": str("公司 id"), "no": str("工单号")}, "company", "no"),
 			func(m map[string]any) (any, error) {
 				return propose(Action{Kind: "cancel_order", Args: map[string]any{"company": s(m, "company"), "no": s(m, "no")}, Detail: "在做的产线停下它，转做下一张；ERP 再发一次同号工单会重新排队"})
@@ -356,7 +376,21 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 		}, agentpkg.ToolMetadata{ReadOnly: true, ConcurrencySafe: !strings.HasPrefix(t.name, "propose_")})
 	}
 	goal := fmt.Sprintf("（管理员：%s，%s）\n\n%s", who.Name, scopeText(who), text)
-	_, err = agents.Run(auth.With(ctx, who), svc, goal, session, 24, names, emit)
+	// every turn ends with words: an empty answer after a proposal points at the card, else it is
+	// said that nothing came back, never silence
+	proposed := false
+	end := func(e agents.Event) {
+		switch {
+		case e.Kind == "action":
+			proposed = true
+		case e.Kind == "complete" && strings.TrimSpace(e.Text) == "" && proposed:
+			e.Text = "改动在上面，点确认才会执行。"
+		case e.Kind == "complete" && strings.TrimSpace(e.Text) == "" && ctx.Err() == nil:
+			e = agents.Event{Kind: "error", Text: agents.ErrNoAnswer.Error()}
+		}
+		emit(e)
+	}
+	_, err = agents.Run(auth.With(ctx, who), svc, goal, session, 24, names, end)
 	return err
 }
 

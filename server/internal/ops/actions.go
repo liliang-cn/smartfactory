@@ -19,7 +19,7 @@ type Action struct {
 	// ID names a proposal of the console agent (AP-…), so what became of it can be counted;
 	// an action that was never proposed has none.
 	ID string `json:"id,omitempty"`
-	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | cancel_order | apply_calibration | approve_command | deny_command | reset_baseline
+	// Kind: create_company | delete_company | create_industry | issue_token | revoke_token | rebuild_knowledge | create_order | cancel_order | apply_calibration | approve_command | deny_command | reset_baseline
 	Kind string `json:"kind"`
 	// Title is the change in a few words; Detail what it does.
 	Title  string         `json:"title"`
@@ -104,6 +104,13 @@ func (o *Ops) do(ctx context.Context, who auth.Who, via string, a Action) (any, 
 		return map[string]bool{"ok": true}, o.Revoke(who, via, str("key"))
 	case "rebuild_knowledge":
 		return o.KnowledgeRebuild(ctx, who, via, str("company"))
+	case "create_order":
+		order, _ := a.Args["order"].(map[string]any)
+		res, err := o.SubmitOrders(who, via, str("company"), []map[string]any{order})
+		if err == nil && len(res) == 1 && !res[0].OK {
+			return nil, fail(400, "%s", res[0].Error)
+		}
+		return res, err
 	case "cancel_order":
 		return o.CancelOrder(who, via, str("company"), str("no"))
 	case "apply_calibration":
@@ -160,6 +167,10 @@ func (o *Ops) describe(a *Action) error {
 		a.Title = "撤销令牌 " + str("key")
 	case "rebuild_knowledge":
 		a.Title = "重建" + named(str("company")) + "的知识库"
+	case "create_order":
+		order, _ := a.Args["order"].(map[string]any)
+		f := func(k string) string { return strings.TrimSpace(fmt.Sprint(cmp.Or(order[k], any("")))) }
+		a.Title = fmt.Sprintf("录工单 %s：%s × %s", f("no"), cmp.Or(f("partNo"), f("product")), f("qty"))
 	case "cancel_order":
 		a.Title = "撤回工单 " + str("no")
 	case "apply_calibration":

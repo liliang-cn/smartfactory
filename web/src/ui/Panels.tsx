@@ -11,10 +11,21 @@ import { ALERT_STATES, CHIP, hhmm, pct, rate, stateLabel } from './status';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 
+/** A wall-clock time (ms) at the plant (UTC+8): its time of day, and its date when it was not today. */
+function stamp(ms: number, now: number) {
+  const day = (t: number) => Math.floor((t + 8 * 3600_000) / 86_400_000);
+  const d = new Date(ms + 8 * 3600_000);
+  const hm = hhmm(((ms + 8 * 3600_000) % 86_400_000) / 1000);
+  return day(ms) === day(now) ? hm : `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${hm}`;
+}
+
 function orderProgress(sim: PlantSim, line: Line) {
   // the work order the plant is running (part number, quantity); the layout's sample order otherwise
   const j = line.job;
-  const o = j ? { ...line.layout.order, no: j.no, part: j.name, qty: j.qty, issued: hhmm(((j.issued + 8 * 3600_000) % 86_400_000) / 1000) } : line.layout.order;
+  const now = sim.wall();
+  // material is kitted a little after the order is issued (a few minutes to half an hour), never in the future
+  const kitted = j ? Math.min(now, j.issued + (5 + ([...j.no].reduce((n, c) => n + c.charCodeAt(0), 0) % 26)) * 60_000) : 0;
+  const o = j ? { ...line.layout.order, no: j.no, part: j.name, qty: j.qty, issued: stamp(j.issued, now), kitted: stamp(kitted, now) } : line.layout.order;
   const k = sim.lineKpi(line);
   const done = Math.min(o.qty, j ? j.good : line.good);
   const eta = k.tp > 0 ? sim.clock + ((o.qty - done) / k.tp) * 3600 : null;

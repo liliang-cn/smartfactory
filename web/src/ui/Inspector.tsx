@@ -19,6 +19,7 @@ import { HistoryChart, RANGES, type Range, type Summary } from './History';
 import { TrendChart, spcStats, type Metric } from './TrendChart';
 import { InventoryList } from './Panels';
 import { ManualRecords } from './ManualRecords';
+import { MachineDie } from './MachineDie';
 import { MachineHints } from './Hints';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
@@ -210,6 +211,11 @@ function Controls({ a }: { a: Asset }) {
   const { layout } = usePlant();
   const [speed, setSpeed] = useState(Math.round(a.speed * 100));
   useEffect(() => setSpeed(Math.round(a.speed * 100)), [a]);
+  // a company's own factory: only operators and administrators work the machines
+  const { commands, status, role } = useLive();
+  if (status === 'on' && !commands) {
+    return <p className="text-[12.5px] text-muted-foreground">{role === 'visitor' ? '登录后，操作员和管理员可以在这里操作设备。' : '操作设备要操作员或管理员账号。'}</p>;
+  }
   if (a.type === 'warehouse') return layout.logistics.store === 'racks' ? <Button className="h-9" onClick={() => command(a.id, 'restock')}>{layout.words.raw}入库 400 件</Button> : null;
   // a counter riders take from, or a depot whose van goes out on the delivery rounds: nothing to ship by hand
   if (a.type === 'fgzone') return layout.logistics.outbound.vehicle === 'rider' || runtime().byId[layout.id]?.sim.depot ? null : <Button className="h-9" onClick={() => command(a.id, 'ship')}>立即发运</Button>;
@@ -431,6 +437,7 @@ export function Inspector() {
           )}
         </div>
 
+        {a.tool && <MachineDie company={runtime().bundle.company.id} plant={layout.id} asset={a.id} />}
         {a.line && a.type !== 'table' && <ManualRecords company={runtime().bundle.company.id} plant={layout.id} asset={a.id} />}
 
         <div className="mt-3.5 border-t pt-3.5"><Controls a={a} /></div>

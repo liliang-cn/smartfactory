@@ -20,7 +20,7 @@ export const VIA: Record<Via, { label: string; icon: LucideIcon }> = {
   anomaly: { label: '异常检测', icon: ActivityIcon },
   ontology: { label: '本体约束', icon: ShapesIcon },
 };
-export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
+export const ROLE: Record<Entry['role'], string> = { visitor: '访客', member: '成员', inspector: '质检员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
 /** How each guard level reads. */
 export const GUARD_LEVEL: Record<string, string> = { advisory: '只提议', guarded: '有护栏', autonomous: '自主' };
 const STATUS_ADVISOR: Record<string, string> = {
@@ -43,7 +43,8 @@ function commandText(detail: string) {
 }
 
 /** What an entry did, as a sentence, and the machine it touched if any. */
-export function describe(e: Entry): { text: string; asset?: string; plant?: string } {
+export function describe(e: Entry, names?: Map<string, string>): { text: string; asset?: string; plant?: string } {
+  const co = (id: string) => names?.get(id) ?? id;
   switch (e.action) {
     case 'command': {
       const [plant, asset] = e.target.split('/');
@@ -94,12 +95,12 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     case 'assistant.create': return { text: `新建助手「${titleOf(e.target)}」` };
     case 'assistant.update': return { text: `修改助手「${titleOf(e.target)}」` };
     case 'assistant.delete': return { text: `删除助手 ${e.target}` };
-    case 'company.create': return { text: `建立或替换公司 ${e.target}` };
-    case 'company.delete': return { text: `删除公司 ${e.target}` };
-    case 'industry.create': return { text: `建立或替换行业包 ${e.target}` };
+    case 'company.create': return { text: `建好或改了公司「${e.detail || co(e.target)}」的场景` };
+    case 'company.delete': return { text: `删除公司「${co(e.target)}」` };
+    case 'industry.create': return { text: `保存行业的设备和工艺 ${e.target}` };
     case 'token.issue': return { text: `发令牌给${titleOf(e.target)}（${ROLE[e.detail as Entry['role']] ?? e.detail}）` };
     case 'token.revoke': return { text: `撤销${titleOf(e.target)}的令牌` };
-    case 'knowledge.rebuild': return { text: `重建 ${e.target} 的知识库` };
+    case 'knowledge.rebuild': return { text: `重建「${co(e.target)}」的知识库` };
     case 'calib.fit': return { text: `按实测拟合 ${e.target || '所有设备'}（${e.detail}）` };
     case 'calib.apply': return { text: `应用 ${e.target} 的校准参数` };
     case 'calib.revert': return { text: `撤销 ${e.target} 的校准，恢复模板参数` };
@@ -111,6 +112,18 @@ export function describe(e: Entry): { text: string; asset?: string; plant?: stri
     case 'device.add': return { text: `登记设备 ${e.target}${e.detail ? `（${e.detail}）` : ''}` };
     case 'device.renew': return { text: `给设备 ${e.target} 换新${e.detail || '凭据'}` };
     case 'device.revoke': return { text: `撤销设备 ${e.target}${e.detail ? `（${e.detail}）` : ''}` };
+  }
+  // the console assistant's proposals: what it proposed, and what the person did with it
+  const kinds: Record<string, string> = {
+    create_company: '建或改公司', delete_company: '删公司', create_industry: '保存行业的设备和工艺', issue_token: '发令牌', revoke_token: '撤销令牌',
+    rebuild_knowledge: '重建知识库', create_order: '录工单', cancel_order: '撤回工单', apply_calibration: '应用校准', approve_command: '批准指令',
+    deny_command: '拒绝指令', reset_baseline: '重新学习读数',
+  };
+  const kind = (d?: string) => kinds[(d ?? '').split(' ')[0]] ?? '改动';
+  switch (e.action) {
+    case 'agent.propose': return { text: `助手提出：${(e.detail ?? '').split(' ').slice(1).join(' ') || kind(e.detail)}（等人确认）` };
+    case 'agent.confirm': return { text: `确认执行助手提出的${kind(e.detail)}` };
+    case 'agent.dismiss': return { text: `没要助手提出的${kind(e.detail)}` };
   }
   if (e.action.startsWith('advisor.')) {
     const verb = e.action.slice('advisor.'.length);

@@ -27,6 +27,54 @@
         "walk"
       ]
     },
+    "stores": {
+      "type": "object",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "default": "other",
+                "type": "string",
+                "enum": [
+                  "bar",
+                  "part",
+                  "product",
+                  "other"
+                ]
+              },
+              "unit": {
+                "default": "件",
+                "type": "string"
+              },
+              "fields": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "key",
+              "label"
+            ]
+          }
+        }
+      },
+      "required": [
+        "categories"
+      ]
+    },
     "terms": {
       "default": {},
       "type": "object",

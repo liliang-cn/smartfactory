@@ -23,7 +23,7 @@ func (o *Ops) kb(who auth.Who, company string, need auth.Role) error {
 	}
 	if !who.Can(company, need) {
 		if who.Key == "" {
-			return fail(401, "用令牌登录")
+			return fail(401, "要先登录")
 		}
 		return fail(403, "要公司 %s %s以上的令牌", company, need.Label())
 	}

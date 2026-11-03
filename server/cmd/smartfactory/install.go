@@ -81,10 +81,14 @@ WantedBy=multi-user.target
 
 const envFile = `# SmartFactory 的环境变量（systemd 启动时读）。改完：sudo systemctl restart smartfactory
 #
-# 助手和 AI 搭建要一个兼容 OpenAI 接口的大模型：
+# 助手和 AI 搭建要一个大模型：Anthropic 的 Claude，或任何兼容 OpenAI 接口的。
+# 用 Claude：
+# LLM_BASE_URL=https://api.anthropic.com/v1
+# LLM_API_KEY=sk-ant-…
+# LLM_MODEL=claude-opus-5-5
+# 别的模型（换成它的地址、密钥和型号；上下文长度写在 LLM_CONTEXT_TOKENS，不写按 6 万算）：
 # LLM_BASE_URL=https://api.example.com/v1
-# LLM_API_KEY=
-# LLM_MODEL=
+# LLM_CONTEXT_TOKENS=128000
 #
 # 要经代理才能出网的（大模型、ERP 接口）：
 # HTTPS_PROXY=http://代理地址:端口

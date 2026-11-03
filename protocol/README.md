@@ -163,7 +163,7 @@
 | `stock`、`count` | 库存、计数 |
 | `battery`、`vel`、`task` | 电量、速度、当前任务（车辆用） |
 | `live` | 设备实测值 `{src, at, f: {字段: 值}}`，或 `null` |
-| `toolUsed?`、`toolLimit?` | 当前模具已做件数、计划换模点 |
+| `toolUsed?`、`toolLimit?`、`toolLife?` | 当前模具已做件数、计划换模点、寿命（模具台账装上的模具按它自己的寿命） |
 | `changing?` | 换模剩余秒数 |
 
 `ProductTuple` 按顺序是：`[件号, 线上位置, 已完成工步, 在做工步, 本工步已用秒数, 形态, 停滞秒数, 占用库存 | null]`。

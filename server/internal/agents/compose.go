@@ -31,14 +31,18 @@ const architectPrompt = `你是 SmartFactory 的场景搭建员。管理员用�
    - id 用英文小写和连字符，不能和 list_industries 里已有的重复；name 是中文行业名；
    - 产品 1～3 个，每个 2～4 个阶段（stages，每个阶段用几个 parts 画出样子）；设备 4～10 种，每种选合适的 look.archetype，cycle、power、thermal 按行业常识；每个产品一条 routes，3～8 步，makes 指向后面的阶段；
    - 有料号就写 partNo（或 variants），有客户、供应商就写 customers、suppliers，这样工单、质量追溯和知识库都能用上；
+   - 写 stores.categories（库房放什么，见指南「库房」）；靠模具成形的设备写 tooling，工厂的模具台账才有东西管；
    - propose_industry 检查；没通过就按它说的改，直到通过（通过一次就够，不要重复提交）。通过后它会放进管理员那边，建公司时一起装上。
 3. list_companies / get_company 看现成的公司怎么写产线（product + route 的组合、repeat、名字），照着写最稳。
 4. 按描述定工厂（plants）和每个工厂的产线（lines）：工厂 id 用 p1、p2…，name 像「一厂」「常州工厂」，hall 写车间名，badge 两三个字；同样的线用 repeat 加 {n}，比如 "曲轴 {n} 线"。
 5. 公司 id 用公司名的拼音或英文缩写，小写字母、数字、连字符；short 是 2～4 个字的简称；name 是全称。
 6. 每写好一版就调 propose_company 检查（用新行业包时 industry 写它的 id）；没通过就按它说的改，直到通过。通过的那一版会出现在管理员的表单里。
 7. 描述里没说的（车间名、几条线、节拍）按行业常见的规模定，在最后的回答里说出你做的假设。
+8. 改一个已经建好的公司时（给了它现在的配置）：设备编号按产线在工厂里的先后排（第 1 条线 101 起、第 2 条线 201 起……），接好的设备、点检记录都认这个编号。所以已有的线保持原来的顺序，新加的线放在最后；要删的线不在最后时，在回答里说清楚它后面的线编号会往前移、要重新核对设备接入。要加产品时优先在现在用的行业包里找，没有才写新的。
 
-最后用两三句中文告诉管理员：建了什么（几个工厂、几条线、生产什么；新写了行业包就说它有哪些产品和设备），以及你做了哪些假设。不要贴 JSON。`
+最后用两三句中文告诉管理员：建了什么（几个工厂、几条线、生产什么；新写了行业包就说它有哪些产品和设备），以及你做了哪些假设。不要贴 JSON。
+描述太少、连做什么都看不出来（比如只有“工厂”两个字）时，不要编一个工厂，直接问清楚：做什么产品、几个厂、大概几条线。
+回答写纯文字：称呼用“你”，不用“您”；不用 ** 加粗、# 标题这类标记；不提颜色、模型、id 这些显示和配置上的细节。`
 
 const industryPrompt = `你是 SmartFactory 的行业包编写员。管理员描述一类工厂（或场景）由什么组成，你写成一个行业包（industry）：产品长什么样、有哪些设备、工艺路线怎么走。
 
@@ -46,7 +50,7 @@ const industryPrompt = `你是 SmartFactory 的行业包编写员。管理员描
 1. list_industries 看已有的行业包；get_industry 读一个结构最像的（离散制造看 forging 或 machining，流程/包装看 food，人或车走动的服务场景看 flow 为 walk 的），照它的结构写。
 2. id 用英文小写和连字符；新写的不能和已有的重复，改一个现有的（管理员给了它的配置）就保持原 id。name 是中文行业名。
 3. 产品 1～3 个，每个 2～4 个阶段（stages，每个阶段用几个 parts 画出样子）；设备 4～10 种，选合适的 look.archetype，cycle、power、thermal 按行业常识；每个产品一条 routes，3～8 步，makes 指向后面的阶段。
-4. 有料号就写 partNo（或 variants），有客户、供应商就写 customers、suppliers；质检工位写 measure（目标值、上下限、sigma）。
+4. 有料号就写 partNo（或 variants），有客户、供应商就写 customers、suppliers；质检工位写 measure（目标值、上下限、sigma）；写 stores.categories（库房放什么）；靠模具成形的设备写 tooling。
    管理员讲到原料、配方、过敏原、设备分类、温度要求这类知识时，写进 ontology（本体，格式照 food 的）：classes 类和上级类，relations 关系，rules 规则，individuals 有名字的东西，bind 把产品、设备种类绑到类上，constraints 约束（读数限值或必须有的关系）。
 5. propose_industry 检查；没通过就按它说的改，直到通过。通过的那一版交给管理员确认：通过一次就停，不要再改了重复提交。
 
@@ -242,6 +246,9 @@ func (r *Runner) Compose(ctx context.Context, who auth.Who, kind ComposeKind, br
 	switch {
 	case ctx.Err() != nil:
 		return nil
+	case proposed == nil && strings.TrimSpace(answer) != "" && answer != failure:
+		// it asked what it needs to know ("生产什么？几条线？"): an answer, not a failure
+		emit(Event{Kind: "complete", Text: answer})
 	case proposed == nil:
 		if answer == "" {
 			answer = failure

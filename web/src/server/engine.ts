@@ -297,11 +297,21 @@ function routeOrder(c: string, json: string): string {
       cands = cands.filter(({ p, l }) => l.id === o.line || `${p.layout.id}/${l.id}` === o.line || l.name === o.line);
       if (!cands.length) throw new Error(`没有产线「${o.line}」`);
     } else if (o.partNo || o.product) {
-      cands = cands.filter(({ p, l }) => {
+      // a part number is the product's own, a variant's, or the model in its name ("KFR-35GW 挂机内机");
+      // the product's id or name works too, whichever field it came in
+      const norm = (x: string) => x.trim().toLowerCase();
+      const want = norm(o.partNo || o.product || '');
+      const names = (name: string) => [name, ...name.split(/\s+/)].map(norm);
+      const makes = ({ p, l }: (typeof cands)[number]) => {
         const pr = l.layout.product;
-        return o.partNo ? pr.partNo === o.partNo || p.variants(l).some((v) => v.partNo === o.partNo) : pr.key === o.product || pr.name === o.product;
-      });
-      if (!cands.length) throw new Error(`没有产线做${o.partNo ? `料号 ${o.partNo}` : `「${o.product}」`}`);
+        return [pr.partNo ?? '', pr.key, ...names(pr.name), ...p.variants(l).flatMap((v) => [v.partNo, ...names(v.name)])].some((x) => x && norm(x) === want);
+      };
+      const all = cands;
+      cands = cands.filter(makes);
+      if (!cands.length) {
+        const known = [...new Set(all.flatMap(({ p, l }) => p.variants(l).map((v) => (v.partNo && v.partNo !== l.layout.product.key ? `${v.partNo}（${v.name}）` : v.name))))];
+        throw new Error(`没有产线做${o.partNo ? `料号 ${o.partNo}` : `「${o.product}」`}。能做的有：${known.join('、')}`);
+      }
     } else {
       throw new Error('工单要写明做什么（partNo 或 product）或在哪条线做（line）');
     }
@@ -917,6 +927,49 @@ function sum(b: ReturnType<History['drain']>, lines: [string, string][]) {
   return { lines: per, spares: Object.values(spares) };
 }
 
+/**
+ * What the company's stores need from the twin, without draining anything: each line's product,
+ * its steel grade and input weight, the heat it is using and the order it runs; each machine with
+ * a wearing tool, its count of cycles and the tool's wear.
+ */
+function materials(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify(co.plants.map((p) => ({
+    id: p.layout.id, name: p.layout.name,
+    lines: p.lines.map((l) => ({
+      id: l.id, name: l.name, product: l.layout.product.name, material: l.layout.product.material ?? '', input: l.layout.product.input ?? 0,
+      lot: l.lot ? { no: l.lot.no, supplier: l.lot.supplier, left: l.lot.left } : null,
+      job: l.job ? { no: l.job.no, part: l.job.partNo, name: l.job.name, heat: l.job.heat, supplier: l.job.supplier, good: l.job.good, qty: l.job.qty } : null,
+      presses: l.stations.filter((a) => a.tool).map((a) => ({
+        id: a.id, name: a.name, label: a.spec?.label ?? '', cycles: a.cycles,
+        tool: { label: a.tool!.label, life: a.tool!.life, used: a.tool!.used }, changing: a.changing > 0,
+      })),
+    })),
+  })));
+}
+
+/**
+ * A die from the company's die ledger went on a machine: its tool counts on from the strokes the
+ * die has struck, against the die's own design life.
+ */
+function mountTool(c: string, plant: string, asset: string, used: number, life: number): boolean {
+  const a = get(c)?.byId[plant]?.assets.get(asset);
+  if (!a?.tool || life <= 0) return false;
+  a.tool = { ...a.tool, life: Math.round(life), used: Math.max(0, Math.round(used)) };
+  return true;
+}
+
+/** The steel heats in the company's store, for its lines' next lots (replaces the last list). */
+function setHeats(c: string, json: string): boolean {
+  const co = get(c);
+  if (!co) return false;
+  const hs = JSON.parse(json) as { no: string; mill: string; material: string; kg: number }[];
+  // one list for all its plants: a heat taken by one is not there for another
+  for (const p of co.plants) p.heats = hs;
+  return true;
+}
+
 function list(): string {
   return JSON.stringify([...companies.values()].map((c) => ({
     id: c.bundle.company.id, name: c.bundle.company.name, short: c.bundle.company.short, industry: c.bundle.company.industry,
@@ -932,5 +985,5 @@ function list(): string {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
-  tables, reportTable, tableSessions,
+  tables, reportTable, tableSessions, materials, setHeats, mountTool,
 };

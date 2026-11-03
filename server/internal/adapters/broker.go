@@ -31,6 +31,15 @@ type Broker struct {
 	// while no client could prove who it is.
 	mu     sync.Mutex
 	listen string
+	acc    *access
+}
+
+// CloseLocal makes clients on this machine show credentials like any other, even while no
+// device is registered: an installation set up with accounts.
+func (b *Broker) CloseLocal() {
+	if b != nil && b.acc != nil {
+		b.acc.closed.Store(true)
+	}
 }
 
 // StartBroker runs the broker. Clients are the server's own (inline), holders of a shared
@@ -40,7 +49,8 @@ func StartBroker(cfg config.Broker, hub *tags.Hub, reg *mqttauth.Registry, log *
 	const name = "broker"
 	s := mqtt.New(&mqtt.Options{InlineClient: true, Logger: log.With("adapter", name)})
 	b := &Broker{Server: s, cfg: cfg, log: log, listen: cfg.Listen}
-	acc := &access{srv: s, users: cfg.Users, reg: reg, prefix: cfg.Prefix, log: log, who: map[*mqtt.Client]*ident{}, warned: map[string]*warning{}}
+	acc := &access{srv: s, users: cfg.Users, reg: reg, prefix: cfg.Prefix, log: log, openLocal: cfg.OpenLocal, who: map[*mqtt.Client]*ident{}, warned: map[string]*warning{}}
+	b.acc = acc
 	if err := s.AddHook(acc, nil); err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import * as api from './api';
+import { fetchAuthState, PasswordForm, signOutSession } from '@/ui/SignIn';
 
 // ---------- where the page is: ?company=&plant=&asset=&form= ----------
 
@@ -138,19 +139,26 @@ function Waiting() {
 
 function SignIn({ problem, onDone }: { problem?: string; onDone(): void }) {
   const [value, setValue] = useState('');
+  // a phone handed out at a machine may still use a token
+  const [withToken, setWithToken] = useState(false);
   return (
     <div className="grid min-h-dvh place-items-center bg-stage p-4">
-      <form className="w-full max-w-[400px] rounded-[20px] bg-card p-5 shadow-float"
-        onSubmit={(e) => { e.preventDefault(); if (value.trim()) { api.signIn(value); onDone(); } }}>
+      <div className="w-full max-w-[400px] rounded-[20px] bg-card p-5 shadow-float">
         <h1 className="text-[19px] font-extrabold">点检 · 人工记录</h1>
-        <p className="mt-1 text-[13.5px] text-muted-foreground">在设备旁边填点检表、首件检验、化验结果。</p>
-        <label htmlFor="token" className="mt-5 block text-[14px] font-bold">操作员令牌</label>
-        <Input id="token" type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)}
-          placeholder="sf_…" className="mt-1.5 h-12 rounded-xl font-mono text-[15px]" />
-        {problem && <p className="mt-2 text-[13px] text-destructive">{problem}</p>}
-        <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">令牌向管理员要，登录后存在这部手机上，下次扫码直接打开。</p>
-        <Button type="submit" className="mt-5 h-12 w-full rounded-xl text-[15px] font-bold" disabled={!value.trim()}>登录</Button>
-      </form>
+        <p className="mt-1 mb-5 text-[13.5px] text-muted-foreground">在设备旁边填点检表、首件检验、化验结果。用你的账号登录，这部手机会记住 30 天。</p>
+        {problem && <p className="mb-3 text-[13px] text-destructive">{problem}</p>}
+        {withToken ? (
+          <form onSubmit={(e) => { e.preventDefault(); if (value.trim()) { api.signIn(value); onDone(); } }}>
+            <label htmlFor="token" className="block text-[14px] font-bold">设备令牌</label>
+            <Input id="token" type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)}
+              placeholder="sf_…" className="mt-1.5 h-12 rounded-xl font-mono text-[15px]" />
+            <Button type="submit" className="mt-5 h-12 w-full rounded-xl text-[15px] font-bold" disabled={!value.trim()}>登录</Button>
+          </form>
+        ) : <PasswordForm big onDone={() => onDone()} />}
+        <button type="button" className="mt-3 text-[12.5px] text-muted-foreground underline underline-offset-2" onClick={() => setWithToken((v) => !v)}>
+          {withToken ? '用账号密码登录' : '这部手机发的是令牌？用令牌登录'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -515,6 +523,10 @@ const cacheKey = (c: string) => `sf-check-overview:${c}`;
 export default function Check() {
   const [where, go] = useWhere();
   const [signedIn, setSignedIn] = useState(() => !!api.token());
+  // a person signed in with an account: the session is in a cookie the page cannot read
+  useEffect(() => {
+    if (!signedIn) fetchAuthState().then((a) => { if (a?.me) setSignedIn(true); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [problem, setProblem] = useState<string>();
   const [companies, setCompanies] = useState<string[] | null>(null);
   const [ov, setOv] = useState<api.Overview | null>(null);
@@ -525,12 +537,13 @@ export default function Check() {
 
   const signOut = useCallback((why?: string) => {
     api.signOut();
+    signOutSession();
     setSignedIn(false);
     setProblem(why);
     setOv(null);
   }, []);
   const failed = useCallback((e: unknown) => {
-    if (e instanceof api.ApiError && (e.status === 401 || e.status === 403)) signOut(e.status === 401 ? '令牌不对或已失效' : e.message);
+    if (e instanceof api.ApiError && (e.status === 401 || e.status === 403)) signOut(e.status === 401 ? '登录已经失效，再登录一次' : e.message);
     else if (api.transient(e)) setOffline(true);
     else setError((e as Error).message);
   }, [signOut]);
@@ -540,7 +553,7 @@ export default function Check() {
     if (!signedIn || company) return;
     api.companies().then((cs) => {
       if (cs.length === 1) go({ company: cs[0] }, true);
-      else if (cs.length === 0) signOut('这个令牌不包括任何公司');
+      else if (cs.length === 0) signOut('你的账号还没有分到哪家工厂，找管理员');
       else setCompanies(cs);
     }, failed);
   }, [signedIn, company, go, signOut, failed]);

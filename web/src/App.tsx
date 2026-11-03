@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -12,6 +12,8 @@ import { Fleet, GroupFleet, Tracker } from '@/ui/Panels';
 import { TopBar } from '@/ui/TopBar';
 import { useBiz } from '@/advisor/store';
 import { useAgents } from '@/agents/store';
+import { PerfOverlay } from '@/perf/PerfOverlay';
+import { SR_CREDIT, loadSimReady } from '@/three/simready';
 
 const Business = lazy(() => import('@/advisor/Business'));
 const Agents = lazy(() => import('@/agents/Agents'));
@@ -84,8 +86,16 @@ function useShortcuts() {
   }, []);
 }
 
+/** The 3D models load once (about 7 MB); the map is drawn when they are in. */
+function useModels() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => { loadSimReady().then(() => setReady(true)); }, []);
+  return ready;
+}
+
 export default function App() {
   useShortcuts();
+  const ready = useModels();
   const plant = usePlant();
   const campus = useCampus();
   // the business view covers the map; the selected device stays selected for the way back
@@ -95,9 +105,12 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="fixed inset-0 overflow-hidden bg-stage">
-        {campus ? <CampusScene /> : <Scene key={plant.layout.id} plant={plant} />}
-        {!campus && <Labels key={`labels-${plant.layout.id}`} />}
+        {!ready ? <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">正在载入 3D 模型…</div>
+          : campus ? <CampusScene /> : <Scene key={plant.layout.id} plant={plant} />}
+        {ready && !campus && <Labels key={`labels-${plant.layout.id}`} />}
+        <div className="pointer-events-none absolute bottom-1 left-2 z-10 text-[10px] text-muted-foreground/70">{SR_CREDIT}</div>
         <TopBar />
+        <PerfOverlay />
         {campus ? <GroupKpis /> : <Kpis />}
         <ViewSwitch />
         <MapControls />

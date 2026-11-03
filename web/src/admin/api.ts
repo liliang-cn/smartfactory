@@ -84,9 +84,24 @@ export function signIn(t: string) {
 }
 export function signOut() {
   try { sessionStorage.removeItem(KEY); } catch { /* storage blocked */ }
+  // a person's session lives in a cookie the page cannot read: the server ends it
+  fetch('/api/auth/signout', { method: 'POST', headers: { 'X-SF-Via': 'page' } }).catch(() => {});
 }
 
-async function call<T>(method: string, path: string, json?: unknown): Promise<T> {
+// ---------- accounts: people sign in with a login and a password ----------
+
+export type AuthState = z.infer<typeof P.AuthState>;
+export type User = z.infer<typeof P.User>;
+export const authState = () => call<AuthState>('GET', '/api/auth/state');
+export const setup = (b: { code?: string; name: string; login: string; password: string }) => call<AuthState>('POST', '/api/auth/setup', b);
+export const signInWith = (login: string, password: string) => call<AuthState>('POST', '/api/auth/signin', { login, password });
+export const changePassword = (old: string, next: string) => call<{ ok: boolean }>('POST', '/api/auth/password', { old, next });
+export const users = () => call<z.infer<typeof P.Users>>('GET', '/api/admin/users');
+export const createUser = (b: { name: string; login: string; role: string; password: string; companies?: string[] }) => call<User>('POST', '/api/admin/users', b);
+export const updateUser = (id: string, b: { name?: string; role?: string; disabled?: boolean; password?: string }) => call<User>('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, b);
+export const setMustLogin = (on: boolean) => call<{ mustLogin: boolean }>('PUT', '/api/admin/settings', { mustLogin: on });
+
+export async function call<T>(method: string, path: string, json?: unknown): Promise<T> {
   const t = token();
   const res = await fetch(path, {
     method,
@@ -333,11 +348,30 @@ export async function downloadDoc(c: string, id: string, name: string, version?:
 export const DOC_ACCEPT = '.pdf,.docx,.xlsx,.xlsm,.csv,.md,.markdown,.txt';
 export const health = () => call<z.infer<typeof P.Health>>('GET', '/api/health');
 
-export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
+export const ROLE_LABEL: Record<Role, string> = { visitor: '访客', member: '成员', inspector: '质检员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' };
 export const ROLE_NOTE: Record<Exclude<Role, 'visitor'>, string> = {
   member: '看数据，让助手记笔记、登记工单',
+  inspector: '再加：填点检和首件检验；不能操作设备',
   operator: '再加：下发设备指令、调全厂倍速、采纳经营建议',
   admin: '再加：搭场景、管资料和助手、发令牌',
   erp: '给 ERP 之类的系统用：只能发、查、撤这家公司的生产工单，别的都做不了',
   reporter: '给摄像头盒子、收银系统、桌边传感器用：只能上报这家公司的桌态和用餐记录，别的都做不了',
 };
+
+// 运行状况: the server's own vitals and the browsers watching the twin (GET /api/admin/health)
+export interface HealthSample { at: string; cpu: number; rss: number; heap: number; stepMs: number; goroutines: number; viewers: number; devices: number; modelCalls: number }
+export interface HealthWarning { level: 'bad' | 'watch'; text: string; hint: string }
+export interface BrowserReport { id: string; fps: number; heapMB: number; width: number; height: number; dpr: number; calls: number; triangles: number; mobile: boolean; company: string; at: string }
+export interface Health {
+  now: string; version: string; started: string;
+  host: { cpus: number; os: string; memTotal: number; memFree: number };
+  process: { cpu: number; cpuMax: number; cpuHour: number; rss: number; heap: number; goroutines: number };
+  engine: { stepMs: number; stepMaxMs: number; budgetMs: number; machines: number; plants: { company: string; name: string; plant: string; lines: number; machines: number; viewers: number }[] };
+  viewers: number; devices: number;
+  disk: { total: number; parts: { name: string; bytes: number }[] | null; free: number; size: number };
+  model: { configured: boolean; name?: string; callsHour?: number; callsMinute?: number };
+  browsers: { count: number; medianFps: number; medianHeapMB: number; mobile: number; slow: BrowserReport[] };
+  samples: HealthSample[];
+  warnings: HealthWarning[];
+}
+export const vitals = () => call<Health>('GET', '/api/admin/health');

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	mqtt "github.com/mochi-mqtt/server/v2"
@@ -48,9 +49,27 @@ type access struct {
 	prefix string
 	log    *slog.Logger
 
+	// openLocal: clients on this machine may connect without credentials (see config.Broker)
+	openLocal bool
+	// closed: this installation never trusts local clients without credentials (one installed
+	// with accounts)
+	closed atomic.Bool
+
 	mu     sync.Mutex
 	who    map[*mqtt.Client]*ident
 	warned map[string]*warning
+}
+
+// localTrusted reports whether a client on this machine may connect without credentials: when
+// configured so, or on an older installation while no device is registered yet.
+func (a *access) localTrusted() bool {
+	if a.openLocal {
+		return true
+	}
+	if a.closed.Load() {
+		return false
+	}
+	return a.reg == nil || a.reg.Count() == 0
 }
 
 func (a *access) ID() string { return "smartfactory-access" }
@@ -94,7 +113,7 @@ func (a *access) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) bool 
 	}
 	// a client on this machine, unless it takes a device's name as its client id: it would
 	// take over that device's session
-	if len(a.users) == 0 && loopbackRemote(cl.Net.Remote) && (a.reg == nil || !a.reg.Known(cl.ID)) {
+	if len(a.users) == 0 && loopbackRemote(cl.Net.Remote) && (a.reg == nil || !a.reg.Known(cl.ID)) && a.localTrusted() {
 		a.set(cl, &ident{kind: local})
 		return true
 	}

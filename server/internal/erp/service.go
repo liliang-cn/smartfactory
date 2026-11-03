@@ -373,6 +373,13 @@ func (s *Service) Run(ctx context.Context) {
 }
 
 func (s *Service) sync(ctx context.Context, c string, cfg Config) {
+	// orders entered by hand (or sent before the ERP was switched off) run all the same: the lines
+	// take them and make up their own when there are none
+	if !cfg.Enabled {
+		if n, err := s.Store.Counts(c); err == nil && n[Queued]+n[Running] > 0 {
+			cfg.Enabled, cfg.WhenEmpty = true, "simulate"
+		}
+	}
 	s.mu.Lock()
 	on, dirty := s.on[c], s.dirty[c]
 	s.dirty[c] = false

@@ -32,7 +32,7 @@ import (
 // estimated to fill a gap.
 
 // ErrNoAdvisor is a company without an advisor service: it has no plans to count.
-var ErrNoAdvisor = errors.New("这家公司没有接顾问服务")
+var ErrNoAdvisor = errors.New("没有接经营顾问。顾问按生产历史提改进计划，采纳后量出效果；要用的话，部署的人在服务器配置里填上顾问地址和存历史的数据库（PostgreSQL），重启后生效")
 
 // PlantHistory is a company's history database, read by day.
 type PlantHistory interface {
@@ -341,7 +341,7 @@ func (o *Ops) Value(ctx context.Context, who auth.Who, company string, p Period)
 	var orders []erp.Order
 	ordersMissing := ""
 	if o.Production == nil {
-		ordersMissing = "这台服务器没有接 ERP（没有数据目录）"
+		ordersMissing = "这台服务器没有数据目录，存不了工单：在配置里设 data 目录后重启"
 	} else {
 		var err error
 		if orders, err = o.Production.Store.Span(company, p.From, p.To); err != nil {
@@ -358,7 +358,7 @@ func (o *Ops) Value(ctx context.Context, who auth.Who, company string, p Period)
 	var days []history.Day
 	plantMissing := ""
 	if h := o.History[company]; h == nil {
-		plantMissing = "这家公司没有接历史库，没有逐小时的产出和停机记录"
+		plantMissing = "还没有接历史库。接上以后每条产线、每台设备逐小时记下产出和停机，这里才能比较前后；在服务器配置里填一个 PostgreSQL 数据库，重启后开始记"
 	} else {
 		var err error
 		if days, err = h.Days(ctx, from, p.To); err != nil {
@@ -701,9 +701,9 @@ func aiOf(counts []audit.Count, auditMissing string, reqs []guard.Request, reqMi
 	} else {
 		proposed, confirmed, failed, dismissed := sum("agent.propose", nil, false), sum("agent.confirm", &yes, false), sum("agent.confirm", &no, false), sum("agent.dismiss", nil, false)
 		s.Figures = append(s.Figures,
-			count("agent.proposed", "助手提出的改动", "条", proposed, agentBasis+"（agent.propose）"),
-			count("agent.confirmed", "确认执行", "条", confirmed, agentBasis+"：有人点了确认、执行成功的（agent.confirm）"),
-			count("agent.dismissed", "不要", "条", dismissed, agentBasis+"：有人点了不要的（agent.dismiss）"),
+			count("agent.proposed", "助手提出的改动", "条", proposed, agentBasis),
+			count("agent.confirmed", "确认执行", "条", confirmed, agentBasis+"：有人点了确认、执行成功的"),
+			count("agent.dismissed", "不要", "条", dismissed, agentBasis+"：有人点了不要的"),
 			ratio("agent.confirm_rate", "确认率", confirmed, confirmed+failed+dismissed, agentBasis+"：有回应的卡片里确认的比例"),
 			count("agent.open", "没有回应", "条", max(0, proposed-confirmed-failed-dismissed), agentBasis+"：提出了，既没确认也没点不要"),
 			count("commands.direct", "AI 直接下发的指令", "条", sum("command", &yes, true), commandBasis+"：没等人、直接执行成功的"),
@@ -742,7 +742,7 @@ func aiOf(counts []audit.Count, auditMissing string, reqs []guard.Request, reqMi
 		)
 	}
 	// refused by rule: sent straight and refused, or refused when approved (the machine had changed)
-	refused := Figure{Key: "commands.refused", Label: "被规则拒绝", Unit: "条", Basis: commandBasis + "被规则拒绝的（command.refused），加批准时设备已变、规则不让下的"}
+	refused := Figure{Key: "commands.refused", Label: "被规则拒绝", Unit: "条", Basis: commandBasis + "被规则拒绝的，加上批准时设备已变、规则不让下的"}
 	failed := Figure{Key: "commands.failed", Label: "下发失败", Unit: "条", Basis: commandBasis + "执行失败的，加批准后执行失败的"}
 	if auditMissing == "" || reqMissing == "" {
 		r := float64(sum("command.refused", nil, true) + status["refused"])

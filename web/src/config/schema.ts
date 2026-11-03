@@ -447,6 +447,21 @@ export const Industry = z.object({
   qualityLabel: z.string().default('一次合格率'),
   /** belt: units ride conveyors between machines; walk: units are people (or vehicles) moving along walkways */
   flow: z.enum(['belt', 'walk']).default('belt'),
+  /**
+   * What the company's stores keep, by category (dies are kept by their own ledger, from the
+   * machines' tooling). kind: bar = steel bar received by heat (炉号, 钢厂, 质保书), the twin's
+   * lines draw their lots from it; part = spare and standard parts; product = finished goods;
+   * other = anything else. fields are what an item of the category is described by (牌号, 规格 …).
+   */
+  stores: z.object({
+    categories: z.array(z.object({
+      key: z.string().regex(/^[a-z][a-z0-9-]*$/),
+      label: z.string(),
+      kind: z.enum(['bar', 'part', 'product', 'other']).default('other'),
+      unit: z.string().default('件'),
+      fields: z.array(z.string()).default([]),
+    })),
+  }).optional(),
   /** dashboard wording for industries that are not factories (a campsite, a hospital, a car wash …) */
   terms: z.object({
     /** overall efficiency KPI, default 综合设备效率 OEE */

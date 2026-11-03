@@ -6,16 +6,18 @@ import type { Asset } from '@/sim/types';
 import type { ViewMode } from '@/state/store';
 import { ARCHETYPE_BUILDERS } from './archetypes';
 import type { ModelHandle } from './common';
-import { P, bodyMat, colorOf, ramp } from './kit';
+import { P, TRIM, bodyMat, colorOf, ramp } from './kit';
 import { buildAGV, buildBuffer, buildConveyor, buildFG, buildOutfeed, buildTruck, buildWarehouse } from './logistics';
 import { animateParts, buildParts } from './parts';
+import { hasSR } from './simready';
+import { buildAGVSR, buildArmSR, buildConveyorSR, buildFGSR, buildWarehouseSR, dressMachine } from './srmodels';
 import { buildCounter, buildPlace, buildRider, buildShelves, buildVan } from './venue';
 
 export type { ModelHandle };
 
 const accents = new Map<string, THREE.MeshStandardMaterial>();
 const accentMat = (c: string) => {
-  if (!accents.has(c)) accents.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.45 }));
+  if (!accents.has(c)) accents.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.3 }));
   return accents.get(c)!;
 };
 
@@ -31,7 +33,7 @@ function buildStation(a: Asset, plant: PlantLayout): ModelHandle {
   }
   const dims = product.dims[kind] ?? product.max;
   const look = st.machine.look;
-  const model = ARCHETYPE_BUILDERS[look.archetype]({
+  const ctx = {
     look,
     size: st.size,
     beltY: line.beltY,
@@ -39,10 +41,12 @@ function buildStation(a: Asset, plant: PlantLayout): ModelHandle {
     top: line.beltY + dims.h,
     plen: dims.l,
     body: bodyMat(colorOf(look.color, look.archetype === 'robot' ? P.yellow : P.white)),
-    accent: accentMat(colorOf(look.accent, P.blue)),
+    accent: accentMat(colorOf(look.accent, TRIM)),
     rejects: !!st.measure || st.machine.rejectRate !== undefined,
     hot: st.machine.thermal.run > 80,
-  });
+  };
+  const model = look.archetype === 'robot' && hasSR('arm') ? buildArmSR(ctx) : ARCHETYPE_BUILDERS[look.archetype](ctx);
+  dressMachine(model.root, look.archetype, ctx.hot);
   model.root.position.set(st.x, 0, line.z);
   // Anything the archetype doesn't have comes from the config's `parts`.
   const extra = buildParts(model.root, look.parts);
@@ -66,12 +70,12 @@ export function buildModel(a: Asset, plant: PlantLayout): ModelHandle {
   const venue = !!plant.demand && !!ll?.places.length;
   const lg = plant.logistics;
   switch (a.type) {
-    case 'conveyor': return buildConveyor(ll!, plant.flow === 'walk', plant.site === 'outdoor');
+    case 'conveyor': return plant.flow !== 'walk' && hasSR('roller') ? buildConveyorSR(ll!) : buildConveyor(ll!, plant.flow === 'walk', plant.site === 'outdoor');
     case 'buffer': return venue ? nothing() : buildBuffer(ll!, plant.flow === 'walk');
     case 'outfeed': return venue ? nothing() : buildOutfeed(ll!, plant.flow === 'walk');
-    case 'warehouse': return lg.store === 'racks' ? buildWarehouse(plant.warehouse) : lg.store === 'shelves' ? buildShelves(plant.warehouse) : nothing();
-    case 'fgzone': return lg.outbound.vehicle === 'rider' ? buildCounter(plant.fg) : buildFG(plant.fg);
-    case 'agv': return buildAGV(lg.internal === 'forklift');
+    case 'warehouse': return lg.store === 'racks' ? (hasSR('rack') ? buildWarehouseSR(plant.warehouse) : buildWarehouse(plant.warehouse)) : lg.store === 'shelves' ? buildShelves(plant.warehouse) : nothing();
+    case 'fgzone': return lg.outbound.vehicle === 'rider' ? buildCounter(plant.fg) : hasSR('loaded') ? buildFGSR(plant.fg) : buildFG(plant.fg);
+    case 'agv': return hasSR(lg.internal === 'forklift' ? 'forklift' : 'amr') ? buildAGVSR(lg.internal === 'forklift') : buildAGV(lg.internal === 'forklift');
     case 'truck': return a.truck?.vehicle === 'rider' ? buildRider() : a.truck?.vehicle === 'van' ? buildVan() : buildTruck();
     case 'table': return buildPlace(a);
     default: return buildStation(a, plant);

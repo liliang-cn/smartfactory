@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -164,8 +165,8 @@ func tools(st *Store, eng *engine.Engine, company string) map[string]tool {
 				}
 				return st.SaveNote(company, n)
 			}},
-		{name: "twin_machines", desc: "在数字孪生里按编号、名称、产线或类型找设备，返回它在哪个厂、当前状态、温度、功率、振动、健康度、稼动率、故障和最近的报警。",
-			params: obj(map[string]any{"query": prop("string", "设备编号（HP-101）、名称（热模锻压力机）或产线（曲轴 1 线）")}, "query"),
+		{name: "twin_machines", desc: "孪生里设备现在的状态（实时）：按设备编号、名称、产线找，或按状态找（“故障”“停”“待机”“报警”），不填看全部。返回各状态各几台（states），出问题的排在前面：哪个厂、状态（state_text）、故障原因、机身温度（设备本体的温度和它自己的报警线、跳停线，不是工件、炉料或出炉温度）、功率、振动、健康度、稼动率、正在响的报警。问“现在怎么样、哪台停了、哪台最慢”都用它。",
+			params: obj(map[string]any{"query": prop("string", "设备编号（HP-101）、名称（热模锻压力机）、产线（曲轴 1 线）或状态（故障、停）；空字符串看全部")}, "query"),
 			run: func(_ context.Context, a args) (any, error) {
 				return machines(eng, company, a.str("query"))
 			}},
@@ -247,7 +248,43 @@ type snapshot struct {
 	} `json:"plants"`
 }
 
-// machines finds the company's machines matching query in the twin's current state.
+// stateText is how a machine's state reads in an answer.
+var stateText = map[string]string{
+	"running": "运行", "idle": "待机", "blocked": "堵料等下游", "stopped": "停机", "fault": "故障", "maint": "保养",
+	"changeover": "换型", "moving": "行驶", "waiting": "等待", "handling": "装卸", "away": "离开",
+}
+
+// stateWords are the states a question can ask for ("哪台故障了", "停了哪些").
+var stateWords = []struct {
+	word   string
+	states []string
+}{
+	{"故障", []string{"fault"}}, {"坏", []string{"fault"}}, {"报警", nil}, {"停", []string{"fault", "stopped", "maint", "changeover"}},
+	{"待机", []string{"idle"}}, {"空闲", []string{"idle"}}, {"保养", []string{"maint"}}, {"换型", []string{"changeover"}},
+	{"堵", []string{"blocked"}}, {"运行", []string{"running"}}, {"在跑", []string{"running"}},
+}
+
+// trouble orders machines for an answer: faults first, then stopped, in maintenance or changeover,
+// then held up, then the rest.
+func trouble(state string) int {
+	switch state {
+	case "fault":
+		return 0
+	case "stopped", "maint", "changeover":
+		return 1
+	case "blocked":
+		return 2
+	}
+	return 3
+}
+
+// Machines finds the company's machines matching query in the twin's current state: a machine
+// (HP-101, 热模锻压力机), a line, or a state ("故障", "停"); empty for all. The machines in
+// trouble come first, with how many machines are in each state across what matched.
+func Machines(eng *engine.Engine, company, query string) (any, error) {
+	return machines(eng, company, query)
+}
+
 func machines(eng *engine.Engine, company, query string) (any, error) {
 	if eng == nil {
 		return nil, errors.New("孪生不可用")
@@ -258,11 +295,39 @@ func machines(eng *engine.Engine, company, query string) (any, error) {
 		return nil, errors.New("孪生里没有这家公司")
 	}
 	q := strings.ToLower(strings.Join(strings.Fields(query), ""))
-	var out []map[string]any
+	var states []string
+	alarmed := false
+	for _, w := range stateWords {
+		if strings.Contains(q, w.word) {
+			states = append(states, w.states...)
+			alarmed = alarmed || w.states == nil
+			q = strings.ReplaceAll(q, w.word, "")
+		}
+	}
+	// what is left of the question after the state words, minus filler, names the machines
+	for _, f := range []string{"现在", "哪台", "哪些", "设备", "机器", "了", "的", "吗", "？", "?", "有", "在"} {
+		q = strings.ReplaceAll(q, f, "")
+	}
+	type found struct {
+		m     map[string]any
+		order int
+	}
+	var all []found
+	count := map[string]int{}
 	for _, p := range snap.Plants {
 		for _, a := range p.Assets {
 			text := strings.ToLower(strings.ReplaceAll(fmt.Sprint(a["id"], a["name"], a["line"], a["type"]), " ", ""))
 			if q != "" && !strings.Contains(text, q) {
+				continue
+			}
+			state, _ := a["state"].(string)
+			var alarms []string
+			for _, al := range p.Alarms {
+				if al.Asset == a["id"] && al.Active && len(alarms) < 5 {
+					alarms = append(alarms, al.At+" "+al.Text)
+				}
+			}
+			if (len(states) > 0 || alarmed) && !slices.Contains(states, state) && !(alarmed && len(alarms) > 0) {
 				continue
 			}
 			m := map[string]any{"plant": p.Name}
@@ -271,23 +336,42 @@ func machines(eng *engine.Engine, company, query string) (any, error) {
 					m[k] = v
 				}
 			}
-			var alarms []string
-			for _, al := range p.Alarms {
-				if al.Asset == a["id"] && len(alarms) < 5 {
-					alarms = append(alarms, al.At+" "+al.Text)
+			// the reading is the machine's body, not the work in it: say so, with its own limits
+			if t, ok := a["temp"].(float64); ok {
+				txt := fmt.Sprintf("机身温度 %.1f ℃", t)
+				if w, _ := a["tempWarn"].(float64); w != 0 {
+					txt += fmt.Sprintf("（本机报警线 %g ℃", w)
+					if tr, _ := a["tempTrip"].(float64); tr != 0 {
+						txt += fmt.Sprintf("，跳停线 %g ℃", tr)
+					}
+					txt += "）"
 				}
+				m["temp"] = txt
+			}
+			if t, ok := stateText[state]; ok {
+				m["state_text"] = t
 			}
 			if alarms != nil {
 				m["alarms"] = alarms
 			}
-			out = append(out, m)
-			if len(out) == 12 {
-				return map[string]any{"machines": out, "more": true}, nil
-			}
+			count[cmp.Or(stateText[state], state)]++
+			all = append(all, found{m, trouble(state)})
 		}
 	}
-	if len(out) == 0 {
+	if len(all) == 0 {
+		if len(states) > 0 || alarmed {
+			return map[string]any{"machines": []any{}, "note": "现在没有处在这种状态的设备"}, nil
+		}
 		return nil, fmt.Errorf("孪生里没有和“%s”对得上的设备；试试编号前缀（HP、IH、RR）或产线名", query)
 	}
-	return map[string]any{"machines": out}, nil
+	slices.SortStableFunc(all, func(a, b found) int { return a.order - b.order })
+	out := make([]map[string]any, 0, min(len(all), 20))
+	for _, f := range all[:min(len(all), 20)] {
+		out = append(out, f.m)
+	}
+	res := map[string]any{"machines": out, "states": count, "total": len(all)}
+	if len(all) > len(out) {
+		res["more"] = len(all) - len(out)
+	}
+	return res, nil
 }

@@ -90,8 +90,8 @@ func TestDeviceIdentity(t *testing.T) {
 	if _, err := connect("someone-else", "rf-line1", read(tokenFile)); err == nil {
 		t.Fatal("a device connected under another client id")
 	}
-	if _, err := connect("anon", "", ""); err != nil {
-		t.Fatalf("a client on this machine is refused while the broker has no shared users: %v", err)
+	if _, err := connect("anon", "", ""); err == nil {
+		t.Fatal("a client on this machine without credentials connected after a device was registered")
 	}
 	if _, err := connect("rf-line1", "", ""); err == nil {
 		t.Fatal("a client on this machine took a device's name without its token")

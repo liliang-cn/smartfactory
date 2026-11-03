@@ -1,5 +1,5 @@
 // The console's pages live under /admin; links push history, back and forward work.
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((f) => f());
@@ -31,3 +31,9 @@ export function match(path: string, pattern: string): Record<string, string> | n
 }
 
 export const query = (path: string) => new URLSearchParams(path.split('?')[1] ?? '');
+
+/** Goes to another page as soon as it is shown. */
+export function Redirect({ to }: { to: string }) {
+  useEffect(() => { go(to, true); }, [to]);
+  return null;
+}

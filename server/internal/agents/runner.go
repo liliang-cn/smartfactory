@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,13 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	agentpkg "github.com/liliang-cn/agent-go/v3/pkg/agent"
 	"github.com/liliang-cn/agent-go/v3/pkg/domain"
-	"github.com/liliang-cn/agent-go/v3/pkg/providers"
+	"github.com/liliang-cn/agent-go/v3/pkg/pool"
 
 	"smartfactory/internal/audit"
 	"smartfactory/internal/auth"
@@ -23,6 +25,7 @@ import (
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 )
 
@@ -56,6 +59,8 @@ type Runner struct {
 	Hints Hints
 	// Tables are the restaurants' tables, as reported and simulated.
 	Tables *tables.Service
+	// Stores are the stores, dies and new parts in development.
+	Stores *stores.Service
 
 	dir string
 	llm domain.Generator
@@ -85,7 +90,8 @@ func New(dir string, eng *engine.Engine, log *slog.Logger) (*Runner, error) {
 		os.Setenv("AGENTGO_HOME", filepath.Join(dir, "agentgo"))
 	}
 	if key := os.Getenv("LLM_API_KEY"); key != "" {
-		p, err := providers.NewOpenAILLMProvider(&domain.OpenAIProviderConfig{BaseURL: os.Getenv("LLM_BASE_URL"), APIKey: key, LLMModel: os.Getenv("LLM_MODEL")})
+		registerWindows(os.Getenv("LLM_MODEL"))
+		p, err := pool.NewClient("llm", os.Getenv("LLM_BASE_URL"), key, os.Getenv("LLM_MODEL"))
 		if err != nil {
 			st.Close()
 			return nil, err
@@ -93,6 +99,18 @@ func New(dir string, eng *engine.Engine, log *slog.Logger) (*Runner, error) {
 		r.llm = p
 	}
 	return r, nil
+}
+
+// registerWindows tells agent-go how long a conversation the model can take, so it compacts one
+// when it has to and not at a guessed 60k tokens: the current Claude models' windows, and
+// LLM_CONTEXT_TOKENS for whatever model is configured.
+func registerWindows(model string) {
+	for _, m := range []string{"claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"} {
+		pool.RegisterModelWindow(m, pool.ModelWindow{ContextTokens: 1_000_000, MaxOutputTokens: 128_000})
+	}
+	if n, err := strconv.Atoi(os.Getenv("LLM_CONTEXT_TOKENS")); err == nil && n > 0 && model != "" {
+		pool.RegisterModelWindow(model, pool.ModelWindow{ContextTokens: n})
+	}
 }
 
 // Ready reports whether there is a model to answer with.
@@ -129,7 +147,7 @@ func (r *Runner) prompt(a Agent) string {
 			}
 		}
 	}
-	p := fmt.Sprintf("你是%s的「%s」。\n\n%s\n%s", name, a.Name, t.prompt, commonPrompt)
+	p := fmt.Sprintf("你是%s的「%s」。\n\n%s\n%s%s", name, a.Name, t.prompt, commonPrompt, storePrompt(r.Stores != nil, a.Kind))
 	if s := strings.TrimSpace(a.Instructions); s != "" {
 		p += "\n\n公司给你的要求（优先于上面的做法）：\n" + s
 	}
@@ -176,8 +194,13 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 		t := tablesTool(r.Tables, a.Company)
 		all[t.name] = t
 	}
+	if r.Stores != nil {
+		for _, t := range storeTools(r.Stores, a.Company) {
+			all[t.name] = t
+		}
+	}
 	writes := map[string]bool{}
-	for _, name := range t.Tools {
+	for _, name := range append(slices.Clone(t.Tools), storeToolsOf(r.Stores != nil, t.Kind)...) {
 		tl, ok := all[name]
 		if !ok {
 			continue // a part this server does not have (no ERP orders, no knowledge base)
@@ -237,8 +260,11 @@ type Event struct {
 	Text   string         `json:"text,omitempty"`
 }
 
+// ErrNoAnswer is said when a run ended without a word: better than leaving the question unanswered.
+var ErrNoAnswer = errors.New("这次没有得到回答，换个说法再问一次；还不行就看服务器日志里的 assistant run")
+
 // ErrNoModel is returned when the server has no model configured.
-var ErrNoModel = errors.New("服务器没有配置大模型")
+var ErrNoModel = errors.New("还没有配置大模型：在服务器的 /etc/smartfactory/env 里填上 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL，再运行 sudo systemctl restart smartfactory")
 
 // Ask puts text to the assistant in conversation conv (whose earlier turns agent-go keeps), as
 // who; emit sees every step. The answer and its steps are kept with the conversation.
@@ -273,7 +299,7 @@ func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who auth.W
 		return err
 	}
 	var steps []Step
-	var answer, partial, failure string
+	var answer, partial, failure, blocked string
 	for ev := range ch {
 		// agent-go's own tools (task_complete …) are how a run ends, not steps of the answer
 		if (ev.Type == agentpkg.EventTypeToolCall || ev.Type == agentpkg.EventTypeToolResult) && !slices.Contains(t.Tools, ev.ToolName) {
@@ -302,12 +328,17 @@ func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who auth.W
 			emit(Event{Kind: "reset"})
 		case agentpkg.EventTypeComplete:
 			answer = ev.Content
-		case agentpkg.EventTypeError:
-			failure = ev.Content
+		case agentpkg.EventTypeBlocked:
+			// agent-go ends a run that could not do what was asked as blocked, with the model's
+			// own explanation ("这张单我没法录…"): that is the answer
+			blocked = ev.Content
+		case agentpkg.EventTypeError, agentpkg.EventTypeCancelled, agentpkg.EventTypeStop:
+			slog.Default().Warn("assistant run ended without an answer", "event", ev.Type, "content", ev.Content)
+			failure = cmp.Or(ev.Content, failure)
 		}
 	}
 	if answer == "" {
-		answer = partial
+		answer = cmp.Or(strings.TrimSpace(blocked), partial)
 	}
 	status := "done"
 	switch {
@@ -316,6 +347,9 @@ func (r *Runner) Ask(ctx context.Context, a Agent, conv, text string, who auth.W
 	case answer == "" && failure != "":
 		status = "failed"
 		answer = failure
+	case answer == "":
+		status = "failed"
+		answer = ErrNoAnswer.Error()
 	}
 	r.Store.FinishMessage(mid, answer, steps, status)
 	if status == "failed" {
@@ -369,7 +403,7 @@ func Run(ctx context.Context, svc *agentpkg.Service, goal, session string, turns
 	if err != nil {
 		return "", err
 	}
-	var answer, partial, failure string
+	var answer, partial, failure, blocked string
 	for ev := range ch {
 		if (ev.Type == agentpkg.EventTypeToolCall || ev.Type == agentpkg.EventTypeToolResult) && !slices.Contains(own, ev.ToolName) {
 			continue
@@ -389,12 +423,17 @@ func Run(ctx context.Context, svc *agentpkg.Service, goal, session string, turns
 			emit(Event{Kind: "reset"})
 		case agentpkg.EventTypeComplete:
 			answer = ev.Content
-		case agentpkg.EventTypeError:
-			failure = ev.Content
+		case agentpkg.EventTypeBlocked:
+			// agent-go ends a run that could not do what was asked as blocked, with the model's
+			// own explanation ("这张单我没法录…"): that is the answer
+			blocked = ev.Content
+		case agentpkg.EventTypeError, agentpkg.EventTypeCancelled, agentpkg.EventTypeStop:
+			slog.Default().Warn("assistant run ended without an answer", "event", ev.Type, "content", ev.Content)
+			failure = cmp.Or(ev.Content, failure)
 		}
 	}
 	if answer == "" {
-		answer = partial
+		answer = cmp.Or(strings.TrimSpace(blocked), partial)
 	}
 	switch {
 	case ctx.Err() != nil:

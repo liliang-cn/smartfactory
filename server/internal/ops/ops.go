@@ -25,6 +25,7 @@ import (
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/mqttauth"
+	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
 	"smartfactory/internal/templates"
@@ -62,6 +63,8 @@ type Ops struct {
 	Hints *anomaly.Detector
 	// Tables are the restaurants' tables as reported and simulated, and their dining sessions.
 	Tables *tables.Service
+	// Stores are the companies' stores, dies and new parts in development.
+	Stores *stores.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.
@@ -81,7 +84,7 @@ func fail(code int, format string, a ...any) error {
 // Admin refuses anyone without an administrator's token.
 func Admin(who auth.Who) error {
 	if who.Key == "" {
-		return fail(401, "用管理员令牌登录")
+		return fail(401, "要用管理员账号登录")
 	}
 	if who.Role != auth.Admin {
 		return fail(403, "%s的令牌是%s，后台要管理员令牌", who.Name, who.Role.Label())
@@ -128,7 +131,9 @@ type Overview struct {
 	Industries json.RawMessage `json:"industries"`
 	Issue      bool            `json:"issue"`
 	Assistants bool            `json:"assistants"`
-	Version    string          `json:"version"`
+	// Model: a model is configured, so the assistants and the AI builder can answer.
+	Model   bool   `json:"model"`
+	Version string `json:"version"`
 	// Runs is the companies this server is limited to; absent when any (the demo).
 	Runs *[]string `json:"runs,omitempty"`
 	// Single: a self-hosted instance of one company (empty until it is built)
@@ -143,7 +148,7 @@ func (o *Ops) Overview(who auth.Who) (*Overview, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Overview{Me: who, Companies: cs, Industries: json.RawMessage(o.Engine.IndustryList()), Issue: o.Keys.CanIssue(), Assistants: o.Agents != nil, Version: o.Version,
+	return &Overview{Me: who, Companies: cs, Industries: json.RawMessage(o.Engine.IndustryList()), Issue: o.Keys.CanIssue(), Assistants: o.Agents != nil, Model: o.Agents != nil && o.Agents.Ready(), Version: o.Version,
 		Runs: runs(o.Engine.Runs()), Single: o.Engine.IsSingle()}, nil
 }
 

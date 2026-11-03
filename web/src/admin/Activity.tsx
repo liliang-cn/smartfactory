@@ -45,12 +45,12 @@ export function ActivityList({ company: fixed }: { company?: string }) {
     days.at(-1)!.items.push(e);
   }
   const failures = entries.filter((e) => !e.ok).length;
-  const where = (c: string) => (c === '*' ? '所有公司' : names.get(c) ?? c);
+  const where = (c: string) => (c === '*' ? (ov.single ? '整个工厂' : '所有公司') : names.get(c) ?? c);
 
   return (
     <section className="rounded-[18px] bg-card shadow-float">
       <div className="flex flex-wrap items-center gap-2 border-b p-4 px-5 max-sm:px-4">
-        {!fixed && (
+        {!fixed && !ov.single && (
           <Select value={company || 'all'} onValueChange={(v) => setCompany(v === 'all' ? '' : v)}>
             <SelectTrigger className="h-9 w-44 rounded-xl font-bold" aria-label="公司"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -82,8 +82,8 @@ export function ActivityList({ company: fixed }: { company?: string }) {
             <h3 className="pt-5 pb-1.5 text-[12px] font-extrabold text-muted-foreground">{day}</h3>
             <ol className="relative ml-[54px] border-l border-border">
               {items.map((e) => {
-                const d = describe(e);
-                const V = VIA[e.via];
+                const d = describe(e, names);
+                const V = VIA[e.via] ?? VIA.page;
                 return (
                   <li key={e.id} className="relative py-2.5 pl-4">
                     <time dateTime={e.at} className="absolute top-3 -left-[54px] w-[46px] text-right font-mono text-[11.5px] text-muted-foreground tabular-nums">
@@ -100,7 +100,7 @@ export function ActivityList({ company: fixed }: { company?: string }) {
                     </div>
                     <p className={cn('mt-0.5 text-[13.5px] leading-snug', !e.ok && 'text-muted-foreground line-through decoration-destructive/50')}>
                       {d.text}{d.asset && <span className="text-muted-foreground"> · {d.plant}/{d.asset}</span>}
-                      {e.via === 'assistant' && e.detail && <span className="text-muted-foreground"> · 经{e.detail}</span>}
+                      {e.via === 'assistant' && e.detail && !e.action.startsWith('agent.') && <span className="text-muted-foreground"> · 经{e.detail}</span>}
                     </p>
                     {!e.ok && e.error && <p className="mt-0.5 text-[12px] text-destructive">没有成功：{e.error}</p>}
                     {e.context && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">当时：{e.context}</p>}

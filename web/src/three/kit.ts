@@ -2,29 +2,31 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
+// Industrial palette, matched to the NVIDIA SimReady models the twin also draws: concrete floor,
+// enamelled light-grey machines, steel-blue frames, safety yellow and orange.
 export const P = {
-  ground: '#e9ecf7',
-  slab: '#f6f7fc',
-  road: '#d9deee',
-  white: '#ffffff',
-  shell: '#f1f3fa',
-  blue: '#2f5bea',
-  blueDeep: '#1f3fb0',
-  blueSoft: '#a9bcff',
-  yellow: '#f6c445',
-  orange: '#f29b38',
-  kraft: '#d9a46b',
-  kraftDark: '#bf8a52',
-  wood: '#c79a68',
-  grey: '#cfd5e4',
-  greyDark: '#58627a',
-  ink: '#28314b',
-  glass: '#b9cdfa',
-  mint: '#d5f1e1',
-  tree: '#5fcb8c',
-  treeDark: '#43b277',
-  trunk: '#b98b60',
-  metal: '#b7c1d8',
+  ground: '#e3e4e1',
+  slab: '#c8c9c4',
+  road: '#c7c9c6',
+  white: '#e9ebec',
+  shell: '#dadde0',
+  blue: '#2c5799',
+  blueDeep: '#1e3a66',
+  blueSoft: '#9cb0cf',
+  yellow: '#f0b400',
+  orange: '#e0752d',
+  kraft: '#c99a63',
+  kraftDark: '#ad7f4b',
+  wood: '#b98d5c',
+  grey: '#a6abb2',
+  greyDark: '#4b5058',
+  ink: '#26292e',
+  glass: '#b8c8de',
+  mint: '#cfe3d6',
+  tree: '#5fae78',
+  treeDark: '#468f5e',
+  trunk: '#9c7552',
+  metal: '#b5bac0',
   green: '#22b573',
   amber: '#f5a524',
   red: '#ef4444',
@@ -32,9 +34,18 @@ export const P = {
 };
 
 /** Resolve a palette token (see config/schema Color) or pass a hex through. */
-export const colorOf = (c: string | undefined, fallback: string = P.white): string => (c ? (P as Record<string, string>)[c] ?? c : fallback);
+// Packs written for the earlier toy palette name its cobalt and yellow by hex; draw them in the
+// industrial ones.
+const LEGACY: Record<string, string> = { '#2f5bea': P.blue, '#1f3fb0': P.blueDeep, '#f6c445': P.yellow, '#f29b38': P.orange, '#b7c1d8': P.metal };
+export const colorOf = (c: string | undefined, fallback: string = P.white): string => {
+  if (!c) return fallback;
+  const v = (P as Record<string, string>)[c] ?? c;
+  return LEGACY[v.toLowerCase()] ?? v;
+};
+/** Default trim of a machine: graphite, like painted steel guarding. */
+export const TRIM = '#454b54';
 
-const std = (color: THREE.ColorRepresentation, o: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0, ...o });
+const std = (color: THREE.ColorRepresentation, o: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.58, metalness: 0.12, ...o });
 
 export const M = {
   white: std(P.white, { roughness: 0.5 }),
@@ -50,7 +61,7 @@ export const M = {
   grey: std(P.grey),
   greyDark: std(P.greyDark, { roughness: 0.5 }),
   ink: std(P.ink, { roughness: 0.4 }),
-  metal: std(P.metal, { roughness: 0.3, metalness: 0.55 }),
+  metal: std(P.metal, { roughness: 0.32, metalness: 0.85 }),
   rubber: std('#2d3348', { roughness: 0.9 }),
   glass: std(P.glass, { roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.38, depthWrite: false }),
   tree: std(P.tree, { roughness: 0.75 }),
@@ -59,11 +70,11 @@ export const M = {
   mint: std(P.mint, { roughness: 0.95 }),
 };
 
-export const bodyMat = (color: THREE.ColorRepresentation = P.white) => std(color, { roughness: 0.5 });
+export const bodyMat = (color: THREE.ColorRepresentation = P.white) => std(color, { roughness: 0.42, metalness: 0.22 });
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
 export function rbox(w: number, h: number, d: number, r = 0.06): THREE.BufferGeometry {
-  const rr = Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001);
+  const rr = Math.min(r * 0.3, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001);
   const key = `rb:${w}:${h}:${d}:${rr}`;
   if (!geoCache.has(key)) {
     const geo = rr > 0.005 ? new RoundedBoxGeometry(w, h, d, 2, rr) : new THREE.BoxGeometry(w, h, d);

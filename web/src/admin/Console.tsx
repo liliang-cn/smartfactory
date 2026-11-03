@@ -1,10 +1,11 @@
 // The console (/admin): where administrators build what the twin shows — customers with their
 // plants and lines, the industry packs they are built from, who may do what, and what was done.
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
-import { ExternalLinkIcon, LogOutIcon, MenuIcon, SparklesIcon, type LucideIcon } from 'lucide-react';
+import { ExternalLinkIcon, KeyRoundIcon, LogOutIcon, MenuIcon, SparklesIcon, type LucideIcon } from 'lucide-react';
 import { Kbd } from '@/components/ui/kbd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordDialog, PasswordForm } from '@/ui/SignIn';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { Toaster } from '@/components/ui/sonner';
@@ -42,31 +43,91 @@ function Mark({ className }: { className?: string }) {
   );
 }
 
-function SignIn({ problem, onDone }: { problem?: string; onDone(): void }) {
-  const [value, setValue] = useState('');
+function Card({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-dvh place-items-center bg-stage p-4">
-      <form
-        className="w-full max-w-[400px] rounded-[20px] bg-card p-6 shadow-float"
-        onSubmit={(e) => { e.preventDefault(); if (value.trim()) { api.signIn(value); onDone(); } }}
-      >
-        <div className="flex items-center gap-2.5">
+      <div className="w-full max-w-[420px] rounded-[20px] bg-card p-6 shadow-float max-sm:p-5">
+        <div className="mb-5 flex items-center gap-2.5">
           <Mark className="size-8" />
           <div className="leading-tight">
             <h1 className="text-[17px] font-extrabold">SmartFactory 工作台</h1>
             <p className="text-[12.5px] text-muted-foreground">你的智能工厂</p>
           </div>
         </div>
-        <label htmlFor="token" className="mt-6 block text-[13px] font-bold">管理员令牌</label>
-        <Input id="token" type="password" autoComplete="off" autoFocus value={value} onChange={(e) => setValue(e.target.value)}
-          placeholder="sf_…" className="mt-1.5 h-11 rounded-xl font-mono" />
-        {problem && <p className="mt-2 text-[12.5px] text-destructive">{problem}</p>}
-        <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-          令牌只保存在这个标签页里，关掉就要重新登录。还没有令牌：在服务器上运行 <code className="rounded bg-surface px-1 font-mono">smartfactory token -role admin</code>。
-        </p>
-        <Button type="submit" className="mt-5 h-11 w-full rounded-xl text-[14px] font-bold" disabled={!value.trim()}>登录</Button>
-      </form>
+        {children}
+      </div>
     </div>
+  );
+}
+
+/** A new installation: the first administrator picks their own login and password. */
+function Setup({ auth, onDone }: { auth: api.AuthState; onDone(): void }) {
+  const [f, setF] = useState({ code: '', name: '', login: '', password: '', again: '' });
+  const [problem, setProblem] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const mismatch = !!f.again && f.password !== f.again;
+  const ready = (!auth.code || f.code.trim()) && f.name.trim() && f.login.trim() && f.password.length >= 8 && f.password === f.again;
+  return (
+    <Card>
+      <h2 className="text-[16px] font-extrabold">设置管理员</h2>
+      <p className="mt-1 mb-4 text-[13px] leading-relaxed text-muted-foreground">刚装好的 SmartFactory 还没有人有账号。先给自己建一个管理员账号，之后在「账号」里给员工建。</p>
+      <form className="grid gap-1.5" onSubmit={async (e) => {
+        e.preventDefault();
+        if (!ready) return;
+        setBusy(true);
+        setProblem(undefined);
+        try {
+          await api.setup({ code: f.code.trim() || undefined, name: f.name.trim(), login: f.login.trim(), password: f.password });
+          onDone();
+        } catch (err) {
+          setProblem((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}>
+        {auth.code && (
+          <>
+            <label htmlFor="code" className="text-[13px] font-bold">安装码</label>
+            <Input id="code" autoComplete="off" value={f.code} onChange={set('code')} placeholder="sf_…" className="h-11 rounded-xl font-mono" />
+            <p className="text-[12px] leading-relaxed text-muted-foreground">证明你是装这台服务器的人：在服务器上运行 <code className="rounded bg-surface px-1 font-mono break-all">sudo cat {auth.codeFile}</code>，把内容贴进来。设置好后这个文件会删掉。</p>
+          </>
+        )}
+        <label htmlFor="name" className="mt-2 text-[13px] font-bold">你的名字</label>
+        <Input id="name" autoComplete="name" value={f.name} onChange={set('name')} placeholder="王厂长" className="h-11 rounded-xl" />
+        <label htmlFor="login" className="mt-2 text-[13px] font-bold">登录名</label>
+        <Input id="login" autoComplete="username" value={f.login} onChange={set('login')} placeholder="手机号或工号" className="h-11 rounded-xl" />
+        <label htmlFor="pw" className="mt-2 text-[13px] font-bold">密码</label>
+        <Input id="pw" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} placeholder="至少 8 位" className="h-11 rounded-xl" />
+        <label htmlFor="pw2" className="mt-2 text-[13px] font-bold">再输一遍</label>
+        <Input id="pw2" type="password" autoComplete="new-password" value={f.again} onChange={set('again')} className="h-11 rounded-xl" />
+        {(mismatch || problem) && <p className="mt-1 text-[12.5px] text-destructive" role="alert">{mismatch ? '两次输的不一样' : problem}</p>}
+        <Button type="submit" className="mt-4 h-11 w-full rounded-xl text-[14px] font-bold" disabled={busy || !ready}>{busy ? '设置中…' : '建好，进工作台'}</Button>
+      </form>
+    </Card>
+  );
+}
+
+function SignIn({ problem, onDone }: { problem?: string; onDone(): void }) {
+  const [value, setValue] = useState('');
+  // systems (and installations from before accounts) sign in with a token
+  const [withToken, setWithToken] = useState(false);
+  return (
+    <Card>
+      {problem && <p className="mb-3 rounded-xl bg-danger-soft px-3 py-2 text-[12.5px] text-destructive">{problem}</p>}
+      {withToken ? (
+        <form onSubmit={(e) => { e.preventDefault(); if (value.trim()) { api.signIn(value); onDone(); } }}>
+          <label htmlFor="token" className="block text-[13px] font-bold">管理员令牌</label>
+          <Input id="token" type="password" autoComplete="off" autoFocus value={value} onChange={(e) => setValue(e.target.value)}
+            placeholder="sf_…" className="mt-1.5 h-11 rounded-xl font-mono" />
+          <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">令牌是给系统接入用的；人用账号登录。令牌只保存在这个标签页里。</p>
+          <Button type="submit" className="mt-5 h-11 w-full rounded-xl text-[14px] font-bold" disabled={!value.trim()}>登录</Button>
+        </form>
+      ) : <PasswordForm onDone={() => onDone()} />}
+      <button type="button" className="mt-3 text-[12.5px] text-muted-foreground underline underline-offset-2" onClick={() => setWithToken((v) => !v)}>
+        {withToken ? '用账号密码登录' : '用令牌登录'}
+      </button>
+    </Card>
   );
 }
 
@@ -103,7 +164,7 @@ function Nav({ path, onPick }: { path: string; onPick?: () => void }) {
         <>
           {(own || ov.companies.length === 1) && (
             <div className="flex items-center gap-2 px-3">
-              <span className="grid h-6 min-w-7 place-items-center rounded-md bg-primary px-1 text-[11px] font-extrabold text-primary-foreground">{company.short}</span>
+              <span className="grid h-6 min-w-7 place-items-center rounded-md bg-primary px-1 text-[11px] whitespace-nowrap shrink-0 font-extrabold text-primary-foreground">{company.short}</span>
               <b className="truncate text-[14px] font-extrabold">{company.name}</b>
             </div>
           )}
@@ -131,16 +192,24 @@ function AskButton() {
   );
 }
 
-function MeCard({ me, onSignOut }: { me: api.Me; onSignOut(): void }) {
+function MeCard({ me, onSignOut, mustChange }: { me: api.Me; onSignOut(): void; mustChange?: boolean }) {
   const { ov } = useConsole();
-  const role = { admin: '管理员', operator: '操作员', member: '成员' }[me.role as string] ?? me.role;
+  const role = api.ROLE_LABEL[me.role] ?? me.role;
+  const [password, setPassword] = useState(false);
+  const [changed, setChanged] = useState(false);
   return (
     <div className="flex items-center gap-2.5 rounded-2xl bg-surface p-2.5">
+      <PasswordDialog open={password || (!!mustChange && !changed)} forced={!!mustChange && !changed} onOpenChange={(v) => { setPassword(v); if (!v) setChanged(true); }} />
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 font-extrabold text-white">{[...me.name][0]}</span>
       <span className="grid min-w-0 flex-1 leading-tight">
         <b className="truncate text-[13.5px]">{me.name}</b>
-        <small className="truncate text-[11.5px] text-muted-foreground">{ownCompany(ov) ? role : me.everywhere ? `所有公司的${role}` : `${me.companies.join('、')} 的${role}`}</small>
+        <small className="truncate text-[11.5px] text-muted-foreground">{ov.single ? `整个工厂的${role}` : me.everywhere ? `所有公司的${role}` : `${me.companies.join('、')} 的${role}`}</small>
       </span>
+      {me.person && (
+        <Button variant="ghost" size="icon-sm" className="rounded-lg text-muted-foreground" title="修改密码" aria-label="修改密码" onClick={() => setPassword(true)}>
+          <KeyRoundIcon className="size-4" />
+        </Button>
+      )}
       <Button variant="ghost" size="icon-sm" className="rounded-lg text-muted-foreground" title="退出" aria-label="退出" onClick={onSignOut}>
         <LogOutIcon className="size-4" />
       </Button>
@@ -164,12 +233,17 @@ function Page({ path }: { path: string }) {
 export default function Console() {
   const path = usePath();
   const [ov, setOv] = useState<api.Overview | null>(null);
-  const [state, setState] = useState<'loading' | 'signin' | 'ready' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'setup' | 'signin' | 'ready' | 'error'>('loading');
   const [problem, setProblem] = useState<string>();
   const [menu, setMenu] = useState(false);
 
+  const [auth, setAuth] = useState<api.AuthState | null>(null);
   const reload = useCallback(async () => {
-    if (!api.token()) { setState('signin'); return; }
+    // a person's session is in a cookie, a system's token in this tab: the server says who it is
+    const a = await api.authState().catch(() => null);
+    setAuth(a);
+    if (a?.setup && !api.token()) { setState('setup'); return; }
+    if (!a?.me && !api.token()) { setState('signin'); return; }
     try {
       setOv(await api.overview());
       setState('ready');
@@ -177,7 +251,7 @@ export default function Console() {
       const err = e as api.ApiError;
       if (err.status === 401 || err.status === 403) {
         api.signOut();
-        setProblem(err.status === 401 ? '这个令牌不对，或者已经过期、被撤销' : err.message);
+        setProblem(err.status === 401 ? '登录已经失效，再登录一次' : err.status === 403 && a?.me ? `${a.me.name}，工作台只给管理员用。去孪生页面看工厂：打开 / 就是。` : err.message);
         setState('signin');
       } else {
         setProblem(err.message);
@@ -189,6 +263,7 @@ export default function Console() {
   useEffect(() => { document.title = 'SmartFactory 工作台'; }, []);
 
   if (state === 'loading') return <div className="min-h-dvh bg-stage" />;
+  if (state === 'setup' && auth) return <Setup auth={auth} onDone={() => { setState('loading'); reload(); }} />;
   if (state === 'signin') return <SignIn problem={problem} onDone={() => { setProblem(undefined); setState('loading'); reload(); }} />;
   if (state === 'error' || !ov) {
     return (
@@ -216,7 +291,7 @@ export default function Console() {
               <a href="/" className="flex h-9 items-center gap-2 rounded-xl px-3 text-[13px] font-bold text-muted-foreground hover:bg-surface hover:text-foreground">
                 <ExternalLinkIcon className="size-4" />打开孪生
               </a>
-              <MeCard me={ov.me} onSignOut={signOut} />
+              <MeCard me={ov.me} onSignOut={signOut} mustChange={auth?.mustChange} />
             </div>
           </aside>
           <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-card/95 px-3 backdrop-blur lg:hidden">
@@ -234,7 +309,7 @@ export default function Console() {
               <div className="min-h-0 flex-1 overflow-y-auto"><Nav path={path} onPick={() => setMenu(false)} /></div>
               <div className="grid gap-2">
                 <a href="/" className="flex h-9 items-center gap-2 rounded-xl px-3 text-[13px] font-bold text-muted-foreground hover:bg-surface"><ExternalLinkIcon className="size-4" />打开孪生</a>
-                <MeCard me={ov.me} onSignOut={signOut} />
+                <MeCard me={ov.me} onSignOut={signOut} mustChange={auth?.mustChange} />
               </div>
             </SheetContent>
           </Sheet>

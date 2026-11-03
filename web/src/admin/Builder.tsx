@@ -20,7 +20,7 @@ import * as api from './api';
 import { Blueprint, BlueprintLegend } from './Blueprint';
 import { link, PageHead, useConsole } from './Console';
 import { forget, loadCompany, useCompanies, type Loaded } from './layouts';
-import { query, usePath } from './router';
+import { go, query, Redirect, usePath } from './router';
 
 type Draft = z.input<typeof CompanySchema>;
 type PlantDraft = Draft['plants'][number];
@@ -76,6 +76,36 @@ const nextPlantId = (plants: PlantDraft[]) => {
 };
 
 /** The draft as the server takes it: names trimmed, nothing empty left over. */
+/** The template's own name in what it brings (its delivery fleet, say) becomes this company's. */
+function rebrand<T>(v: T, from: { name: string; short: string } | null, to: { name: string; short: string }): T {
+  if (!from) return v;
+  const swap = (x: unknown): unknown => {
+    if (typeof x === 'string') {
+      let y = from.name && to.name ? x.split(from.name).join(to.name) : x;
+      if (from.short && to.short) y = y.split(from.short).join(to.short);
+      return y;
+    }
+    if (Array.isArray(x)) return x.map(swap);
+    if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x).map(([k, w]) => [k, swap(w)]));
+    return x;
+  };
+  return swap(v) as T;
+}
+
+/** What is wrong with a JSON text, in words and with the line it is on; undefined when it parses. */
+function jsonProblem(text: string): string | undefined {
+  try {
+    JSON.parse(text);
+    return undefined;
+  } catch (e) {
+    const msg = (e as Error).message;
+    const at = Number(/position (\d+)/.exec(msg)?.[1]);
+    if (!Number.isFinite(at)) return `JSON 写得不对：${msg}`;
+    const line = text.slice(0, at).split('\n').length;
+    return `JSON 写得不对，第 ${line} 行附近：多了或少了逗号、引号或括号`;
+  }
+}
+
 function clean(d: Draft): Draft {
   return {
     ...d,
@@ -135,6 +165,8 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
         </div>
         {plant.lines.map((l, i) => {
           const current = kinds.find((k) => k.key === kindKey(k.industry, l));
+          // a line the AI wrote with its own steps matches no kind on the list: still say what it makes
+          const same = current ? undefined : kinds.find((k) => k.line.product === l.product);
           return (
             <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto_32px] items-center gap-2 rounded-xl bg-surface/60 p-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto_32px]">
               <Input value={l.name} onChange={(e) => setLine(i, { ...l, name: e.target.value })} className="h-9 rounded-xl bg-background" aria-label="产线名称"
@@ -145,7 +177,9 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
                 setLine(i, { ...k.line, name: renamed ? k.name : l.name, note: renamed ? k.note : l.note, repeat: l.repeat });
               }}>
                 <SelectTrigger className="h-9 w-full rounded-xl bg-background max-sm:col-span-3 max-sm:row-start-2" aria-label="生产什么">
-                  <SelectValue placeholder="选一种产线">{current && <span className="truncate">{current.label}<span className="ml-1.5 text-muted-foreground">{current.detail.split('：')[0]}</span></span>}</SelectValue>
+                  <SelectValue placeholder="选一种产线">{current
+                    ? <span className="truncate">{current.label}<span className="ml-1.5 text-muted-foreground">{current.detail.split('：')[0]}</span></span>
+                    : same && <span className="truncate">{same.label}<span className="ml-1.5 text-muted-foreground">按 AI 写的工序</span></span>}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {kinds.map((k) => (
@@ -174,12 +208,12 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
 }
 
 const TOOL_LABEL: Record<string, (a?: Record<string, unknown>) => string> = {
-  list_industries: () => '看有哪些行业包',
-  get_industry: (a) => `读行业包 ${a?.id ?? ''}`,
-  list_companies: () => '看现有的公司',
-  get_company: (a) => `参考 ${a?.id ?? ''} 的配置`,
+  list_industries: () => '看已有哪些行业的设备和工艺',
+  get_industry: () => '读这个行业的设备和工艺',
+  list_companies: () => '看已经建好的工厂',
+  get_company: () => '参考一份现成的配置',
   propose_company: () => '检查配置',
-  propose_industry: () => '检查新写的行业包',
+  propose_industry: () => '检查新写的设备和工艺',
 };
 
 interface Step { tool: string; args?: Record<string, unknown>; done: boolean; failed?: string }
@@ -226,6 +260,8 @@ function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; 
     } catch (e) {
       if (!c.signal.aborted) setError((e as Error).message);
     } finally {
+      // stopped: say so, and that the form keeps what was already written
+      if (c.signal.aborted) setAnswer((a) => `${a ? `${a}\n\n` : ''}已停下。表单里是停下前写好的部分，可以接着说，或者直接改。`);
       setCtrl(null);
     }
   };
@@ -236,7 +272,7 @@ function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="grid size-8 place-items-center rounded-[10px] bg-foreground text-background"><SparklesIcon className="size-4" /></span>
           <h2 className="text-[15px] font-extrabold">{edit ? '说要怎么改' : '描述工厂'}</h2>
-          <span className="text-[12.5px] text-muted-foreground max-sm:basis-full">AI 按行业包写好放进下面的表单，你确认后再建</span>
+          <span className="text-[12.5px] text-muted-foreground max-sm:basis-full">AI 写好放进下面的表单，你确认后再{edit ? '保存' : '建'}</span>
         </div>
         <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3} disabled={busy}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run(); } }}
@@ -258,14 +294,14 @@ function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; 
                   : st.failed ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                     : <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />}
                 <span className="min-w-0">
-                  <span className={cn('font-bold', st.failed && 'text-destructive')}>{(TOOL_LABEL[st.tool] ?? (() => st.tool))(st.args)}{st.done && !st.failed ? { propose_company: '：通过，已放进表单', propose_industry: '：通过，建的时候一起装上' }[st.tool] ?? '' : ''}</span>
+                  <span className={cn('font-bold', st.failed && 'text-destructive')}>{(TOOL_LABEL[st.tool] ?? (() => st.tool))(st.args)}{st.done && !st.failed ? { propose_company: '：通过，已放进表单', propose_industry: '：通过，建的时候一起用上' }[st.tool] ?? '' : ''}</span>
                   {st.failed && <span className="block whitespace-pre-line text-muted-foreground">{st.failed.replace(/^没通过：\n?/, '').slice(0, 300)}</span>}
                 </span>
               </li>
             ))}
             {busy && !steps.some((st) => !st.done) && <li className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-3.5 animate-spin" />在想</li>}
           </ol>
-          {answer && <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{answer}</p>}
+          {answer && <p className="text-[13.5px] leading-relaxed whitespace-pre-line">{answer.replace(/\*\*(.+?)\*\*/g, '$1')}</p>}
           {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-[13px] text-destructive">{error}</p>}
           {!busy && drafts > 0 && <p className="text-[12px] text-muted-foreground">表单和平面图已更新，没问题就{edit ? '保存' : '建'}。</p>}
         </div>
@@ -338,7 +374,11 @@ export default function Builder({ edit }: { edit?: string }) {
   const [extra, setExtra] = useState(new Map<string, IndustryCfg>());
   const q = query(path);
   const [from, setFrom] = useState<string>(edit ? `company:${edit}` : q.get('template') ?? (q.get('from') ? `company:${q.get('from')}` : ''));
+  // came to describe the factory to the AI: no template is put in the form until one is picked
+  const [aiFirst] = useState(() => !edit && q.get('ai') === '1');
   const [draft, setDraft] = useState<Draft | null>(null);
+  // the template the draft was copied from: its name is swapped for this company's when built
+  const [brand, setBrand] = useState<{ name: string; short: string } | null>(null);
   const [mode, setMode] = useState<'form' | 'json'>('form');
   const [json, setJson] = useState('');
   const [jsonError, setJsonError] = useState<string>();
@@ -386,7 +426,7 @@ export default function Builder({ edit }: { edit?: string }) {
       packs = t.industries ?? {};
     }
     const inds = new Map<string, IndustryCfg>();
-    for (const [pid, raw] of Object.entries(packs)) inds.set(pid, validateIndustry(raw, `行业包 ${pid}`));
+    for (const [pid, raw] of Object.entries(packs)) inds.set(pid, validateIndustry(raw, `行业 ${pid}`));
     const cfg = validateCompany(company, `模板 ${id}`);
     for (const pid of industriesOf(cfg)) if (!inds.has(pid) && !industries.has(pid)) inds.set(pid, await industryConfig(pid, api.industry));
     setPicked((m) => new Map(m).set(key, { company: cfg, industries: inds, plants: [] }));
@@ -399,12 +439,12 @@ export default function Builder({ edit }: { edit?: string }) {
   // start from the template (or the company being edited) once there is something to start from
   useEffect(() => {
     if (draft) return;
-    const key = from || (builtin.size ? `builtin:${[...builtin.keys()][0]}` : '');
+    const key = from || (builtin.size && !aiFirst ? `builtin:${[...builtin.keys()][0]}` : '');
     if (!key || key.startsWith('blank:') || (key.startsWith('builtin:') && !builtin.size) || (key.startsWith('company:') && edit && !companies.has(edit))) return;
     let live = true;
     load(key).then((d) => {
       if (!live || !d) return;
-      if (!edit) { d.id = ''; d.name = ''; d.short = ''; }
+      if (!edit) { setBrand({ name: d.name, short: d.short }); d.id = ''; d.name = ''; d.short = ''; }
       setFrom(key);
       setDraft(d);
     }, (e: Error) => toast.error(e.message));
@@ -420,6 +460,7 @@ export default function Builder({ edit }: { edit?: string }) {
     }
     const product = Object.keys(ind.products)[0];
     const route = Object.keys(ind.routes)[0];
+    setBrand(null);
     setDraft({ id: '', name: '', short: '', industry: industryId, plants: [{ id: 'p1', name: '一厂', lines: [{ name: `${ind.products[product].name} {n} 线`, product, route, repeat: 1 }] }] });
   };
 
@@ -429,7 +470,10 @@ export default function Builder({ edit }: { edit?: string }) {
     if (v.startsWith('blank:')) { startBlank(v.slice(6)); return; }
     try {
       const d = await load(v);
-      if (d) setDraft({ ...d, id: draft?.id ?? '', name: draft?.name ?? '', short: draft?.short ?? '' });
+      if (d) {
+        setBrand({ name: d.name, short: d.short });
+        setDraft({ ...d, id: draft?.id ?? '', name: draft?.name ?? '', short: draft?.short ?? '' });
+      }
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -449,23 +493,28 @@ export default function Builder({ edit }: { edit?: string }) {
     try {
       const cfg = validateCompany(clean(draft), '公司');
       const missing = industriesOf(cfg).filter((i) => !industries.has(i));
-      if (missing.length) return { plants: [], problems: [`还没读到行业包 ${missing.join('、')}`] };
+      if (missing.length) return { plants: [], problems: [`还没读到 ${missing.join('、')} 行业的设备和工艺`] };
       return { plants: layoutCompany(cfg, industries, '公司'), problems: [] };
     } catch (e) {
-      return { plants: [], problems: e instanceof ConfigError ? e.issues : [(e as Error).message] };
+      // the name, short name and id have their own messages beside them
+      const issues = e instanceof ConfigError ? e.issues.filter((i) => !/^(id|name|short)[：:]/.test(i)) : [(e as Error).message];
+      return { plants: [], problems: issues };
     }
   }, [draft, industries]);
 
+  // first, before the checks below: once built, the company is here and they would hide the result
+  if (done) return <><PageHead title={edit ? '改场景' : ov.single ? '建你的工厂' : '新建公司'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
   if (edit && !ov.companies.some((c) => c.id === edit && !c.builtin)) {
     return <PageHead title="这家公司不能在这里改" sub="随应用内置的公司改不了，可以照它新建一个" back={{ to: `/admin/customers/${encodeURIComponent(edit)}`, label: '公司' }} />;
   }
-  if (!edit && (ov.single ? ov.companies.length > 0 : !!ov.runs)) {
-    return <PageHead title={ov.single ? '这个实例已经建好了工厂' : '这台服务器只运行一家公司'} sub="别的公司部署自己的 SmartFactory" back={{ to: '/admin', label: noun }} />;
+  // a self-hosted server has its one factory: its home is where to go
+  if (!edit && ov.single && ov.companies.length > 0) return <Redirect to="/admin" />;
+  if (!edit && !ov.single && ov.runs) {
+    return <PageHead title="这台服务器只运行一家公司" back={{ to: '/admin', label: noun }} />;
   }
   if (!ov.me.everywhere && !edit) {
     return <PageHead title={`新建${noun}要所有公司的管理员令牌`} sub={`你的令牌只管 ${ov.companies.map((c) => c.name).join('、')}`} back={{ to: '/admin', label: '公司' }} />;
   }
-  if (done) return <><PageHead title={edit ? '改场景' : ov.single ? '建你的工厂' : '新建公司'} back={{ to: '/admin', label: noun }} /><Done result={done} edit={!!edit} /></>;
 
   const idTaken = !edit && !!draft?.id && ov.companies.some((c) => c.id === draft.id.trim());
   const idBad = !!draft?.id && !ID.test(draft.id.trim());
@@ -483,10 +532,13 @@ export default function Builder({ edit }: { edit?: string }) {
       const have = new Set(ov.industries.map((i) => i.id));
       const used = new Set([draft.industry, ...draft.plants.map((p) => p.industry)].filter(Boolean));
       for (const [pid, raw] of bundled) if (used.has(pid) && !have.has(pid)) await api.createIndustry(raw);
-      const res = await api.createCompany(clean(draft));
+      const c = clean(draft);
+      const res = await api.createCompany(edit ? c : rebrand(c, brand, { name: c.name, short: c.short }));
       forget(res.id);
       await reload();
       toast.success(edit ? `${res.name} 已更新` : `${res.name} 建好了`);
+      // a self-hosted server: straight into its factory
+      if (ov.single) return go('/admin');
       setDone(res);
       window.scrollTo(0, 0);
     } catch (e) {
@@ -505,93 +557,103 @@ export default function Builder({ edit }: { edit?: string }) {
       setDraft(d);
       setMode('form');
     } catch (e) {
-      setJsonError(`不是合法的 JSON：${(e as Error).message}`);
+      setJsonError(jsonProblem(json) ?? (e as Error).message);
     }
   };
 
+  const architect = ov.assistants && (ov.model === false ? (
+    <section className="grid gap-1.5 rounded-[18px] bg-card p-5 shadow-float max-sm:p-4">
+      <b className="text-[14px]">让 AI 搭要先配一个大模型</b>
+      <p className="text-[13px] leading-relaxed text-muted-foreground">在服务器的 <code className="rounded bg-surface px-1 font-mono">/etc/smartfactory/env</code> 里填上 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL（文件里有 Claude 和其他模型的写法），再运行 <code className="rounded bg-surface px-1 font-mono">sudo systemctl restart smartfactory</code>。不配也行：下面选一个模板，改成你的工厂。</p>
+    </section>
+  ) : (
+    <Architect draft={draft} edit={!!edit} onDraft={(d) => {
+      const next = { ...d } as Draft;
+      delete (next as { $schema?: string }).$schema;
+      if (edit) next.id = edit;
+      setBrand(null);
+      setDraft(next);
+      setServer([]);
+      if (next.industry) setFrom((f) => (sources.get(f)?.company.industry === next.industry ? f : ''));
+    }} onIndustry={(raw) => {
+      // a pack the architect wrote: drawn from now on, installed when the factory is built
+      try {
+        const ind = validateIndustry(raw, `行业 ${String(raw.id)}`);
+        setExtra((m) => new Map(m).set(ind.id, ind));
+        setBundled((m) => new Map(m).set(ind.id, raw));
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+    }} />
+  ));
+  const picker = !edit && (
+    <section className="rounded-[18px] bg-card p-5 shadow-float max-sm:p-4">
+      <Field label="或者从一个模板起步" hint="复制它的工厂和产线，下面再改；带的客户、供应商是示例，建好后在「改场景」里换成你们的">
+        <Select value={from} onValueChange={pickTemplate}>
+          <SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="选一个模板" /></SelectTrigger>
+          <SelectContent>
+            {(['builtin', 'local'] as const).map((src) => {
+              const items = list.filter((t) => t.source === src);
+              if (!items.length) return null;
+              return (
+                <SelectGroup key={src}>
+                  <SelectLabel>{SOURCE_LABEL[src]}</SelectLabel>
+                  {items.map((t) => (
+                    <SelectItem key={`${src}:${t.id}`} value={`${src}:${t.id}`}>
+                      {`${t.name}（${t.industryName}，${t.plants.length} 个工厂${t.author && src !== 'builtin' ? `，${t.author}` : ''}）`}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              );
+            })}
+            {!ov.single && ov.companies.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>现有{noun}</SelectLabel>
+                {ov.companies.map((c) => (
+                  <SelectItem key={c.id} value={`company:${c.id}`}>
+                    {`${c.name}（${ov.industries.find((i) => i.id === c.industry)?.name ?? c.industry}，${c.plants.length} 个工厂）`}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+            {unused.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>空白，只按行业起步</SelectLabel>
+                {unused.map((i) => <SelectItem key={i.id} value={`blank:${i.id}`}>{i.name}</SelectItem>)}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
+      </Field>
+    </section>
+  );
   const templateName = (id: string) => ov.companies.find((c) => c.id === id)?.name ?? id;
   return (
     <>
-      <PageHead title={edit ? `改场景：${templateName(edit)}` : ov.single ? '建你的工厂' : '新建公司'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '模板' : '公司' }}
-        sub={edit ? '保存后这家公司的仿真按新场景从头开始' : '从一个模板起步，改成你公司的名字、工厂和产线'}>
+      <PageHead title={edit ? `改场景：${templateName(edit)}` : ov.single ? '建你的工厂' : '新建公司'} back={edit ? { to: ov.single ? '/admin' : `/admin/customers/${encodeURIComponent(edit)}`, label: templateName(edit) } : { to: '/admin', label: ov.single ? '返回' : '公司' }}
+        sub={edit ? '保存后仿真按新场景从头开始，仿真里的工单重新编号；点检、资料库、助手对话和操作记录都留着' : aiFirst && !draft ? '说说你的工厂：几个厂、做什么、几条线。AI 写好放进表单，你确认后再建' : '从一个模板起步，改成你公司的名字、工厂和产线'}>
         <ToggleGroup type="single" value={mode} onValueChange={(v) => { if (v === 'json' && mode === 'form') toJson(); if (v === 'form' && mode === 'json') fromJson(); }} className="rounded-xl bg-card p-0.5 shadow-float">
           <ToggleGroupItem value="form" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><ListIcon className="size-4" />表单</ToggleGroupItem>
           <ToggleGroupItem value="json" className="h-9 gap-1.5 rounded-lg px-3 text-[13px] font-bold data-[state=on]:bg-brand-soft data-[state=on]:text-primary"><CodeXmlIcon className="size-4" />JSON</ToggleGroupItem>
         </ToggleGroup>
       </PageHead>
 
-      {!draft && <div className="grid h-60 place-items-center"><LoaderCircleIcon className="animate-spin text-muted-foreground" /></div>}
+      {!draft && (aiFirst
+        ? <div className="grid max-w-[880px] gap-5">{architect}{picker}</div>
+        : <div className="grid h-60 place-items-center"><LoaderCircleIcon className="animate-spin text-muted-foreground" /></div>)}
       {draft && (
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,480px)]">
           <div className="grid gap-5">
             {mode === 'json' ? (
               <section className="grid gap-3 rounded-[18px] bg-card p-5 shadow-float">
-                <p className="text-[13px] text-muted-foreground">整份公司配置。用 MCP 的 scene_guide 让 AI 写好贴进来也行；切回表单时生效。</p>
-                <Textarea value={json} onChange={(e) => setJson(e.target.value)} spellCheck={false} className="h-[560px] resize-y rounded-xl font-mono text-[12.5px]" aria-label="公司配置 JSON" />
+                <p className="text-[13px] text-muted-foreground">整份公司配置，可以直接改，也可以把别处写好的整份贴进来。改完点「检查」或切回表单生效。</p>
+                <Textarea value={json} onChange={(e) => { setJson(e.target.value); setJsonError(jsonProblem(e.target.value)); }} spellCheck={false} className="h-[560px] resize-y rounded-xl font-mono text-[12.5px]" aria-label="公司配置 JSON" />
                 {jsonError && <p className="text-[12.5px] text-destructive">{jsonError}</p>}
               </section>
             ) : (
               <>
-                {ov.assistants && (
-                  <Architect draft={draft} edit={!!edit} onDraft={(d) => {
-                    const next = { ...d } as Draft;
-                    delete (next as { $schema?: string }).$schema;
-                    if (edit) next.id = edit;
-                    setDraft(next);
-                    setServer([]);
-                    if (next.industry) setFrom((f) => (sources.get(f)?.company.industry === next.industry ? f : ''));
-                  }} onIndustry={(raw) => {
-                    // a pack the architect wrote: drawn from now on, installed when the factory is built
-                    try {
-                      const ind = validateIndustry(raw, `行业包 ${String(raw.id)}`);
-                      setExtra((m) => new Map(m).set(ind.id, ind));
-                      setBundled((m) => new Map(m).set(ind.id, raw));
-                    } catch (e) {
-                      toast.error((e as Error).message);
-                    }
-                  }} />
-                )}
-                {!edit && (
-                  <section className="rounded-[18px] bg-card p-5 shadow-float max-sm:p-4">
-                    <Field label="或者从一个模板起步" hint="复制它的行业、工厂和产线，下面再改">
-                      <Select value={from} onValueChange={pickTemplate}>
-                        <SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="选一个模板" /></SelectTrigger>
-                        <SelectContent>
-                          {(['builtin', 'local'] as const).map((src) => {
-                            const items = list.filter((t) => t.source === src);
-                            if (!items.length) return null;
-                            return (
-                              <SelectGroup key={src}>
-                                <SelectLabel>{SOURCE_LABEL[src]}</SelectLabel>
-                                {items.map((t) => (
-                                  <SelectItem key={`${src}:${t.id}`} value={`${src}:${t.id}`}>
-                                    {`${t.name}（${t.industryName}，${t.plants.length} 个工厂${t.author && src !== 'builtin' ? `，${t.author}` : ''}）`}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            );
-                          })}
-                          {!ov.single && ov.companies.length > 0 && (
-                            <SelectGroup>
-                              <SelectLabel>现有{noun}</SelectLabel>
-                              {ov.companies.map((c) => (
-                                <SelectItem key={c.id} value={`company:${c.id}`}>
-                                  {`${c.name}（${ov.industries.find((i) => i.id === c.industry)?.name ?? c.industry}，${c.plants.length} 个工厂）`}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          )}
-                          {unused.length > 0 && (
-                            <SelectGroup>
-                              <SelectLabel>空白，只用行业包</SelectLabel>
-                              {unused.map((i) => <SelectItem key={i.id} value={`blank:${i.id}`}>{i.name}</SelectItem>)}
-                            </SelectGroup>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  </section>
-                )}
+                {architect}
+                {picker}
                 <section className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.3fr)] gap-4 rounded-[18px] bg-card p-5 shadow-float max-md:grid-cols-2 max-sm:p-4">
                   <Field label={`${noun}名称`} error={touched && !draft.name.trim() ? `填上${noun}的名称` : undefined} className="max-md:col-span-2">
                     <Input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="星河锻造集团" className="h-10 rounded-xl" autoFocus={!edit} />
@@ -625,11 +687,13 @@ export default function Builder({ edit }: { edit?: string }) {
             <Preview plants={checked.plants} problems={[...checked.problems, ...server]} draft={draft} />
             <div className="flex items-center gap-2 border-t pt-4">
               {touched && !ready && !checked.problems.length && <span className="text-[12.5px] text-destructive">左边还有没填好的</span>}
-              <Button className="ml-auto h-11 rounded-xl px-5 text-[14px] font-bold" disabled={busy || mode === 'json' || !!checked.problems.length} onClick={submit}>
-                {busy && <LoaderCircleIcon className="animate-spin" />}{edit ? '保存' : '建好它'}
-              </Button>
+              {mode === 'json'
+                ? <Button className="ml-auto h-11 rounded-xl px-5 text-[14px] font-bold" disabled={!!jsonError} onClick={fromJson}>检查</Button>
+                : <Button className="ml-auto h-11 rounded-xl px-5 text-[14px] font-bold" disabled={busy || !!checked.problems.length} onClick={submit}>
+                    {busy && <LoaderCircleIcon className="animate-spin" />}{edit ? '保存' : '建好它'}
+                  </Button>}
             </div>
-            {mode === 'json' && <p className="-mt-2 text-right text-[12px] text-muted-foreground">切回表单再保存</p>}
+            {mode === 'json' && <p className="-mt-2 text-right text-[12px] text-muted-foreground">检查没问题就回到表单，再{edit ? '保存' : '建'}</p>}
           </aside>
         </div>
       )}

@@ -27,8 +27,11 @@ export interface Words {
 }
 
 /** The pack's words with the factory's in the gaps. */
-export function wordsOf(industry: Pick<IndustryCfg, 'terms' | 'logistics'>): Words {
+export function wordsOf(industry: Pick<IndustryCfg, 'terms' | 'logistics'> & Partial<Pick<IndustryCfg, 'products' | 'stores'>>): Words {
   const t = industry.terms ?? {};
+  // a material lot is a heat (炉号) where the material is steel of a grade: the pack stores bar,
+  // or its products name their grade; a batch (批号) anywhere else
+  const steel = !!industry.stores?.categories.some((c) => c.kind === 'bar') || Object.values(industry.products ?? {}).some((p) => !!p.material);
   const lg = industry.logistics;
   const inV = lg?.inbound?.vehicle ?? 'truck';
   const outV = lg?.outbound?.vehicle ?? 'truck';
@@ -38,7 +41,7 @@ export function wordsOf(industry: Pick<IndustryCfg, 'terms' | 'logistics'>): Wor
     line: t.lineNoun ?? '产线',
     lines: t.line ?? '条线',
     machine: t.machine ?? '设备',
-    lot: t.lot ?? '炉号',
+    lot: t.lot ?? (steel ? '炉号' : '批号'),
     raw: t.raw ?? '原料',
     goods: t.goods ?? '成品',
     infeed: t.infeed ?? '上料缓存',

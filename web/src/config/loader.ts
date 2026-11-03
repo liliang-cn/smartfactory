@@ -4,6 +4,13 @@ import { layoutPlant, type PlantLayout } from '@/core/layout';
 import { companyOntologyIssues } from './ontology';
 import { Company, Industry, type CompanyCfg, type IndustryCfg } from './schema';
 
+/** A system's token the tab was opened with (an older ?token= link); people sign in with a cookie. */
+function tokenHeader(): Record<string, string> {
+  let t: string | null = new URLSearchParams(location.search).get('token');
+  try { t ??= sessionStorage.getItem('sf-token'); } catch { /* storage unavailable */ }
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 z.config(z.locales.zhCN());
 
 const industryFiles = import.meta.glob<{ default: unknown }>('./industries/*.json');
@@ -84,7 +91,7 @@ function bundle(picked: CompanyEntry, all: CompanyEntry[], industries: Map<strin
 /** The companies the server this page came from runs; null when there is no such server (vite alone). */
 async function site(): Promise<string[] | null> {
   try {
-    const r = await fetch('/api/site');
+    const r = await fetch('/api/site', { headers: tokenHeader() });
     return r.ok ? ((await r.json()) as { companies: string[] }).companies : null;
   } catch {
     return null;
@@ -102,7 +109,7 @@ export async function loadCompany(wanted: string | null): Promise<CompanyBundle>
 
   // A company created on the server: its config (and any industry packs it brings) come from there.
   if (wanted && !all.some((c) => c.id === wanted)) {
-    const r = await fetch(`/api/config/company/${encodeURIComponent(wanted)}`).catch(() => null);
+    const r = await fetch(`/api/config/company/${encodeURIComponent(wanted)}`, { headers: tokenHeader() }).catch(() => null);
     if (r?.ok) {
       const d: { company: unknown; industries: Record<string, unknown> } = await r.json();
       const company = validateCompany(d.company, `服务器上的公司 ${wanted}`);
@@ -176,7 +183,7 @@ export async function companyConfig(id: string, extra?: (id: string) => Promise<
   const file = companyFiles[`./companies/${id}.json`];
   if (file) company = validateCompany((await file()).default, `src/config/companies/${id}.json`);
   else {
-    const r = await fetch(`/api/config/company/${encodeURIComponent(id)}`);
+    const r = await fetch(`/api/config/company/${encodeURIComponent(id)}`, { headers: tokenHeader() });
     if (!r.ok) throw new ConfigError(`公司 ${id}`, ['服务器上没有这家公司的配置']);
     const d: { company: unknown; industries: Record<string, unknown> } = await r.json();
     company = validateCompany(d.company, `服务器上的公司 ${id}`);

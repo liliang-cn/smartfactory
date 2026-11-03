@@ -66,20 +66,24 @@ export const useAgent = create<AgentState>()((set, get) => ({
 }));
 
 const STEP: Record<string, string> = {
-  list_customers: '看公司', get_customer: '读公司配置', list_industries: '看行业包', get_industry: '读行业包', check_company: '检查配置',
+  list_customers: '看公司', get_customer: '读公司配置', list_industries: '看有哪些行业', get_industry: '读行业的设备和工艺', check_company: '检查配置',
   list_tokens: '看令牌', activity: '看操作记录', knowledge_search: '搜知识库', knowledge_entity: '查工艺图',
   propose_create_company: '提出建公司', propose_delete_company: '提出删公司', propose_issue_token: '提出发令牌',
   propose_revoke_token: '提出撤销令牌', propose_rebuild_knowledge: '提出重建知识库',
-  list_orders: '看工单', erp_status: '看 ERP 对接', propose_cancel_order: '提出撤回工单',
-  check_industry: '检查行业包', propose_create_industry: '提出保存行业包',
+  list_orders: '看工单', erp_status: '看 ERP 对接', propose_create_order: '提出录工单', propose_cancel_order: '提出撤回工单',
+  check_industry: '检查行业的设备和工艺', propose_create_industry: '提出保存行业的设备和工艺',
   calibration: '看仿真校准', propose_apply_calibration: '提出应用校准',
   guard_status: '看指令把关', propose_approve_command: '提出批准指令', propose_deny_command: '提出拒绝指令', value_report: '看成效',
-  anomalies: '看读数异常', propose_reset_baseline: '提出重新学习读数',
+  anomalies: '看读数异常', propose_reset_baseline: '提出重新学习读数', machines_now: '看设备现在的状态',
   tables_now: '看餐桌', table_now: '看一张桌', tables_history: '看用餐记录',
 };
-const stepText = (s: Step) => [STEP[s.tool] ?? s.tool, ...['id', 'company', 'name', 'query'].map((k) => s.args?.[k]).filter((v): v is string => typeof v === 'string' && !!v)].join(' ');
+/** A step as a person reads it: a company by its name, not its id. */
+const stepText = (s: Step, names: Map<string, string>) => [
+  STEP[s.tool] ?? s.tool,
+  ...['id', 'company', 'name', 'query'].map((k) => s.args?.[k]).filter((v): v is string => typeof v === 'string' && !!v).map((v) => names.get(v) ?? v),
+].join(' ');
 
-const SUGGEST = ['现在在做哪些工单，哪张会延期？', '哪些设备接了真实数据？', '给 ERP 发一个接口令牌', '最近一周谁改过什么？'];
+const SUGGEST = ['现在哪台设备停了，为什么？', '现在在做哪些工单，哪张会延期？', '哪些设备接了真实数据？', '最近一周谁改过什么？'];
 
 function ActionCard({ card, onChange }: { card: Card; onChange(c: Card): void }) {
   const { reload } = useConsole();
@@ -128,6 +132,8 @@ function ActionCard({ card, onChange }: { card: Card; onChange(c: Card): void })
 
 function TurnView({ t }: { t: Turn }) {
   const patch = useAgent((s) => s.patch);
+  const { ov } = useConsole();
+  const names = new Map(ov.companies.map((c) => [c.id, c.name]));
   return (
     <div className="grid gap-3">
       <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-[13.5px] whitespace-pre-wrap text-primary-foreground">{t.q}</div>
@@ -137,7 +143,7 @@ function TurnView({ t }: { t: Turn }) {
             {t.steps.map((s, i) => (
               <li key={i} className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
                 {!s.done ? <LoaderCircleIcon className="size-3 animate-spin text-primary" /> : s.failed ? <CircleAlertIcon className="size-3 text-destructive" /> : <CheckIcon className="size-3 text-success" />}
-                {stepText(s)}
+                {stepText(s, names)}
               </li>
             ))}
           </ol>
@@ -188,6 +194,9 @@ export function AgentPanel() {
   }, []);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [turns]);
   const go = (q: string) => { send(q); setText(''); };
+  // an example in this factory's own words
+  const plant = ov.companies[0]?.plants[0]?.name;
+  const example = plant ? `比如：现在哪台设备停了？${plant}再加一条线` : '比如：现在哪台设备停了？';
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent side={phone ? 'bottom' : 'right'} onOpenAutoFocus={(e) => { e.preventDefault(); box.current?.focus(); }}
@@ -203,7 +212,12 @@ export function AgentPanel() {
           )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {!turns.length ? (
+          {ov.model === false ? (
+            <div className="grid gap-2 pt-6 text-[13px] leading-relaxed text-muted-foreground">
+              <b className="text-[14px] text-foreground">助手要先配一个大模型</b>
+              <p>在服务器的 <code className="rounded bg-surface px-1 font-mono">/etc/smartfactory/env</code> 里填上 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL（文件里有 Claude 和其他模型的写法），再运行 <code className="rounded bg-surface px-1 font-mono">sudo systemctl restart smartfactory</code>。</p>
+            </div>
+          ) : !turns.length ? (
             <div className="grid gap-4 pt-6">
               <p className="text-[13.5px] text-muted-foreground">{ov.me.name}，想查什么、改什么，直接说。</p>
               <div className="grid gap-2">
@@ -217,16 +231,16 @@ export function AgentPanel() {
           )}
           <div ref={end} />
         </div>
-        <form className="border-t p-3" onSubmit={(e) => { e.preventDefault(); go(text); }}>
+        {ov.model !== false && <form className="border-t p-3" onSubmit={(e) => { e.preventDefault(); go(text); }}>
           <div className="relative">
-            <Textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="比如：二厂再加一条曲轴线"
+            <Textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder={example}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); go(text); } }}
               className="max-h-40 min-h-[64px] resize-none rounded-xl pr-12 text-[13.5px]" aria-label="对助手说" />
             {ctrl
               ? <Button type="button" size="icon-sm" variant="outline" className="absolute right-2 bottom-2 size-8 rounded-lg" aria-label="停下" onClick={() => ctrl.abort()}><CircleStopIcon /></Button>
               : <Button type="submit" size="icon-sm" className="absolute right-2 bottom-2 size-8 rounded-lg" aria-label="发送" disabled={!text.trim()}><ArrowUpIcon /></Button>}
           </div>
-        </form>
+        </form>}
       </SheetContent>
     </Sheet>
   );

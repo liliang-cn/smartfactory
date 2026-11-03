@@ -145,17 +145,21 @@
             "operator": {
               "type": "boolean"
             },
+            "commands": {
+              "type": "boolean"
+            },
             "role": {
               "type": "string",
               "enum": [
                 "visitor",
                 "member",
+                "inspector",
                 "operator",
                 "admin",
                 "erp",
                 "reporter"
               ],
-              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
+              "description": "visitor: watch, demo commands that undo themselves (a company's own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
             },
             "name": {
               "type": "string"
@@ -409,6 +413,45 @@
           ],
           "additionalProperties": false,
           "description": "An operator or an AI assistant acted on the watched company"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "who"
+            },
+            "operator": {
+              "type": "boolean"
+            },
+            "commands": {
+              "type": "boolean"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "visitor",
+                "member",
+                "inspector",
+                "operator",
+                "admin",
+                "erp",
+                "reporter"
+              ],
+              "description": "visitor: watch, demo commands that undo themselves (a company's own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "operator",
+            "role",
+            "name"
+          ],
+          "additionalProperties": false,
+          "description": "The caller changed while the link was open: signed out, an account disabled, a token revoked"
         }
       ]
     },
@@ -634,6 +677,9 @@
                 "type": "number"
               },
               "toolLimit": {
+                "type": "number"
+              },
+              "toolLife": {
                 "type": "number"
               },
               "changing": {
@@ -2588,12 +2634,13 @@
           "enum": [
             "visitor",
             "member",
+            "inspector",
             "operator",
             "admin",
             "erp",
             "reporter"
           ],
-          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
+          "description": "visitor: watch, demo commands that undo themselves (a company's own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
         },
         "you": {
           "type": "string"
@@ -3398,12 +3445,13 @@
             "enum": [
               "visitor",
               "member",
+              "inspector",
               "operator",
               "admin",
               "erp",
               "reporter"
             ],
-            "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
+            "description": "visitor: watch, demo commands that undo themselves (a company's own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
           },
           "key": {
             "type": "string"
@@ -3474,12 +3522,13 @@
               "enum": [
                 "visitor",
                 "member",
+                "inspector",
                 "operator",
                 "admin",
                 "erp",
                 "reporter"
               ],
-              "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
+              "description": "visitor: watch, demo commands that undo themselves (a company's own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
             },
             "companies": {
               "type": "array",
@@ -3492,6 +3541,9 @@
             },
             "key": {
               "type": "string"
+            },
+            "person": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -3641,6 +3693,9 @@
         "assistants": {
           "type": "boolean"
         },
+        "model": {
+          "type": "boolean"
+        },
         "version": {
           "type": "string"
         },
@@ -3770,12 +3825,13 @@
           "enum": [
             "visitor",
             "member",
+            "inspector",
             "operator",
             "admin",
             "erp",
             "reporter"
           ],
-          "description": "visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
+          "description": "visitor: watch, demo commands that undo themselves (a company's own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor's decisions · admin: + scenes, documents, assistants · erp: a business system's token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor's token that reports the tables (and dining sessions) of its companies, a visitor everywhere else"
         },
         "companies": {
           "type": "array",
@@ -3832,6 +3888,7 @@
           "type": "string",
           "enum": [
             "member",
+            "inspector",
             "operator",
             "admin",
             "erp",
@@ -5035,6 +5092,7 @@
             "issue_token",
             "revoke_token",
             "rebuild_knowledge",
+            "create_order",
             "cancel_order",
             "apply_calibration",
             "approve_command",

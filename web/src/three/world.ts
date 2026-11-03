@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { PlantLayout } from '@/core/layout';
 import type { Campus } from '@/core/campus';
 import { M, P, blk, bodyMat, canvasTex, cyl, mesh } from './kit';
+import { SRInstances, hasSR, srBox } from './simready';
 
 type Box = PlantLayout['box'];
 
@@ -51,6 +52,20 @@ function floorTexture(L: PlantLayout) {
     const shop = L.site === 'shop';
     c.fillStyle = outdoor ? '#d3eabc' : shop ? '#f3ebdf' : P.slab;
     c.fillRect(0, 0, w, h);
+    if (!outdoor && !shop) {
+      // trowelled concrete: soft blotches, then fine grit
+      for (let i = 0; i < (w * h) / 900; i++) {
+        const v = 200 + Math.floor(Math.random() * 40);
+        c.fillStyle = `rgba(${v},${v},${v - 4},0.06)`;
+        c.beginPath();
+        c.arc(Math.random() * w, Math.random() * h, 6 + Math.random() * 40, 0, Math.PI * 2);
+        c.fill();
+      }
+      for (let i = 0; i < (w * h) / 60; i++) {
+        c.fillStyle = Math.random() < 0.5 ? 'rgba(90,90,85,0.10)' : 'rgba(255,255,255,0.12)';
+        c.fillRect(Math.random() * w, Math.random() * h, 1.2, 1.2);
+      }
+    }
     if (shop) {
       // warm floor tiles
       c.strokeStyle = 'rgba(150,110,60,0.08)';
@@ -62,7 +77,7 @@ function floorTexture(L: PlantLayout) {
       c.fillStyle = 'rgba(255,255,255,0.12)';
       for (let x = box.x0; x <= box.x1; x += 8) c.fillRect(X(x), 0, 4 * S, h);
     } else {
-      c.strokeStyle = 'rgba(80,95,150,0.06)';
+      c.strokeStyle = 'rgba(60,60,55,0.10)'; // saw-cut joints
       c.lineWidth = 2;
       for (let x = box.x0; x <= box.x1; x += 6) { c.beginPath(); c.moveTo(X(x), 0); c.lineTo(X(x), h); c.stroke(); }
       for (let z = box.z0; z <= box.z1; z += 6) { c.beginPath(); c.moveTo(0, Z(z)); c.lineTo(w, Z(z)); c.stroke(); }
@@ -78,7 +93,7 @@ function floorTexture(L: PlantLayout) {
     for (const l of L.lines) {
       // line cell, and the dashed aisle edge on its front
       if (outdoor) rr(l.x0 - 0.8, l.z - l.beltW / 2 - 0.6, l.outfeed.x + 1.4, l.z + l.beltW / 2 + 1.9, 'rgba(236,214,166,0.55)', '#d8b77c');
-      else rr(l.x0 - 0.8, l.z - l.beltW / 2 - 0.6, l.outfeed.x + 1.4, l.z + l.beltW / 2 + 1.9, 'rgba(47,91,234,0.045)', P.yellow);
+      else rr(l.x0 - 0.8, l.z - l.beltW / 2 - 0.6, l.outfeed.x + 1.4, l.z + l.beltW / 2 + 1.9, 'rgba(255,255,255,0.10)', P.yellow);
       c.strokeStyle = outdoor ? 'rgba(255,255,255,0.9)' : P.yellow;
       c.lineWidth = 0.12 * S;
       c.setLineDash([0.9 * S, 0.6 * S]);
@@ -86,7 +101,7 @@ function floorTexture(L: PlantLayout) {
       c.beginPath(); c.moveTo(X(L.warehouse.x1 + 0.6), Z(ez)); c.lineTo(X(L.fg.x0 - 0.4), Z(ez)); c.stroke();
       c.setLineDash([]);
     }
-    rr(L.warehouse.x0 - 0.4, L.warehouse.z0 - 1, L.warehouse.x1 + 0.4, L.warehouse.z1 + 1, 'rgba(47,91,234,0.05)', P.yellow);
+    rr(L.warehouse.x0 - 0.4, L.warehouse.z0 - 1, L.warehouse.x1 + 0.4, L.warehouse.z1 + 1, 'rgba(255,255,255,0.08)', P.yellow);
     rr(L.fg.x0, L.fg.z0, L.fg.x1, L.fg.z1, 'rgba(246,196,69,0.12)', P.yellow, [0.6 * S, 0.4 * S]);
     c.strokeStyle = 'rgba(191,138,82,0.5)';
     c.lineWidth = 0.05 * S;
@@ -109,17 +124,17 @@ function floorTexture(L: PlantLayout) {
     hatch(box.x1 - 1.8, midZ - 2.5, box.x1 - 0.3, midZ + 2.5);
 
     // AGV guide tape and docks
-    c.strokeStyle = 'rgba(47,91,234,0.55)';
+    c.strokeStyle = 'rgba(30,58,102,0.6)';
     c.lineWidth = 0.08 * S;
     for (const a of L.agvs) {
       c.beginPath();
       a.route.forEach((p, i) => (i ? c.lineTo(X(p.x), Z(p.z)) : c.moveTo(X(p.x), Z(p.z))));
       c.stroke();
-      c.fillStyle = 'rgba(47,91,234,0.18)';
+      c.fillStyle = 'rgba(30,58,102,0.18)';
       for (const p of a.route) { c.beginPath(); c.arc(X(p.x), Z(p.z), 0.75 * S, 0, Math.PI * 2); c.fill(); }
     }
 
-    c.fillStyle = outdoor ? 'rgba(52,110,64,0.6)' : 'rgba(47,91,234,0.5)';
+    c.fillStyle = outdoor ? 'rgba(52,110,64,0.6)' : 'rgba(70,72,70,0.55)';
     c.textBaseline = 'middle';
     const stencil = (txt: string, x: number, z: number, size: number) => {
       c.save();
@@ -181,6 +196,28 @@ function buildWalls(g: THREE.Object3D, box: Box) {
   for (const sz of [-1, 1]) blk(g, M.blue, 0.3, 4.2, 0.3, x1 + 0.2, 0, midZ + sz * 2.9, 0.06);
   blk(g, M.blue, 0.9, 0.3, 6.4, x1 + 0.5, 4.2, midZ, 0.08);
   for (const x of [x0 - 0.6, x1 + 0.6]) for (const sz of [-1, 1]) blk(g, M.ink, 0.3, 0.6, 0.3, x, 0, midZ + sz * 1.8, 0.06);
+  // concrete columns along the back and left walls, extinguishers on every other one
+  if (hasSR('column')) {
+    const cb = srBox('column');
+    const k = H / (cb.max.y - cb.min.y);
+    const spots: [number, number][] = [];
+    for (let x = x0 + 1; x < x1 - 1; x += 6) spots.push([x, z0 + 0.45]);
+    for (let z = z0 + 7; z < z1 - 3; z += 6) if (Math.abs(z - midZ) > 3.5) spots.push([x0 + 0.45, z]);
+    const cols = new SRInstances('column', spots.length);
+    const m = new THREE.Matrix4();
+    spots.forEach(([x, z], i) => { cols.set(i, m.makeScale(0.6, k, 0.6).setPosition(x, 0, z)); });
+    cols.count = spots.length;
+    cols.done();
+    g.add(cols.group);
+    if (hasSR('extinguisher')) {
+      const ex = spots.filter((_, i) => i % 2 === 0);
+      const fe = new SRInstances('extinguisher', ex.length, 1.4);
+      ex.forEach(([x, z], i) => { fe.set(i, m.makeTranslation(x + (z === z0 + 0.45 ? 0.45 : 0.35), 0, z + (z === z0 + 0.45 ? 0.35 : 0.45))); });
+      fe.count = ex.length;
+      fe.done();
+      g.add(fe.group);
+    }
+  }
 }
 
 /**

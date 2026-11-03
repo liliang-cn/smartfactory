@@ -24,9 +24,9 @@ func (o *Ops) checks(who auth.Who, company string, need auth.Role) error {
 	}
 	if !who.Can(company, need) {
 		if who.Key == "" {
-			return fail(401, "用令牌登录")
+			return fail(401, "要先登录")
 		}
-		return fail(403, "要公司 %s %s以上的令牌", company, need.Label())
+		return fail(403, "这要%s以上才能做，你是%s", need.Label(), who.RoleIn(company).Label())
 	}
 	return nil
 }
@@ -69,7 +69,7 @@ func (o *Ops) ChecksOverview(who auth.Who, company string) (*ChecksOverview, err
 		return nil, err
 	}
 	return &ChecksOverview{Forms: forms, Machines: ms, Kinds: checks.Kinds, TwinFields: checks.TwinFields,
-		Who: who.Name, Operator: who.Can(company, auth.Operator), Admin: who.Can(company, auth.Admin), Now: o.Checks.Now()}, nil
+		Who: who.Name, Operator: who.Can(company, auth.Inspector), Admin: who.Can(company, auth.Admin), Now: o.Checks.Now()}, nil
 }
 
 // CheckTemplates are forms to start one from.
@@ -141,7 +141,7 @@ func (o *Ops) MachineChecks(who auth.Who, company, plant, asset string) (*Machin
 	if !ok {
 		return nil, fail(404, "%s/%s 没有要填的表", plant, asset)
 	}
-	out := &MachineChecks{Machine: *m, Forms: []checks.Form{}, Operator: who.Can(company, auth.Operator)}
+	out := &MachineChecks{Machine: *m, Forms: []checks.Form{}, Operator: who.Can(company, auth.Inspector)}
 	for _, r := range m.Rounds {
 		if f, err := o.Checks.Form(company, r.Form); err == nil {
 			out.Forms = append(out.Forms, *f)
@@ -155,7 +155,7 @@ func (o *Ops) MachineChecks(who auth.Who, company, plant, asset string) (*Machin
 
 // SubmitCheck keeps a form filled in by who, and logs it with every value.
 func (o *Ops) SubmitCheck(who auth.Who, via, company string, in checks.Input) (*checks.Submission, error) {
-	if err := o.checks(who, company, auth.Operator); err != nil {
+	if err := o.checks(who, company, auth.Inspector); err != nil {
 		return nil, err
 	}
 	sub, err := o.Checks.Submit(company, in, checks.Author{Name: who.Name, Via: via})

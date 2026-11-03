@@ -94,13 +94,14 @@ function Enter({ c, open, onOpenChange, onSent }: { c: api.Company; open: boolea
   const { data } = useCompany(open ? c.id : null);
   // every part number a line here can run, with the customers of its product
   const parts = useMemo(() => {
-    const out = new Map<string, { label: string; customers: string[] }>();
+    // real: the product has a part number of its own; else it is ordered by the product (its id)
+    const out = new Map<string, { label: string; customers: string[]; real: boolean }>();
     for (const p of data?.plants ?? []) {
       for (const l of p.lines) {
         const pr = l.product;
         const vs = pr.variants?.length ? pr.variants : [{ partNo: pr.partNo ?? pr.key, name: pr.name, customers: undefined }];
         for (const v of vs) {
-          if (!out.has(v.partNo)) out.set(v.partNo, { label: v.name, customers: v.customers ?? (pr.customers ?? []).map((x) => x.name) });
+          if (!out.has(v.partNo)) out.set(v.partNo, { label: v.name, customers: v.customers ?? (pr.customers ?? []).map((x) => x.name), real: v.partNo !== pr.key });
         }
       }
     }
@@ -124,7 +125,7 @@ function Enter({ c, open, onOpenChange, onSent }: { c: api.Company; open: boolea
     setBusy(true);
     setError(undefined);
     try {
-      const [r] = await api.sendOrders(c.id, [{ no: no.trim(), partNo: part, qty: Number(qty), ...(due && { due: due.replace('T', ' ') }), ...(customer && { customer }) }]);
+      const [r] = await api.sendOrders(c.id, [{ no: no.trim(), ...(parts.get(part)?.real ? { partNo: part } : { product: part }), name: parts.get(part)?.label, qty: Number(qty), ...(due && { due: due.replace('T', ' ') }), ...(customer && { customer }) }]);
       if (!r.ok) {
         setError(r.error);
         return;
@@ -161,7 +162,7 @@ function Enter({ c, open, onOpenChange, onSent }: { c: api.Company; open: boolea
             <Select value={part} onValueChange={(v) => { setPart(v); setCustomer(''); }}>
               <SelectTrigger className="h-10 w-full rounded-xl" aria-label="料号"><SelectValue placeholder={data ? '选一个料号' : '读取产线…'} /></SelectTrigger>
               <SelectContent>
-                {[...parts].map(([k, v]) => <SelectItem key={k} value={k}><span className="font-mono">{k}</span><span className="text-muted-foreground">{v.label}</span></SelectItem>)}
+                {[...parts].map(([k, v]) => <SelectItem key={k} value={k}>{v.real ? <><span className="font-mono">{k}</span><span className="ml-2 text-muted-foreground">{v.label}</span></> : v.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -197,6 +198,8 @@ const VIEWS = [
 
 export function OrderBoard({ c }: { c: api.Company }) {
   const { ov } = useConsole();
+  // what the factory counts in: 台 for air conditioners, 件 for forgings
+  const unit = (ov.industries as { id: string; unit?: string }[]).find((i) => i.id === c.industry)?.unit || '件';
   const [erp, setERP] = useState<api.ERPOverview | null>(null);
   const [list, setList] = useState<api.Order[] | null>(null);
   const [error, setError] = useState<string>();
@@ -295,13 +298,13 @@ export function OrderBoard({ c }: { c: api.Company }) {
                 {rest.map((o) => (
                   <TableRow key={o.no} className="text-[13px]">
                     <TableCell><div className="flex items-center gap-2"><span className="font-mono font-bold">{o.no}</span><Chip status={o.status} problem={o.problem} /></div></TableCell>
-                    <TableCell className="max-w-[220px]"><span className="font-mono text-[12.5px]">{o.partNo || o.product}</span><div className="truncate text-[12px] text-muted-foreground">{[o.name, o.customer].filter(Boolean).join('，')}</div></TableCell>
+                    <TableCell className="max-w-[220px]">{o.partNo ? <span className="font-mono text-[12.5px]">{o.partNo}</span> : <span className="text-[12.5px] font-bold">{o.name || o.product}</span>}<div className="truncate text-[12px] text-muted-foreground">{[o.partNo ? o.name : '', o.customer].filter(Boolean).join('，')}</div></TableCell>
                     <TableCell>
                       {o.problem && o.status === 'queued' ? <span className="text-[12.5px] text-destructive">{o.problem}</span> : (
                         <><span className="font-bold">{o.lineName}</span>{place.has(o.no) && <div className="text-[12px] text-muted-foreground">排第 {place.get(o.no)}</div>}</>
                       )}
                     </TableCell>
-                    <TableCell>{o.status === 'queued' ? <span className="text-muted-foreground tabular-nums">{o.qty} 件</span> : <Progress o={o} />}</TableCell>
+                    <TableCell>{o.status === 'queued' ? <span className="text-muted-foreground tabular-nums">{o.qty} {unit}</span> : <Progress o={o} />}</TableCell>
                     <TableCell className={cn('max-md:hidden', late(o) ? 'font-bold text-destructive' : 'text-muted-foreground')}>{fmt(o.due)}</TableCell>
                     <TableCell className="text-[12px] text-muted-foreground max-lg:hidden">{SOURCE[o.source]}<div>{o.finished ? `${fmt(o.finished)} 完成` : ago(o.created)}</div></TableCell>
                     <TableCell className="text-right">
@@ -322,7 +325,7 @@ export function OrderBoard({ c }: { c: api.Company }) {
           <AlertDialogHeader>
             <AlertDialogTitle>撤回工单 {cancelling?.no}？</AlertDialogTitle>
             <AlertDialogDescription>
-              {cancelling?.status === 'running' ? `${cancelling.lineName}停下它，转做下一张。已做的 ${cancelling.good} 件留在记录里。` : '它不再排队。'}ERP 再发一次同号工单会重新排队。
+              {cancelling?.status === 'running' ? `${cancelling.lineName}停下它，转做下一张。已做的 ${cancelling.good} ${unit}留在记录里。` : '它不再排队。'}ERP 再发一次同号工单会重新排队。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -471,7 +474,9 @@ export function ERPPanel({ c }: { c: api.Company }) {
   if (!ov) return <Panel title="ERP"><div className="h-24" /></Panel>;
   const endpoint = `${location.origin}/api/erp/${c.id}/orders`;
   const st = ov.status;
-  const curl = `curl -X POST ${endpoint} \\\n  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \\\n  -d '{"no":"MO-1001","partNo":"…","qty":200,"due":"2026-10-20 17:00","customer":"…"}'`;
+  // the example due date a week ahead
+  const ahead = new Date(Date.now() + 8 * 3600_000 + 7 * 86_400_000).toISOString().slice(0, 10);
+  const curl = `curl -X POST ${endpoint} \\\n  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \\\n  -d '{"no":"MO-1001","partNo":"料号","qty":200,"due":"${ahead} 17:00","customer":"…"}'`;
   const set = (patch: Partial<PullForm>) => setPull((p) => ({ ...p, ...patch }));
   return (
     <Panel
@@ -504,7 +509,7 @@ export function ERPPanel({ c }: { c: api.Company }) {
 
             <section className="grid gap-2">
               <h3 className="text-[13.5px] font-extrabold">ERP 推给孪生</h3>
-              <p className="text-[12.5px] text-muted-foreground">ERP（或中间件）带一个操作员令牌，把工单 POST 到这里。同一个工单号再发一次就是改；DELETE 这个地址加 /工单号 就是撤回。</p>
+              <p className="text-[12.5px] text-muted-foreground">ERP（或中间件）带一个「ERP 接口」令牌（在「账号」里发，角色选 ERP 接口），把工单 POST 到这里；partNo 写料号，没有料号的产品写产品名。同一个工单号再发一次就是改；DELETE 这个地址加 /工单号 就是撤回。</p>
               <Copyable text={endpoint} label="地址" />
               <pre className="overflow-x-auto rounded-xl bg-surface px-3 py-2 font-mono text-[12px] leading-relaxed text-muted-foreground">{curl}</pre>
               <Button variant="outline" size="sm" className="w-fit rounded-lg font-bold" onClick={() => setIssuing(true)}><KeyRoundIcon />给 ERP 发一个令牌</Button>

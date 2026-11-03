@@ -35,7 +35,12 @@ func OpenStore(dir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	st := &Store{db: db}
+	if err := st.migrateUsers(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return st, nil
 }
 
 func (s *Store) Close() error {
@@ -339,5 +344,6 @@ func (w Who) MarshalJSON() ([]byte, error) {
 		Companies  []string `json:"companies"`
 		Everywhere bool     `json:"everywhere"`
 		Key        string   `json:"key"`
-	}{w.Name, w.Role, orEmpty(w.Companies), w.Everywhere(), w.Key})
+		Person     bool     `json:"person"`
+	}{w.Name, w.Role, orEmpty(w.Companies), w.Everywhere(), w.Key, w.User != ""})
 }

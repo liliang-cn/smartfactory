@@ -20,6 +20,7 @@ import { CameraRig, type View } from './CameraRig';
 import { Pin } from './Markers';
 import { Products } from './Products';
 import { Environment, SimLoop, coarse } from './Scene';
+import { PerfProbe } from '@/perf/perf';
 
 const PHI = 0.92;
 // from the front left: the far end of a row of plants rises to the right, clear of the panels
@@ -289,6 +290,7 @@ export function CampusScene() {
         gl.toneMappingExposure = 1.05;
       }}
     >
+      <PerfProbe />
       <color attach="background" args={[P.ground]} />
       <fog attach="fog" args={[P.ground, far * 1.4, far * 3.5]} />
       <Environment />

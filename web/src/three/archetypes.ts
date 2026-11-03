@@ -3,6 +3,8 @@
 // Local frame: belt along +x at z = 0, belt top at `beltY`, aisle towards +z.
 import * as THREE from 'three';
 import type { LookCfg } from '@/config/schema';
+import { hasSR } from './simready';
+import { benchCarts } from './srmodels';
 import { M, P, blk, clamp01, colorOf, cyl, cylGeo, mesh, rbox, smooth } from './kit';
 import {
   andon, emitter, enclosure, follow, hazardMat, operator, panel, setScreen, type ModelHandle,
@@ -397,10 +399,13 @@ const buildManual: Builder = (c) => {
     blk(root, c.body, L - 0.4, 0.9, 0.6, 0, 0, rz, 0.05);
     blk(root, c.accent, L - 0.36, 0.06, 0.64, 0, 0.9, rz, 0.02);
   } else {
-    for (const x of [-L / 2 + 0.15, L / 2 - 0.15]) blk(root, c.body, 0.08, 1.6, 0.6, x, 0, rz, 0.02);
-    for (const y of [0.45, 0.95, 1.45]) blk(root, c.body, L - 0.22, 0.05, 0.62, 0, y, rz, 0.02);
-    const bins = Math.max(2, Math.floor((L - 0.4) / 0.6));
-    for (const y of [0.5, 1.0]) for (let i = 0; i < bins; i++) blk(root, i % 2 ? M.yellow : c.accent, 0.5, 0.26, 0.5, -((bins - 1) * 0.6) / 2 + i * 0.6, y, rz, 0.05);
+    if (hasSR('bins')) benchCarts(root, L, rz);
+    else {
+      for (const x of [-L / 2 + 0.15, L / 2 - 0.15]) blk(root, c.body, 0.08, 1.6, 0.6, x, 0, rz, 0.02);
+      for (const y of [0.45, 0.95, 1.45]) blk(root, c.body, L - 0.22, 0.05, 0.62, 0, y, rz, 0.02);
+      const bins = Math.max(2, Math.floor((L - 0.4) / 0.6));
+      for (const y of [0.5, 1.0]) for (let i = 0; i < bins; i++) blk(root, i % 2 ? M.yellow : c.accent, 0.5, 0.26, 0.5, -((bins - 1) * 0.6) / 2 + i * 0.6, y, rz, 0.05);
+    }
     for (const x of [-L / 2 + 0.05, L / 2 - 0.05]) blk(root, c.accent, 0.1, 2.5, 0.1, x, 0, railZ, 0.03);
     blk(root, c.accent, L, 0.12, 0.12, 0, 2.5, railZ, 0.03);
   }

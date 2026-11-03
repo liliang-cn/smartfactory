@@ -17,6 +17,8 @@ interface LiveState {
   following: boolean;
   /** an operator (or above) of this company: commands reach equipment, the clock can change */
   operator: boolean;
+  /** the machines' buttons are shown: an operator, or anyone on the demo */
+  commands: boolean;
   /** the caller's role in this company */
   role: Role;
   /** the token holder's name; 访客 without one */
@@ -26,7 +28,7 @@ interface LiveState {
   anomalies: AnomalyInfo[];
 }
 
-export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, role: 'visitor', name: '访客', sources: [], anomalies: [] }));
+export const useLive = create<LiveState>(() => ({ status: 'off', following: false, operator: false, commands: true, role: 'visitor', name: '访客', sources: [], anomalies: [] }));
 
 const me = Math.random().toString(36).slice(2, 10);
 let ws: WebSocket | null = null;
@@ -55,7 +57,20 @@ const send = (m: ClientMessage) => {
 };
 
 export function startLive() {
-  connect(token(), 0);
+  const tok = token();
+  connect(tok, 0);
+  // a token revoked while the page is open: once a minute ask whether it still works, and if it
+  // does not, reconnect, so the server greets the page as a visitor again
+  if (tok) {
+    setInterval(() => {
+      if (useLive.getState().role === 'visitor' || document.hidden) return;
+      fetch('/api/health', { headers: { Authorization: `Bearer ${tok}` } })
+        .then((r) => (r.ok ? r.json() : r.status === 401 || r.status === 403 ? {} : null))
+        .then((h: { companies?: string[] } | null) => {
+          if (h && !h.companies?.includes(runtime().bundle.company.id)) ws?.close();
+        }, () => {});
+    }, 60_000);
+  }
   // Frames for the plant on screen come twice a second; the others less often.
   useUI.subscribe((s, prev) => {
     if (s.plantId !== prev.plantId && useLive.getState().following) send({ type: 'plant', plant: s.plantId });
@@ -83,7 +98,14 @@ function connect(tok: string | null, attempt: number) {
     for (const p of runtime().plants) p.sim.follower = false;
     useLive.setState({ status: 'off', following: false, sources: [], anomalies: [] });
     // No server answered on the first tries: static hosting or dev without the server. Stay quiet.
-    if (stale || (!opened && attempt >= 2)) return;
+    if (stale) return;
+    // a private factory closed the link (signed out, account disabled): show the sign-in
+    if (!opened && attempt >= 2) {
+      fetch('/api/auth/state').then((r) => r.json()).then((a: { mustLogin?: boolean; me?: unknown }) => {
+        if (a.mustLogin && !a.me) location.reload();
+      }, () => {});
+      return;
+    }
     setTimeout(() => connect(tok, opened ? 0 : attempt + 1), Math.min(30_000, 1500 * 2 ** attempt));
   };
 }
@@ -99,7 +121,7 @@ function handle(m: ServerMessage) {
         ws?.close();
         return;
       }
-      useLive.setState({ operator: m.operator, role: m.role, name: m.name, sources: m.sources, following: m.sim });
+      useLive.setState({ operator: m.operator, commands: m.commands ?? true, role: m.role, name: m.name, sources: m.sources, following: m.sim });
       if (m.sim) {
         for (const p of rt.plants) {
           p.sim.follower = true;
@@ -110,6 +132,16 @@ function handle(m: ServerMessage) {
         if (ui.selected) send({ type: 'hist', plant: ui.plantId, asset: ui.selected });
       }
       break;
+    case 'who': {
+      // signed out elsewhere, an account disabled, a token revoked: the page follows at once
+      const was = useLive.getState().role;
+      useLive.setState({ operator: m.operator, commands: m.commands ?? true, role: m.role, name: m.name });
+      if (m.role === 'visitor' && was !== 'visitor') {
+        try { sessionStorage.removeItem('sf-token'); } catch { /* storage unavailable */ }
+        toast.warning('你的登录已经失效，现在是访客');
+      }
+      break;
+    }
     case 'sources':
       useLive.setState({ sources: m.sources });
       break;

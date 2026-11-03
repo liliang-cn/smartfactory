@@ -19,8 +19,8 @@ const str = z.string();
  * What a caller may do in a company. No token: visitor. A token carries one role and the
  * companies it covers; elsewhere its holder is a visitor.
  */
-export const Role = z.enum(['visitor', 'member', 'operator', 'admin', 'erp', 'reporter']).meta({
-  description: 'visitor: watch, demo commands that undo themselves · member: + record notes and tickets · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants · erp: a business system\'s token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor\'s token that reports the tables (and dining sessions) of its companies, a visitor everywhere else',
+export const Role = z.enum(['visitor', 'member', 'inspector', 'operator', 'admin', 'erp', 'reporter']).meta({
+  description: 'visitor: watch, demo commands that undo themselves (a company\'s own server: watch only) · member: + record notes and tickets · inspector: + fill in checks and first-article inspections, no machine commands · operator: + commands that reach equipment, the plant clock, the advisor\'s decisions · admin: + scenes, documents, assistants · erp: a business system\'s token for the order API of its companies, a visitor everywhere else · reporter: a camera box, POS or table sensor\'s token that reports the tables (and dining sessions) of its companies, a visitor everywhere else',
 });
 
 export const Command = z.enum(['start', 'stop', 'speed', 'reset', 'maint', 'fault', 'restock', 'ship', 'retool', 'toollimit']).meta({
@@ -111,9 +111,10 @@ export const AssetFrame = z.object({
   vel: num,
   task: str,
   live: LiveValues.nullable(),
-  /** units made with the current tool, and its planned change point */
+  /** units made with the current tool, its planned change point, and its life (a die from the die ledger has its own) */
   toolUsed: num.optional(),
   toolLimit: num.optional(),
+  toolLife: num.optional(),
   /** seconds left of a tool change */
   changing: num.optional(),
   /** a place (table, pitch): elapsed its state began; `count` is the people at it */
@@ -211,6 +212,8 @@ export const Hello = z.object({
   protocol: z.literal(PROTOCOL),
   /** the caller is an operator (or above) of the company the page asked about (?company=) */
   operator: z.boolean(),
+  /** the caller may work the machines: an operator, or anyone on the demo (a company's own factory: operators only) */
+  commands: z.boolean().optional(),
   /** the caller's role in that company */
   role: Role,
   /** the token holder's name; 访客 without one */
@@ -272,7 +275,15 @@ export const CmdBroadcast = z.object({
   }),
 }).meta({ description: 'An operator or an AI assistant acted on the watched company' });
 
-export const ServerMessage = z.discriminatedUnion('type', [Hello, Sources, Anomalies, Frame, Result, Hist, CmdBroadcast]);
+export const Who = z.object({
+  type: z.literal('who'),
+  operator: z.boolean(),
+  commands: z.boolean().optional(),
+  role: Role,
+  name: str,
+}).meta({ description: 'The caller changed while the link was open: signed out, an account disabled, a token revoked' });
+
+export const ServerMessage = z.discriminatedUnion('type', [Hello, Sources, Anomalies, Frame, Result, Hist, CmdBroadcast, Who]);
 
 // ---------- HTTP ----------
 
@@ -607,7 +618,32 @@ export const AuditLog = z.array(AuditEntry).meta({ description: "A company's cha
 // ---------- the console (/admin) ----------
 
 /** The signed-in administrator. companies is empty for a token covering every company. */
-export const AdminMe = z.object({ name: str, role: Role, companies: z.array(str), everywhere: z.boolean(), key: str });
+export const AdminMe = z.object({ name: str, role: Role, companies: z.array(str), everywhere: z.boolean(), key: str,
+  /** signed in with an account and password (not a system's token) */
+  person: z.boolean().optional() });
+
+/** GET /api/auth/state — what the sign-in shows: set up the first administrator, or sign in */
+export const AuthState = z.object({
+  /** nobody has an account yet: set up the first administrator */
+  setup: z.boolean(),
+  /** setting up needs the installation code in codeFile (the page was not opened on the server itself) */
+  code: z.boolean(),
+  codeFile: str.optional(),
+  /** visitors see nothing until they sign in */
+  mustLogin: z.boolean(),
+  me: AdminMe.optional(),
+  /** the password was set by an administrator: pick your own */
+  mustChange: z.boolean().optional(),
+  /** the server keeps accounts (it has a data directory) */
+  accounts: z.boolean(),
+});
+
+/** A person's account, as the console lists it (GET /api/admin/users). */
+export const User = z.object({
+  id: str, name: str, login: str, role: Role, companies: z.array(str),
+  disabled: z.boolean().optional(), created: str, createdBy: str.optional(), lastIn: str.optional(), mustChange: z.boolean().optional(),
+});
+export const Users = z.object({ users: z.array(User), mustLogin: z.boolean() });
 
 export const AdminCompany = z.object({
   id: str, name: str, short: str, industry: str,
@@ -636,6 +672,8 @@ export const AdminOverview = z.object({
   issue: z.boolean(),
   /** the server runs the companies' assistants */
   assistants: z.boolean(),
+  /** a model is configured: the assistants and the AI builder can answer */
+  model: z.boolean().optional(),
   version: str,
   /** the companies this server is limited to (absent when any: the demo) */
   runs: z.array(str).optional(),
@@ -669,7 +707,7 @@ export const Account = z.object({
 });
 export const Accounts = z.array(Account).meta({ description: 'GET /api/admin/tokens — the tokens of the companies the caller administers' });
 export const IssueToken = z.object({
-  name: str, role: z.enum(['member', 'operator', 'admin', 'erp', 'reporter']),
+  name: str, role: z.enum(['member', 'inspector', 'operator', 'admin', 'erp', 'reporter']),
   /** null: every company (only an administrator of every company) */
   companies: z.array(str).nullable(),
   expires: str.optional(),
@@ -1341,7 +1379,7 @@ export const AnomalyResetResult = z.array(z.object({ machine: str, ok: z.boolean
 export const ConsoleAction = z.object({
   /** the proposal (AP-…); the activity log keeps what became of it */
   id: str.optional(),
-  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'cancel_order', 'apply_calibration', 'approve_command', 'deny_command', 'reset_baseline']),
+  kind: z.enum(['create_company', 'delete_company', 'create_industry', 'issue_token', 'revoke_token', 'rebuild_knowledge', 'create_order', 'cancel_order', 'apply_calibration', 'approve_command', 'deny_command', 'reset_baseline']),
   title: str, detail: str.optional(), args: z.record(str, z.unknown()),
 });
 export const ConsoleEvent = z.discriminatedUnion('kind', [

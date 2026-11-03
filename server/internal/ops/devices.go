@@ -36,7 +36,7 @@ func (o *Ops) devices(who auth.Who, company string) error {
 	}
 	if !who.Can(company, auth.Admin) {
 		if who.Key == "" {
-			return fail(401, "用令牌登录")
+			return fail(401, "要先登录")
 		}
 		return fail(403, "要公司 %s 的管理员令牌", company)
 	}

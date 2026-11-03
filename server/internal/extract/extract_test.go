@@ -3,6 +3,7 @@ package extract
 import (
 	"archive/zip"
 	"bytes"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -108,5 +109,31 @@ func TestText(t *testing.T) {
 	}
 	if _, err := Extract("旧.doc", []byte("x")); err == nil || !strings.Contains(err.Error(), ".docx") {
 		t.Errorf("an old .doc: %v", err)
+	}
+}
+
+// A PDF printed from Chrome: its y axis is flipped, numbers are kerned apart, tables are drawn
+// cell by cell, and 用 / 水 / 高 come out as Kangxi radicals.
+func TestPDFFromChrome(t *testing.T) {
+	data, err := os.ReadFile("testdata/chrome.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := Extract("chrome.pdf", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := strings.Index(d.Body, "中频感应加热炉操作与维护规程")
+	purpose := strings.Index(d.Body, "1 目的")
+	if title < 0 || purpose < title {
+		t.Errorf("not top to bottom:\n%s", d.Body)
+	}
+	for _, want := range []string{"Φ90×520 | 1200 ℃ | ±15 ℃ | 42 s", "20CrMnTi", "冷却水压力", "每周用黑体炉", "回水温度 | ≤55 ℃ | 看温度表"} {
+		if !strings.Contains(d.Body, want) {
+			t.Errorf("missing %q:\n%s", want, d.Body)
+		}
+	}
+	if strings.ContainsAny(d.Body, "⽤⽔⾼⽆") {
+		t.Errorf("Kangxi radicals left in:\n%s", d.Body)
 	}
 }

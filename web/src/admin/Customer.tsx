@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import type { PlantLayout } from '@/core/layout';
 import * as api from './api';
-import { AccountList } from './Accounts';
+import { AccountList, PeopleList } from './Accounts';
 import { AnomalyPanel } from './Anomalies';
 import { ActivityList } from './Activity';
 import { Blueprint, BlueprintLegend } from './Blueprint';
@@ -24,7 +24,11 @@ import { Calibration } from './Calib';
 import { DevicePanel } from './Devices';
 import { TablePanel } from './Tables';
 import { ChecksPanel } from './Checks';
+import { StoresPanel } from './Stores';
+import { DiesPanel } from './Dies';
+import { RnDPanel } from './RnD';
 import { GuardPanel } from './Guard';
+import { HealthPanel } from './Health';
 import { ValuePanel } from './Value';
 import { OrderBoard, ERPPanel } from './Orders';
 import { Panel } from './Panel';
@@ -88,7 +92,7 @@ function AI({ c }: { c: api.Company }) {
       <Panel title="助手" aside={<Button asChild variant="outline" size="sm" className="rounded-lg font-bold"><a href={`/?company=${encodeURIComponent(c.id)}&view=agents`}>去对话<ExternalLinkIcon /></a></Button>}>
         {!ov.assistants && <p className="text-[13px] text-muted-foreground">这台服务器没有开启助手（没有数据目录）。</p>}
         {error && <p className="text-[13px] text-destructive">{error}</p>}
-        {info && !info.ready && <p className="mb-3 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] font-semibold text-warning">服务器没配大模型，助手现在答不了：设置 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL。</p>}
+        {info && !info.ready && <p className="mb-3 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] font-semibold text-warning">助手现在答不了：还没有配置大模型：在服务器的 /etc/smartfactory/env 里填上 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL，再运行 sudo systemctl restart smartfactory。</p>}
         {info && (
           <ul className="grid gap-2">
             {info.agents.map((a) => {
@@ -114,7 +118,7 @@ function AI({ c }: { c: api.Company }) {
             <Button asChild variant="outline" size="sm" className="w-fit rounded-lg font-bold"><a href={`/?company=${encodeURIComponent(c.id)}&view=biz`}>打开经营<ExternalLinkIcon /></a></Button>
           </div>
         ) : (
-          <p className="text-[13px] leading-relaxed text-muted-foreground">没有接。接法：在服务器配置的 history 里给 {c.id} 配一个 Postgres 和顾问地址，重启后生产历史按小时写入。</p>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">没有接。经营顾问要一个存生产历史的数据库（PostgreSQL）：部署的人在服务器配置里填上数据库和顾问地址，重启后生产历史按小时写进去。</p>
         )}
       </Panel>
     </div>
@@ -161,13 +165,13 @@ function Connect({ c }: { c: api.Company }) {
           className="mt-2 flex w-full items-center gap-2 rounded-xl bg-surface px-3 py-2 text-left font-mono text-[12.5px] hover:bg-brand-soft">
           <span className="min-w-0 flex-1 truncate">{topic}</span><CopyIcon className="size-3.5 shrink-0 text-muted-foreground" />
         </button>
-        <p className="mt-4 text-[13px] text-muted-foreground">每个厂的 MQTT 主题、Modbus 寄存器、OPC UA 节点：</p>
+        <p className="mt-4 text-[13px] text-muted-foreground">接 PLC、网关要的完整地址清单（每台设备的 MQTT 主题、Modbus 寄存器、OPC UA 节点，JSON 格式，给做集成的人用）。字段和发法见上面「设备身份」里的「怎么发读数」：</p>
         <ul className="mt-2 grid gap-1.5">
           {c.plants.map((p) => (
             <li key={p.id}>
               <a href={`/api/devices/${encodeURIComponent(c.id)}/${encodeURIComponent(p.id)}`} target="_blank" rel="noreferrer"
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-bold hover:bg-surface hover:text-primary">
-                <FileJsonIcon className="size-4 text-muted-foreground" />{p.name} 点位表<span className="ml-auto text-[12px] font-normal text-muted-foreground">{p.machines} 台设备</span>
+                <FileJsonIcon className="size-4 text-muted-foreground" />{p.name} 地址清单<span className="ml-auto text-[12px] font-normal text-muted-foreground">{p.machines} 台设备</span>
               </a>
             </li>
           ))}
@@ -178,7 +182,7 @@ function Connect({ c }: { c: api.Company }) {
 }
 
 function Remove({ c, open, onOpenChange }: { c: api.Company; open: boolean; onOpenChange(o: boolean): void }) {
-  const { reload } = useConsole();
+  const { ov, reload } = useConsole();
   const [busy, setBusy] = useState(false);
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -186,7 +190,7 @@ function Remove({ c, open, onOpenChange }: { c: api.Company; open: boolean; onOp
         <AlertDialogHeader>
           <AlertDialogTitle>删除 {c.name}？</AlertDialogTitle>
           <AlertDialogDescription>
-            它的 {c.plants.length} 个工厂停止仿真，配置删掉，打开它的链接会回到默认公司。助手、资料和操作记录留着，用同一个标识重建会接上。
+            {ov.single ? `它的 ${c.plants.length} 个工厂停止仿真，配置删掉，工作台回到「建你的工厂」。助手、资料和操作记录留着，用同一个标识重建会接上。` : `它的 ${c.plants.length} 个工厂停止仿真，配置删掉，打开它的链接会回到默认公司。助手、资料和操作记录留着，用同一个标识重建会接上。`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -256,9 +260,13 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
         <TabsContent value="checks"><ChecksPanel c={c} /></TabsContent>
+        <TabsContent value="stores"><StoresPanel c={c} /></TabsContent>
+        <TabsContent value="dies"><DiesPanel c={c} /></TabsContent>
+        <TabsContent value="rnd"><RnDPanel c={c} /></TabsContent>
         <TabsContent value="value"><ValuePanel c={c} /></TabsContent>
-        <TabsContent value="accounts"><AccountList company={c.id} /></TabsContent>
+        <TabsContent value="accounts" className="grid gap-5">{home && <PeopleList />}<AccountList company={c.id} /></TabsContent>
         <TabsContent value="activity"><ActivityList company={home ? undefined : c.id} /></TabsContent>
+        <TabsContent value="health"><HealthPanel /></TabsContent>
       </Tabs>
     </>
   );

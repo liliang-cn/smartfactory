@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BarChart3Icon, BellIcon, BotIcon, BoxIcon, ChevronDownIcon, LayoutGridIcon, PauseIcon, RadioTowerIcon, ScrollTextIcon, SearchIcon } from 'lucide-react';
+import { ActivityIcon, BarChart3Icon, BellIcon, BotIcon, BoxIcon, ChevronDownIcon, KeyRoundIcon, LayoutGridIcon, LogOutIcon, PauseIcon, RadioTowerIcon, ScrollTextIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -13,10 +13,13 @@ import { cn } from '@/lib/utils';
 import { useBiz } from '@/advisor/store';
 import { useAgents } from '@/agents/store';
 import { useLive } from '@/live/client';
+import { toggleStats, useStatsShown } from '@/perf/perf';
 import { liveFields } from '@/sim/plant';
 import { ALL, goToAsset, groupsOf, runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
 import { Approvals } from './Approvals';
 import { HintChip } from './Hints';
+import { fetchAuthState, PasswordDialog, SignInDialog, signOutSession } from './SignIn';
+import type { AuthState } from '@/admin/api';
 import { companyWords, groupFigures, plantFigures, shortLabel } from './group';
 import { CHIP, hhmm, stateLabel } from './status';
 
@@ -366,31 +369,43 @@ function AlarmBell() {
   );
 }
 
-const ROLE_LABEL = { visitor: '没有令牌', member: '成员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' } as const;
+const ROLE_LABEL = { visitor: '没登录', member: '成员', inspector: '质检员', operator: '操作员', admin: '管理员', erp: 'ERP 接口', reporter: '桌态上报' } as const;
 
 const AuditSheet = lazy(() => import('@/audit/Audit'));
 
-/** Who this page is open as: the token holder and their role in this company. Operators and
- * administrators open the audit log from here. */
+/** Who this page is open as: sign in from here; signed in, the person's name and role, their
+ * password and signing out, and for operators and administrators the audit log. */
 function Me() {
   const { name, role, status } = useLive();
   const [audit, setAudit] = useState(false);
+  const [signIn, setSignIn] = useState(false);
+  const [password, setPassword] = useState(false);
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const stats = useStatsShown();
+  useEffect(() => { fetchAuthState().then(setAuth); }, [role]);
   if (status !== 'on') return null;
   const visitor = role === 'visitor';
+  const person = !!auth?.me?.person;
   const chip = (
     <>
       <span className={cn('grid size-[38px] shrink-0 place-items-center rounded-full font-extrabold max-md:size-8', visitor ? 'bg-surface text-muted-foreground' : 'bg-gradient-to-br from-amber-300 to-orange-400 text-white')}>
-        {[...name][0] ?? '访'}
+        {visitor ? '访' : [...name][0]}
       </span>
       <span className="grid shrink-0 text-left leading-tight whitespace-nowrap max-xl:hidden">
-        <b className="text-[13.5px]">{name}</b>
-        <small className="text-xs text-muted-foreground">{ROLE_LABEL[role]}</small>
+        <b className="text-[13.5px]">{visitor ? '访客' : name}</b>
+        <small className="text-xs text-muted-foreground">{visitor ? '点这里登录' : ROLE_LABEL[role]}</small>
       </span>
     </>
   );
-  if (role !== 'operator' && role !== 'admin') {
-    return <div className="flex items-center gap-2.5 max-md:hidden" title={visitor ? '用令牌打开页面（?token=…）可以按角色操作' : `${name} · ${ROLE_LABEL[role]}`}>{chip}</div>;
+  if (visitor) {
+    return (
+      <>
+        <button type="button" className="flex items-center gap-2.5 rounded-xl p-0.5 pr-1.5 hover:bg-surface max-xl:pr-0.5" aria-label="登录" title="登录" onClick={() => setSignIn(true)}>{chip}</button>
+        <SignInDialog open={signIn} onOpenChange={setSignIn} onDone={() => location.reload()} />
+      </>
+    );
   }
+  const staff = role === 'operator' || role === 'admin';
   return (
     <>
       <DropdownMenu>
@@ -406,11 +421,31 @@ function Me() {
             <span className="text-xs font-normal text-muted-foreground">{runtime().bundle.company.name} · {ROLE_LABEL[role]}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2 rounded-xl" onSelect={() => setAudit(true)}>
-            <ScrollTextIcon className="size-4" />操作记录
+          {staff && (
+            <DropdownMenuItem className="gap-2 rounded-xl" onSelect={() => setAudit(true)}>
+              <ScrollTextIcon className="size-4" />操作记录
+            </DropdownMenuItem>
+          )}
+          {staff && (
+            <DropdownMenuItem className="gap-2 rounded-xl" onSelect={toggleStats}>
+              <ActivityIcon className="size-4" />{stats ? '关掉性能面板' : '性能面板'}
+            </DropdownMenuItem>
+          )}
+          {person && (
+            <DropdownMenuItem className="gap-2 rounded-xl" onSelect={() => setPassword(true)}>
+              <KeyRoundIcon className="size-4" />修改密码
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem className="gap-2 rounded-xl" onSelect={async () => {
+            try { sessionStorage.removeItem('sf-token'); } catch { /* storage blocked */ }
+            await signOutSession();
+            location.reload();
+          }}>
+            <LogOutIcon className="size-4" />退出
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <PasswordDialog open={password || !!auth?.mustChange} forced={!!auth?.mustChange} onOpenChange={(v) => { setPassword(v); if (!v) fetchAuthState().then(setAuth); }} />
       {audit && (
         <Suspense fallback={null}>
           <AuditSheet open={audit} onClose={() => setAudit(false)} />

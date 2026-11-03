@@ -154,6 +154,11 @@ export class PlantSim {
   history?: History;
   /** the company's ERP orders, when it sends any */
   orders?: OrderFeed;
+  /**
+   * Steel heats received into the company's store, the oldest first: a line needing a new lot
+   * takes the first one of its product's grade with enough left, instead of making one up.
+   */
+  heats?: { no: string; mill: string; material: string; kg: number }[];
   /** nobody will look at sparklines (history backfill, what-if runs): skip keeping them */
   headless = false;
   /** `${asset} ${code}` of every active alarm, so clearing a condition that is not raised is cheap */
@@ -755,6 +760,16 @@ export class PlantSim {
     // a heat is around 40 t of steel
     const left = Math.max(1, Math.round(40_000 / (prod.input ?? 40)));
     const tonnes = Math.round((left * (prod.input ?? 40)) / 100) / 10;
+    // a heat from the company's store, when it has one of this grade: at most a usual lot of it
+    const grade = (prod.material ?? '').toLowerCase();
+    const kg = prod.input ?? 40;
+    const stored = grade ? this.heats?.find((h) => h.material.toLowerCase() === grade && h.kg >= kg) : undefined;
+    if (stored) {
+      const n = Math.min(left, Math.floor(stored.kg / kg));
+      stored.kg -= n * kg;
+      line.lot = { no: stored.no, supplier: stored.mill, factor: rand(0.8, 1.25), left: n };
+      return;
+    }
     // incoming inspection catches some bad heats; those go back to the mill and another is drawn
     for (let tries = 0; ; tries++) {
       const s = pickShare(sups)!;
@@ -2238,6 +2253,8 @@ export class PlantSim {
       assets: [...this.assets.values()].map((a) => ({
         id: a.id, name: a.name, type: a.type, line: a.line?.name, state: a.fault ? 'fault' : a.state, fault: a.fault?.text,
         temp: r2(a.temp), power: r2(a.power), vib: r2(a.vib), health: r2(a.health), util: r2(a.util), speed: r2(a.speed),
+        // the machine's own body-temperature limits, so a reader can tell what the reading means
+        tempWarn: a.spec?.warn, tempTrip: a.spec?.trip,
         live: liveFields(a) ? a.live!.src : undefined,
         tool: a.tool ? `${a.tool.label} ${a.tool.used}/${a.tool.life} 次（${Math.round((a.tool.used / a.tool.life) * 100)}%）${a.changing > 0 ? '，更换中' : ''}` : undefined,
       })),
@@ -2256,7 +2273,7 @@ export class PlantSim {
         temp: p3(a.temp), vib: p3(a.vib), power: p3(a.power), health: p3(a.health), util: p3(a.util), avail: p3(a.avail),
         cycles: a.cycles, progress: p3(a.progress), busy: a.busy?.id ?? null, reading: a.reading ?? null, rejects: a.rejects,
         verdict: a.verdict ?? null, stock: a.stock, count: a.count, battery: p3(a.battery), vel: p3(a.vel), task: a.task, live: a.live ?? null,
-        toolUsed: a.tool?.used, toolLimit: a.tool?.limit, changing: a.changing ? p3(a.changing) : undefined,
+        toolUsed: a.tool?.used, toolLimit: a.tool?.limit, toolLife: a.tool?.life, changing: a.changing ? p3(a.changing) : undefined,
         since: a.place ? p3(a.since ?? 0) : undefined,
       })),
       lines: this.lines.map((l) => ({
@@ -2462,6 +2479,7 @@ export class PlantSim {
       });
       if (a.tool && x.toolUsed !== undefined) a.tool.used = x.toolUsed;
       if (a.tool && x.toolLimit !== undefined) a.tool.limit = x.toolLimit;
+      if (a.tool && x.toolLife) a.tool.life = x.toolLife;
       if (x.busy) busy.push([a, x.busy]);
     }
     const byId = new Map<string, Product>();

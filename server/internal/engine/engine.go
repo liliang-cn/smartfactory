@@ -438,6 +438,17 @@ func (e *Engine) Watch(company, plant string) (<-chan []byte, func(plant string)
 	}
 }
 
+// Watchers is how many browsers follow each company's twin now.
+func (e *Engine) Watchers() map[string]int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := map[string]int{}
+	for _, w := range e.watchers {
+		out[w.company]++
+	}
+	return out
+}
+
 // Frame is the current replicated state of a company (JSON), or "null".
 func (e *Engine) Frame(company string) string { return e.str("frame", company) }
 
