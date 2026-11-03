@@ -105,9 +105,17 @@ func (s *Service) StartWhatIf(company, which string, days float64) (WhatIf, erro
 	s.runs[company] = j
 	s.mu.Unlock()
 	state := s.Eng.SaveJSON(company)
+	// the plan's order timed from now, as the copy stands: an order a line has taken since the
+	// plan was made is running there, not waiting to be fed again
+	r := p.Result
+	if st, err := s.Store.settings(company); err == nil {
+		if in, err := s.input(company, st, p.Goal); err == nil {
+			r = Evaluate(in, p.Result.Seq())
+		}
+	}
 	go func() {
 		defer close(j.end)
-		res, err := s.check(company, state, p.Result, days)
+		res, err := s.check(company, state, r, days)
 		j.mu.Lock()
 		defer j.mu.Unlock()
 		j.w.Took = math.Round(time.Since(j.w.Started).Seconds())

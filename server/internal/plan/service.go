@@ -482,7 +482,7 @@ func (s *Service) Overview(company string) (*Overview, error) {
 // suggest says what changed since the plan in force was made, as a reason to plan again: orders
 // added or withdrawn, a line stopped, material that came.
 func (s *Service) suggest(in *Input, pub, draft *Plan) []string {
-	var out []string
+	out := []string{}
 	ref := pub
 	if draft != nil && (pub == nil || draft.Created.After(pub.Created)) {
 		ref = draft
@@ -522,7 +522,8 @@ func (s *Service) suggest(in *Input, pub, draft *Plan) []string {
 	}
 	var gone []string
 	for no, p := range in0 {
-		if !open[no] && !running[no] && !p.Running && p.Start.After(in.Now) {
+		// gone before the plan had it done: withdrawn, or (if it was running) stopped short
+		if !open[no] && !running[no] && p.End.After(in.Now.Add(30*time.Minute)) {
 			gone = append(gone, no)
 		}
 	}

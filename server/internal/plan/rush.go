@@ -25,6 +25,18 @@ func Insert(in *Input, s Seq, no string) (*Result, error) {
 	for j := range seq {
 		seq[j] = slices.DeleteFunc(seq[j], func(x int) bool { return x == i })
 	}
+	// what the others' ends are without it: of places that cost the same, the one that pushes
+	// the others back least (an urgent order due next week does not jump the queue for nothing)
+	base := p.decode(seq, false)
+	pushed := func(e *eval) float64 {
+		var h float64
+		for x := range p.ords {
+			if x != i && base.end[x] > 0 && e.end[x] > base.end[x] {
+				h += float64(e.end[x]-base.end[x]) / 3600
+			}
+		}
+		return h
+	}
 	var best [][]int
 	bestCost := math.Inf(1)
 	for _, j := range p.elig[i] {
@@ -45,7 +57,8 @@ func Insert(in *Input, s Seq, no string) (*Result, error) {
 		for _, k := range slices.Compact(at) {
 			next := clone(seq)
 			next[j] = slices.Insert(next[j], k, i)
-			if c := p.decode(next, false).cost; c < bestCost-1e-9 {
+			e := p.decode(next, false)
+			if c := e.cost + 0.01*pushed(e); c < bestCost-1e-9 {
 				best, bestCost = next, c
 			}
 		}

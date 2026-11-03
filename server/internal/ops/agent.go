@@ -30,6 +30,7 @@ const consolePrompt = `你是 SmartFactory 工作台的助手，帮这家公司�
 - 知识库：knowledge_search（文档和工艺）、knowledge_entity（工艺图里一样东西的上下游和关系）。
 - 本体：ontology（行业包声明的类、关系、规则、约束和约束现在的状况）、ontology_instances（一个类有哪些东西，可按关系的值筛）、ontology_explain（一样东西的类和事实，推理出的带为什么）。回答推理出的结论时把「为什么」一起说。
 - 生产工单：list_orders（ERP 下达的工单：排队、生产中、完成、撤回）、erp_status（ERP 怎么接的、上次拉取和回调怎么样）。
+- 生产计划：plan_status（发布的计划：按期率、误期、换型、各线负荷，每张工单在哪条线几点做完、晚的原因、缺料先不排的）、plan_whatif（插一张急单会怎样：排在哪、赶不赶得上、把谁往后推、有没有因此误期的；只推算不改计划，把「下周三」这类说法换成具体日期再填）。要真改计划，让管理员在「生产计划」页重新排、发布。
 - 仿真校准：calibration（每台设备的模型参数：模板值、按实测拟合的值、在用的值，拟合回放的误差，最近一天模型和实测差多少）。拟合要管理员在后台点；你可以 propose_apply_calibration 提出应用拟合好的参数，说清楚哪些参数会变、误差能降多少。
 - 指令把关：guard_status（AI 能对真实设备做到哪一步、规则、哪些设备接了真实设备、等待批准的指令）。
 - 人工记录：check_forms（点检、首件检验、化验这些手填的表：问什么、标准、用于哪些设备、多久一次）、check_rounds（哪些设备的点检逾期了、哪些待做）、check_results（最近填了什么，哪些超差或异常，谁记的）。表单要管理员在后台「点检」页里设。
@@ -187,6 +188,24 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			}},
 		{"erp_status", "一家公司的 ERP 对接：开没开、没工单时停线还是仿真、拉取地址和上次结果、回调成功失败数、各状态工单数。", obj(map[string]any{"company": str("公司 id")}, "company"),
 			func(m map[string]any) (any, error) { return o.ERP(who, s(m, "company")) }},
+		{"plan_status", agents.PlanStatusDesc, obj(map[string]any{"company": str("公司 id")}, "company"),
+			func(m map[string]any) (any, error) { return o.PlanStatus(who, s(m, "company")) }},
+		{"plan_whatif", agents.PlanWhatIfDesc, obj(map[string]any{
+			"company": str("公司 id"), "part": str("料号或产品名，如 QZ-B20-4 或 发动机曲轴"), "qty": map[string]any{"type": "integer", "description": "数量（件）"},
+			"due": str("交期，如 2026-11-11 或 2026-11-11 17:00（只写日期按当天 17:00）"), "customer": str("客户，可省"),
+		}, "company", "part", "qty", "due"),
+			func(m map[string]any) (any, error) {
+				qty, _ := m["qty"].(float64)
+				in, err := agents.RushIn(s(m, "part"), int(qty), s(m, "due"), s(m, "customer"))
+				if err != nil {
+					return nil, err
+				}
+				v, err := o.PlanRush(who, s(m, "company"), in)
+				if err != nil {
+					return nil, err
+				}
+				return agents.RushAnswer(v), nil
+			}},
 		{"calibration", "一家公司每台设备的仿真参数：模板值、按实测拟合的值（附依据的读数个数和可信度，拟合不了的说明缺什么）、在用的值；拟合期间回放的误差（模板 vs 拟合）；最近一天模型和实测差多少。只列有实测数据或在用校准的设备。", obj(map[string]any{"company": str("公司 id")}, "company"),
 			func(m map[string]any) (any, error) {
 				all, err := o.Calibration(who, s(m, "company"))
@@ -375,7 +394,10 @@ func (o *Ops) ConsoleAgent(ctx context.Context, who auth.Who, session, text stri
 			return v, err
 		}, agentpkg.ToolMetadata{ReadOnly: true, ConcurrencySafe: !strings.HasPrefix(t.name, "propose_")})
 	}
-	goal := fmt.Sprintf("（管理员：%s，%s）\n\n%s", who.Name, scopeText(who), text)
+	// the date, so "下周三" can be a date
+	now := time.Now().In(time.FixedZone("CST", 8*3600))
+	day := "日一二三四五六"
+	goal := fmt.Sprintf("（现在是 %s 周%s %s；管理员：%s，%s）\n\n%s", now.Format("2006-01-02"), string([]rune(day)[now.Weekday()]), now.Format("15:04"), who.Name, scopeText(who), text)
 	// every turn ends with words: an empty answer after a proposal points at the card, else it is
 	// said that nothing came back, never silence
 	proposed := false

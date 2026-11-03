@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -109,6 +110,7 @@ func TestPlanPublish(t *testing.T) {
 		Running  bool
 		Locked   bool
 		Start    time.Time
+		End      time.Time
 	}
 	type planOut struct {
 		ID     string
@@ -201,6 +203,25 @@ func TestPlanPublish(t *testing.T) {
 	code, b = do(mtok, "POST", "/api/plan/huaduan/rush", map[string]any{"part": "LG-B20", "qty": 500, "due": time.Now().Add(30 * time.Hour).Format("2006-01-02 15:04")})
 	if code != 200 || !strings.Contains(string(b), `"pushed"`) {
 		t.Fatalf("rush: %d %.400s", code, b)
+	}
+	// a running order withdrawn after publishing is a reason to plan again
+	for _, o := range p.Result.Orders {
+		if o.Running {
+			if code, b := do(ptok, "DELETE", "/api/erp/huaduan/orders/"+o.No, nil); code != 200 {
+				t.Fatalf("cancel: %d %s", code, b)
+			}
+			// the line lets the order go on its next step
+			var b []byte
+			for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
+				if _, b = do(mtok, "GET", "/api/plan/huaduan", nil); strings.Contains(string(b), "撤回") {
+					break
+				}
+			}
+			if !strings.Contains(string(b), "撤回") || !strings.Contains(string(b), o.No) {
+				t.Errorf("no re-plan suggestion after %s (to end %s) was withdrawn: %s", o.No, o.End, b[bytes.Index(b, []byte(`"suggest"`)):][:300])
+			}
+			break
+		}
 	}
 	es, _ := trail.List(t.Context(), "huaduan", 0, 50)
 	if !slices.ContainsFunc(es, func(e audit.Entry) bool { return e.Action == "plan.publish" && e.Who == "计划员" }) {

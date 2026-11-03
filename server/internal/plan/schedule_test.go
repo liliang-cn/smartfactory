@@ -280,3 +280,25 @@ func TestBig(t *testing.T) {
 		t.Errorf("plan costs %.1f, plain due-date order %.1f", r.KPI.Cost, base.KPI.Cost)
 	}
 }
+
+// An urgent order goes where it costs least: ahead of others when that keeps it on time, at the
+// end when it is due late enough not to push anyone back.
+func TestInsert(t *testing.T) {
+	mk := func(dueH float64) *Input {
+		return &Input{Now: t0, Goal: Due, Lines: []Line{line("A", 36, 0)}, Orders: []Order{
+			order("O1", "X", 100, 40, "A"), order("O2", "X", 100, 40, "A"), order("R", "X", 100, dueH, "A"),
+		}}
+	}
+	seq := Seq{"A": {"O1", "O2"}}
+	r, err := Insert(mk(200), seq, "R")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := byNo(r); o["R"].Seq != 3 || o["O1"].Seq != 1 {
+		t.Errorf("due next week, placed %d (O1 %d)", o["R"].Seq, o["O1"].Seq)
+	}
+	r, _ = Insert(mk(1.5), seq, "R")
+	if o := byNo(r); o["R"].Seq != 1 || o["R"].Late {
+		t.Errorf("due in 1.5 h, placed %d late %v", o["R"].Seq, o["R"].Late)
+	}
+}
