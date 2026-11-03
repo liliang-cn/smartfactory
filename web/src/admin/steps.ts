@@ -10,6 +10,7 @@ const TEXT: Record<string, { doing: string; done: (n: number) => string; failed?
   get_company: { doing: '正在读取参考配置', done: (n) => (n > 1 ? `已读取 ${n} 份参考配置` : '已读取参考配置') },
   propose_company: { doing: '正在检查工厂配置', done: () => '工厂配置检查通过，已填入下面的表单', failed: '工厂配置检查没通过' },
   propose_industry: { doing: '正在检查设备和工艺', done: () => '设备和工艺检查通过，建厂时一起使用', failed: '设备和工艺检查没通过' },
+  propose_change: { doing: '正在检查改动', done: (n) => (n > 1 ? `改动检查通过（第 ${n} 版）` : '改动检查通过，放进下面的预览'), failed: '改动没通过检查' },
   draw_shape: { doing: '正在画外形', done: (n) => (n > 1 ? `已画好 ${n} 个外形` : '已画好外形'), failed: '外形没画出来' },
 };
 

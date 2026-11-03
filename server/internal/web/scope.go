@@ -51,6 +51,10 @@ func (s *Server) scopeRoutes(mux *http.ServeMux) {
 		v, err := o.ScopeApply(s.caller(r), via(r), r.PathValue("id"), in)
 		answer(w, v, err)
 	})
+	mux.HandleFunc("GET /api/admin/companies/{id}/versions", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.Versions(s.caller(r), r.PathValue("id"))
+		answer(w, v, err)
+	})
 	mux.HandleFunc("POST /api/admin/companies/{id}/undo", func(w http.ResponseWriter, r *http.Request) {
 		v, err := o.Undo(s.caller(r), via(r), r.PathValue("id"))
 		answer(w, v, err)

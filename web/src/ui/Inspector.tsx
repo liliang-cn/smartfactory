@@ -21,6 +21,7 @@ import { InventoryList } from './Panels';
 import { ManualRecords } from './ManualRecords';
 import { MachineDie } from './MachineDie';
 import { MachineHints } from './Hints';
+import { EditHere } from './EditHere';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
 const isVehicle = (a: Asset) => a.type === 'agv' || a.type === 'truck';
@@ -382,6 +383,7 @@ export function Inspector() {
           </span>
         )}
         <span className="truncate tabular-nums">{note}</span>
+        {a.type === 'station' && a.line && <EditHere node={{ kind: 'machine', plant: layout.id, asset: a.id }} className="ml-auto" />}
       </div>
 
       <div className={cn(peek && 'max-md:hidden')}>

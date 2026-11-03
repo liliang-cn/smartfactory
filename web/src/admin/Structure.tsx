@@ -1,10 +1,12 @@
 // The company's plant breakdown (PBS): 公司 › 工厂 › 车间 › 产线 › 设备 by tag (位号), each node
 // with how many lines and machines it holds and how many of them are running or down now.
 import { useEffect, useState } from 'react';
-import { ChevronRightIcon, ExternalLinkIcon } from 'lucide-react';
+import { ChevronRightIcon, ExternalLinkIcon, PencilIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import * as api from './api';
+import { link } from './Console';
 import { Panel } from './Panel';
+import { UndoButton } from './ScopeEditor';
 
 const STATE: Record<string, { label: string; dot: string }> = {
   running: { label: '运行', dot: 'bg-success' },
@@ -32,7 +34,19 @@ function Rollup({ n }: { n: api.PBSNode }) {
   );
 }
 
-function Node({ n, depth, company, plant, open: start }: { n: api.PBSNode; depth: number; company: string; plant?: string; open: boolean }) {
+/** 修改: opens the part editor on this node. */
+function Edit({ n, company, plant }: { n: api.PBSNode; company: string; plant?: string }) {
+  if (n.kind === 'company' || !plant) return null;
+  const node: api.ScopeNode = { kind: n.kind, plant, ...(n.kind === 'area' ? { area: n.id } : n.kind === 'line' ? { line: n.id } : n.kind === 'machine' ? { asset: n.id } : {}) };
+  return (
+    <a {...link(api.scopeHref(company, node))} title={`修改这个${LEVEL[n.kind]}`} aria-label={`修改${LEVEL[n.kind]}${n.kind === 'machine' ? n.id : n.name}`}
+      className="flex h-7 shrink-0 items-center gap-1 rounded-lg px-2 text-[12px] font-bold text-primary hover:bg-brand-soft">
+      <PencilIcon className="size-3.5" /><span className="max-sm:hidden">修改</span>
+    </a>
+  );
+}
+
+function Node({ n, depth, company, plant, open: start, editable }: { n: api.PBSNode; depth: number; company: string; plant?: string; open: boolean; editable: boolean }) {
   // a line with a machine down opens by itself, so the fault is in sight
   const [open, setOpen] = useState(start || (n.kind === 'line' && (n.states.fault ?? 0) > 0));
   if (n.kind === 'machine') {
@@ -45,14 +59,16 @@ function Node({ n, depth, company, plant, open: start }: { n: api.PBSNode; depth
         <span className="min-w-0 truncate">{n.name}{n.sub && n.sub !== n.name && <span className="ml-1.5 text-muted-foreground">{n.sub}</span>}</span>
         <span className={cn('ml-auto shrink-0 text-[12px] font-semibold', n.state === 'fault' ? 'text-destructive' : n.state === 'running' ? 'text-success' : 'text-muted-foreground')}
           title={n.fault || undefined}>{st.label}{n.fault ? `：${n.fault}` : ''}</span>
+        {editable && <Edit n={n} company={company} plant={plant} />}
       </li>
     );
   }
   const counts = n.kind === 'line' ? `${n.machines} 台` : `${n.lines} 条线，${n.machines} 台`;
   return (
     <li>
+      <div className="flex items-center gap-1 rounded-lg pr-1 hover:bg-surface">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        className={cn('flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left hover:bg-surface', depth === 0 && 'py-2')}
+        className={cn('flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-1 text-left', depth === 0 && 'py-2')}
         style={{ paddingLeft: depth * 18 + 4 }}>
         <ChevronRightIcon className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
         <span className="shrink-0 rounded-md bg-brand-soft px-1.5 py-px text-[11px] font-bold text-primary">{LEVEL[n.kind]}</span>
@@ -62,11 +78,13 @@ function Node({ n, depth, company, plant, open: start }: { n: api.PBSNode; depth
         <span className="ml-auto shrink-0 text-[12px] text-muted-foreground tabular-nums max-sm:hidden">{counts}</span>
         <Rollup n={n} />
       </button>
+      {editable && <Edit n={n} company={company} plant={n.kind === 'plant' ? n.id : plant} />}
+      </div>
       {open && !!n.children?.length && (
         <ul>
           {n.children.map((c) => (
             <Node key={`${c.kind}:${c.id}`} n={c} depth={depth + 1} company={company} plant={n.kind === 'plant' ? n.id : plant}
-              open={c.kind === 'plant' || c.kind === 'area'} />
+              open={c.kind === 'plant' || c.kind === 'area'} editable={editable} />
           ))}
         </ul>
       )}
@@ -78,8 +96,13 @@ function Node({ n, depth, company, plant, open: start }: { n: api.PBSNode; depth
 }
 
 /** The breakdown, kept up to date every few seconds while it is on screen. */
-export function StructurePanel({ company }: { company: string }) {
+export function StructurePanel({ company, editable = false }: { company: string; editable?: boolean }) {
   const [tree, setTree] = useState<api.PBSNode | null>(null);
+  const [versions, setVersions] = useState(0);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (editable) api.versions(company).then((v) => setVersions(v.versions), () => setVersions(0));
+  }, [company, editable, n]);
   const [error, setError] = useState<string>();
   useEffect(() => {
     let live = true;
@@ -90,10 +113,13 @@ export function StructurePanel({ company }: { company: string }) {
   }, [company]);
   return (
     <Panel title="工厂结构"
-      aside={<span className="text-[12px] text-muted-foreground max-sm:hidden">公司 › 工厂 › 车间 › 产线 › 设备（位号），状态每 5 秒刷新</span>}>
+      aside={<>
+        <span className="text-[12px] text-muted-foreground max-sm:hidden">{editable ? '点「修改」只改那一处，' : ''}状态每 5 秒刷新</span>
+        {editable && <UndoButton company={company} versions={versions} className="h-8 rounded-lg text-[12.5px]" onDone={() => setN((x) => x + 1)} />}
+      </>}>
       {error && <p className="text-[13px] text-destructive">结构读不出来：{error}</p>}
       {!tree && !error && <p className="text-[13px] text-muted-foreground">正在读取…</p>}
-      {tree && <ul className="grid"><Node n={tree} depth={0} company={company} open /></ul>}
+      {tree && <ul className="grid"><Node n={tree} depth={0} company={company} open editable={editable} /></ul>}
       {tree && (
         <a href={`/?company=${encodeURIComponent(company)}`} className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-bold text-primary hover:underline">
           在孪生里看<ExternalLinkIcon className="size-3.5" />

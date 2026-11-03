@@ -7,6 +7,7 @@ import type { PlantSim } from '@/sim/plant';
 import type { Asset, Line } from '@/sim/types';
 import { goToAsset, groupsOf, runtime, usePlant, useTick, useUI } from '@/state/store';
 import { companyWords, groupFigures, shortLabel } from './group';
+import { EditHere } from './EditHere';
 import { ALERT_STATES, CHIP, hhmm, pct, rate, stateLabel } from './status';
 
 const isMachine = (a: Asset) => a.spec?.runRise !== undefined;
@@ -37,6 +38,7 @@ export function Tracker() {
   const { sim, layout } = usePlant();
   const lineId = useUI((s) => s.trackerLine);
   const line = sim.lineById[lineId] ?? sim.lines[0];
+  const laid = layout.lines.find((l) => l.id === line.id);
   const { o, k, done, eta, finished } = orderProgress(sim, line);
   const w = layout.terms.order?.steps ?? ['工单下达', '物料齐套', '生产中', '生产完成', '质检入库', '发运'];
   const steps: [React.ReactNode, string, string, 'done' | 'now' | ''][] = [
@@ -58,6 +60,8 @@ export function Tracker() {
           <span className="grid size-[22px] place-items-center rounded-md bg-primary text-primary-foreground"><ClipboardListIcon className="size-3.5" /></span>
           <h3 className="shrink-0 whitespace-nowrap text-[15px] font-extrabold">{layout.terms.order?.title ?? '工单跟踪'}</h3>
           <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{line.name}  {o.no}  {o.part}{line.lot?.no ? `  ${words.lot} ${line.lot.no}${line.lot.supplier ? `（${line.lot.supplier}）` : ''}` : ''}</span>
+          <EditHere node={{ kind: 'line', plant: layout.id, line: line.id }} label="修改这条线" />
+          {laid?.area && layout.areas.length > 1 && <EditHere node={{ kind: 'area', plant: layout.id, area: laid.area }} label="修改车间" />}
           <div className="ml-auto flex max-w-[50%] shrink-0 gap-0.5 overflow-x-auto rounded-lg bg-muted p-[3px] [scrollbar-width:none]">
             {sim.lines.map((l) => (
               <button

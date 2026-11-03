@@ -251,7 +251,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
           ))}
         </TabsList>
         <TabsContent value="scene" className="grid gap-5">
-          <StructurePanel company={c.id} />
+          <StructurePanel company={c.id} editable={!c.builtin} />
           {error && <Panel><p className="text-[13px] text-destructive">配置读不出来：{error}</p></Panel>}
           {data?.plants.map((p) => <PlantPanel key={p.id} plant={p} info={c.plants.find((x) => x.id === p.id)} />)}
         </TabsContent>

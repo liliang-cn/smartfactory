@@ -216,6 +216,19 @@ func (o *Ops) ScopeApply(who auth.Who, via, company string, req ScopeRequest) (*
 	return r, nil
 }
 
+// Versions is how many earlier configs of the company are kept to undo to, and when the latest was.
+func (o *Ops) Versions(who auth.Who, company string) (map[string]any, error) {
+	if _, _, err := o.scopeBase(who, company); err != nil {
+		return nil, err
+	}
+	vs := o.Engine.Versions(company)
+	out := map[string]any{"versions": len(vs)}
+	if len(vs) > 0 {
+		out["last"] = vs[len(vs)-1].At
+	}
+	return out, nil
+}
+
 // Undo puts the company back on the config it ran before its last change.
 func (o *Ops) Undo(who auth.Who, via, company string) (*ScopeView, error) {
 	if _, _, err := o.scopeBase(who, company); err != nil {

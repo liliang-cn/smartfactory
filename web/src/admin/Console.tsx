@@ -20,6 +20,7 @@ import { AgentPanel, useAgent } from './AgentPanel';
 const Customers = lazy(() => import('./Customers'));
 const Customer = lazy(() => import('./Customer'));
 const Builder = lazy(() => import('./Builder'));
+const ScopeEditor = lazy(() => import('./ScopeEditor'));
 const Industries = lazy(() => import('./Industries'));
 const Templates = lazy(() => import('./Templates'));
 const Accounts = lazy(() => import('./Accounts'));
@@ -220,6 +221,7 @@ function MeCard({ me, onSignOut, mustChange }: { me: api.Me; onSignOut(): void; 
 function Page({ path }: { path: string }) {
   let m: Record<string, string> | null;
   if ((m = match(path, '/admin/customers/:id/edit'))) return <Builder edit={m.id} />;
+  if ((m = match(path, '/admin/customers/:id/scope'))) return <ScopeEditor company={m.id} />;
   if ((m = match(path, '/admin/customers/:id'))) return <Customer id={m.id} />;
   if (match(path, '/admin/new')) return <Builder />;
   if ((m = match(path, '/admin/industries/:id'))) return <Industries open={m.id} />;

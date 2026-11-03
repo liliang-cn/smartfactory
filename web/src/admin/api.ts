@@ -142,6 +142,47 @@ export interface PBSNode {
 }
 export const pbs = (c: string) => call<PBSNode>('GET', `/api/pbs/${encodeURIComponent(c)}`);
 export const createCompany = (cfg: CompanyCfg | unknown) => call<CompanyCreated>('POST', '/api/admin/companies', cfg);
+
+/** One part of a built company, picked to be changed: a plant, an area (by code), a line (L3) or a machine (by tag). */
+export interface ScopeNode { kind: 'plant' | 'area' | 'line' | 'machine'; plant: string; area?: string; line?: string; asset?: string }
+export interface ScopeStation { id: string; key: string; name: string; label: string; code: string; cycle: number; warn: number; trip: number }
+export interface ScopeLine { id: string; no: number; name: string; cfg: number; rep: number; area: string; speed: number; stations: ScopeStation[] }
+export interface ScopePlant { id: string; name: string; industry: string; hall: string; areas: { code: string; name: string; note: string; index: number }[]; lines: ScopeLine[] }
+export interface MachineKind { label: string; code: string; archetype: string; cycle: number; warn: number; trip: number; run: number }
+/** A company config as the part editor works on it: each line with its own steps (objects). */
+export interface ScopeModel {
+  config: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  routes: Record<string, Record<string, unknown[]>>;
+  machines: Record<string, Record<string, MachineKind>>;
+  plants: ScopePlant[];
+}
+export interface Scope { node: ScopeNode; title: string; path: string; plant: number; line: number; step: number; areaIndex: number; areaLines?: number[]; shared?: string }
+export interface ScopeView { scope: Scope; model: ScopeModel; base: string; versions: number; last?: string }
+export interface TagChange { plant: string; from: string; to?: string; name: string; line: string; attached?: string[] }
+export interface ScopeResult {
+  title: string; shared?: string; base: string; saved: boolean; config: Record<string, unknown>;
+  preview: { changes: string[]; tags: TagChange[]; added: string[] };
+}
+export interface ScopeChange { op: 'set' | 'insert' | 'remove'; path: string; value?: unknown }
+export type ScopeEvent = ComposeEvent | { kind: 'proposal'; result: ScopeResult } | { kind: 'refused'; text: string; result: string[] };
+
+const scopePath = (c: string) => `/api/admin/companies/${encodeURIComponent(c)}`;
+export const scope = (c: string, n: ScopeNode) =>
+  call<ScopeView>('GET', `${scopePath(c)}/scope?${new URLSearchParams(Object.entries(n).filter(([, v]) => v) as [string, string][])}`);
+export const scopePreview = (c: string, b: { node: ScopeNode; base: string; config?: unknown; changes?: ScopeChange[] }) =>
+  call<ScopeResult>('POST', `${scopePath(c)}/scope/preview`, b);
+export const scopeApply = (c: string, b: { node: ScopeNode; base: string; config?: unknown; changes?: ScopeChange[] }) =>
+  call<ScopeResult>('POST', `${scopePath(c)}/scope/apply`, b);
+/** The AI changes the part from a few words: steps, then each proposal that passed the check (nothing saved). */
+export const scopeAI = (c: string, node: ScopeNode, brief: string, signal: AbortSignal, on: (ev: ScopeEvent) => void) =>
+  stream(`${scopePath(c)}/scope/ai`, { node, brief }, signal, on);
+export const versions = (c: string) => call<{ versions: number; last?: string }>('GET', `${scopePath(c)}/versions`);
+/** Back to the config the company ran before its last change. */
+export const undoCompany = (c: string) => call<Omit<ScopeView, 'scope'>>('POST', `${scopePath(c)}/undo`);
+
+/** Where the part editor for a node is. */
+export const scopeHref = (c: string, n: ScopeNode) =>
+  `/admin/customers/${encodeURIComponent(c)}/scope?${new URLSearchParams(Object.entries(n).filter(([, v]) => v) as [string, string][])}`;
 export const deleteCompany = (id: string) => call<{ ok: true }>('DELETE', `/api/admin/companies/${encodeURIComponent(id)}`);
 export const industry = (id: string) => call<IndustryCfg>('GET', `/api/admin/industries/${encodeURIComponent(id)}`);
 export const createIndustry = (cfg: unknown) => call<unknown>('POST', '/api/admin/industries', cfg);

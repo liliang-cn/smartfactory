@@ -97,6 +97,8 @@ export function describe(e: Entry, names?: Map<string, string>): { text: string;
     case 'assistant.delete': return { text: `删除助手 ${e.target}` };
     case 'company.create': return { text: `建好或改了公司「${e.detail || co(e.target)}」的场景` };
     case 'company.delete': return { text: `删除公司「${co(e.target)}」` };
+    case 'company.edit': return { text: `改了${e.target}${e.detail ? `：${e.detail}` : ''}` };
+    case 'company.undo': return { text: `撤销了公司「${co(e.target)}」的上次修改${e.detail ? `，${e.detail}` : ''}` };
     case 'industry.create': return { text: `保存行业的设备和工艺 ${e.target}` };
     case 'industry.shape': return { text: `保存 AI 画的外形「${e.detail || e.target}」（${e.target.split('/')[0]}）` };
     case 'token.issue': return { text: `发令牌给${titleOf(e.target)}（${ROLE[e.detail as Entry['role']] ?? e.detail}）` };

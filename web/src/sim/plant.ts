@@ -597,7 +597,8 @@ export class PlantSim {
     if (ext) return this.extJob(line, ext);
     const vs = this.variants(line);
     const prev = line.job ?? line.last;
-    let v = prev ? prev.variant : 0;
+    // a job taken over from the server may carry no variant, or one this line no longer has
+    let v = Math.min(prev?.variant ?? 0, vs.length - 1);
     const L = line.layout;
     // the week's order mix: how much is called off today, and which part number the day favours
     const week = this.layout.calendar?.week;
