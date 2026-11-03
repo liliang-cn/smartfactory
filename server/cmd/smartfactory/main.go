@@ -56,6 +56,7 @@ import (
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/ops"
+	"smartfactory/internal/plan"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/stores"
@@ -530,6 +531,21 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			go kb.RunBOMs(ctx)
 		}
 	}
+	// production plans: the open orders laid out on the lines, published to the queues they run
+	var plans *plan.Service
+	if cfg.Data != "" && production != nil {
+		st, err := plan.Open(cfg.Data)
+		if err != nil {
+			return fmt.Errorf("plans: %w", err)
+		}
+		defer st.Close()
+		plans = plan.New(st, eng, production, log)
+		plans.Stores = store
+		plans.HistoryOEE = func(company string) (float64, bool) { return historyOEE(ctx, plants[company]) }
+		if assistants != nil {
+			assistants.Plans = plans
+		}
+	}
 	// what happens to the machines (checks, reading hints, calibrations, AI commands), in each
 	// company's knowledge base
 	if kb != nil {
@@ -555,7 +571,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	}
 	ws := &sfweb.Server{
 		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Devices: devs, MQTT: mq, Checks: manual, Hints: hints, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
-		History: plants, Tables: dining, Stores: store,
+		History: plants, Tables: dining, Stores: store, Plans: plans,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
@@ -566,6 +582,22 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		ws.FirstToken = filepath.Join(cfg.Data, "initial-admin-token")
 	}
 	mcptools.AddValueTool(ms, ws.Operations().ValueTool)
+	if plans != nil {
+		o := ws.Operations()
+		mcptools.AddPlan(ms, mcptools.PlanTools{
+			Status: func(w auth.Who, company string) (any, error) { return o.PlanStatus(w, company) },
+			Rush: func(w auth.Who, company, part string, qty int, due, customer string) (any, error) {
+				t, err := erp.ParseTime(due)
+				if err != nil {
+					return nil, err
+				}
+				if len(strings.TrimSpace(due)) == 10 {
+					t = t.Add(17 * time.Hour)
+				}
+				return o.PlanRush(w, company, plan.RushInput{Part: part, Qty: qty, Due: t, Customer: customer})
+			},
+		})
+	}
 	if kb != nil {
 		mcptools.AddKnowledge(ms, ws.Operations().KnowledgeTools())
 	}
@@ -810,4 +842,27 @@ func vitals(ctx context.Context, data string, eng *engine.Engine, broker *adapte
 	h := health.New(data, p)
 	go h.Run(ctx.Done())
 	return h
+}
+
+// historyOEE is a company's OEE over the last 7 days of its history database.
+func historyOEE(ctx context.Context, h ops.PlantHistory) (float64, bool) {
+	if h == nil {
+		return 0, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	to := time.Now()
+	days, err := h.Days(ctx, to.AddDate(0, 0, -7), to)
+	if err != nil {
+		return 0, false
+	}
+	var planned, good float64
+	for _, d := range days {
+		planned += d.PlannedS
+		good += d.GoodIdealS
+	}
+	if planned < 3600 {
+		return 0, false
+	}
+	return good / planned, true
 }

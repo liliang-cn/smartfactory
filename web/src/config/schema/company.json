@@ -419,6 +419,11 @@
                   "minimum": 1,
                   "maximum": 9007199254740991
                 },
+                "changeover": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1440
+                },
                 "speed": {
                   "type": "number",
                   "exclusiveMinimum": 0

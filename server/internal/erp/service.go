@@ -254,7 +254,7 @@ func (s *Service) Submit(company string, ins []Input, source string) []Result {
 			out[i] = r
 			continue
 		}
-		route, res := s.route(company, in)
+		route, res := s.planned(company, in)
 		if !res.OK {
 			r.Error = strings.Join(res.Errors, "；")
 			out[i] = r
@@ -277,6 +277,28 @@ func (s *Service) Submit(company string, ins []Input, source string) []Result {
 		s.touch(company)
 	}
 	return out
+}
+
+// planned keeps an order the published production plan put on a line where it is, when the ERP
+// sends it again and still lets it run anywhere that makes its part; any other order is routed.
+func (s *Service) planned(company string, in Input) (engine.Route, engine.ConfigResult) {
+	if in.Plant == "" && in.Line == "" {
+		if old, err := s.Store.Get(company, in.No); err == nil && old != nil && old.Status == Queued && old.Seq > 0 &&
+			old.PartNo == in.PartNo && old.Product == in.Product && old.Line != "" {
+			return engine.Route{Plant: old.Plant, PlantName: old.PlantName, Line: old.Line, LineName: old.LineName}, engine.ConfigResult{OK: true}
+		}
+	}
+	return s.route(company, in)
+}
+
+// ApplyPlan hands the lines a published production plan: each queued order gets the plan's line
+// and place in its queue, and those it holds back wait. It says how many orders it placed or held.
+func (s *Service) ApplyPlan(company string, as []Assign, hold []string) (int, error) {
+	n, err := s.Store.applyPlan(company, as, hold, time.Now())
+	if err == nil {
+		s.touch(company)
+	}
+	return n, err
 }
 
 // route picks the line for an order, counting what is queued in the store for each line (the

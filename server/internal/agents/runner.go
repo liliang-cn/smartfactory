@@ -25,6 +25,7 @@ import (
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/plan"
 	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 )
@@ -61,6 +62,8 @@ type Runner struct {
 	Tables *tables.Service
 	// Stores are the stores, dies and new parts in development.
 	Stores *stores.Service
+	// Plans are the production plans.
+	Plans *plan.Service
 
 	dir string
 	llm domain.Generator
@@ -148,6 +151,9 @@ func (r *Runner) prompt(a Agent) string {
 		}
 	}
 	p := fmt.Sprintf("你是%s的「%s」。\n\n%s\n%s%s", name, a.Name, t.prompt, commonPrompt, storePrompt(r.Stores != nil, a.Kind))
+	if r.Plans != nil {
+		p += planPrompt
+	}
 	if s := strings.TrimSpace(a.Instructions); s != "" {
 		p += "\n\n公司给你的要求（优先于上面的做法）：\n" + s
 	}
@@ -199,8 +205,15 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 			all[t.name] = t
 		}
 	}
+	names := append(slices.Clone(t.Tools), storeToolsOf(r.Stores != nil, t.Kind)...)
+	if r.Plans != nil {
+		for _, t := range planTools(r.Plans, a.Company) {
+			all[t.name] = t
+			names = append(names, t.name)
+		}
+	}
 	writes := map[string]bool{}
-	for _, name := range append(slices.Clone(t.Tools), storeToolsOf(r.Stores != nil, t.Kind)...) {
+	for _, name := range names {
 		tl, ok := all[name]
 		if !ok {
 			continue // a part this server does not have (no ERP orders, no knowledge base)

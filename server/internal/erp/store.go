@@ -51,6 +51,10 @@ type Order struct {
 	Started  *time.Time `json:"started,omitempty"`
 	Finished *time.Time `json:"finished,omitempty"`
 	Updated  time.Time  `json:"updated"`
+	// Seq is its place in its line's queue as the published production plan has it (0: not
+	// planned, it runs after the planned ones by due date); Hold: the plan holds it back (缺料).
+	Seq  int  `json:"seq,omitempty"`
+	Hold bool `json:"hold,omitempty"`
 }
 
 // Input is an order as the ERP sends it. Plant and Line, when given, say where it must run.
@@ -90,12 +94,19 @@ func Open(dir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// the published production plan's place in the queue, and orders it holds back
+	for _, c := range []string{"seq", "hold"} {
+		if _, err := db.Exec(`ALTER TABLE orders ADD COLUMN ` + c + ` INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			db.Close()
+			return nil, err
+		}
+	}
 	return &Store{db: db}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-const orderCols = `no, part_no, product, name, qty, due, customer, price, plant, plant_name, line, line_name, problem, status, good, scrap, source, created, started, finished, updated`
+const orderCols = `no, part_no, product, name, qty, due, customer, price, plant, plant_name, line, line_name, problem, status, good, scrap, source, created, started, finished, updated, seq, hold`
 
 func ms(t time.Time) int64 { return t.UnixMilli() }
 
@@ -111,7 +122,7 @@ func scanOrder(sc interface{ Scan(...any) error }) (Order, error) {
 	var o Order
 	var due, created, started, finished, updated int64
 	err := sc.Scan(&o.No, &o.PartNo, &o.Product, &o.Name, &o.Qty, &due, &o.Customer, &o.Price, &o.Plant, &o.PlantName, &o.Line, &o.LineName,
-		&o.Problem, &o.Status, &o.Good, &o.Scrap, &o.Source, &created, &started, &finished, &updated)
+		&o.Problem, &o.Status, &o.Good, &o.Scrap, &o.Source, &created, &started, &finished, &updated, &o.Seq, &o.Hold)
 	o.Due, o.Started, o.Finished = when(due), when(started), when(finished)
 	o.Created, o.Updated = time.UnixMilli(created), time.UnixMilli(updated)
 	return o, err
@@ -238,7 +249,7 @@ func (s *Store) put(company string, in Input, r engine.Route, source string, now
 	}
 	switch {
 	case old == nil:
-		_, err = s.db.Exec(`INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		_, err = s.db.Exec(`INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0)`,
 			company, in.No, in.PartNo, in.Product, in.Name, in.Qty, due, in.Customer, in.Price, in.Plant, in.Line,
 			r.Plant, r.PlantName, r.Line, r.LineName, "", Queued, 0, 0, source, ms(now), 0, 0, ms(now))
 		return Created, err
@@ -292,11 +303,12 @@ func (s *Store) cancel(company, no string, now time.Time) (*Order, error) {
 	return o, nil
 }
 
-// queue is what the lines are to run: queued orders by line, earliest due first (orders without
-// a due date after those with one, in the order they came).
+// queue is what the lines are to run: queued orders by line, those the published production
+// plan placed first in its order, then the rest earliest due first (orders without a due date
+// after those with one, in the order they came). Orders the plan holds back are not handed out.
 func (s *Store) queue(company, mode string) (*engine.OrderQueue, error) {
-	rows, err := s.db.Query(`SELECT no, part_no, name, qty, due, customer, price, plant, line, status FROM orders
-		WHERE company=? AND status IN ('queued','running') ORDER BY CASE due WHEN 0 THEN 9e15 ELSE due END, created`, company)
+	rows, err := s.db.Query(`SELECT no, part_no, name, qty, due, customer, price, plant, line, status, hold FROM orders
+		WHERE company=? AND status IN ('queued','running') ORDER BY CASE seq WHEN 0 THEN 9e15 ELSE seq END, CASE due WHEN 0 THEN 9e15 ELSE due END, created`, company)
 	if err != nil {
 		return nil, err
 	}
@@ -305,11 +317,12 @@ func (s *Store) queue(company, mode string) (*engine.OrderQueue, error) {
 	for rows.Next() {
 		var o engine.ExtOrder
 		var plant, line, status string
-		if err := rows.Scan(&o.No, &o.PartNo, &o.Name, &o.Qty, &o.Due, &o.Customer, &o.Price, &plant, &line, &status); err != nil {
+		var hold bool
+		if err := rows.Scan(&o.No, &o.PartNo, &o.Name, &o.Qty, &o.Due, &o.Customer, &o.Price, &plant, &line, &status, &hold); err != nil {
 			return nil, err
 		}
 		q.Active = append(q.Active, o.No)
-		if status == Queued && line != "" {
+		if status == Queued && line != "" && !hold {
 			k := plant + "/" + line
 			q.Queue[k] = append(q.Queue[k], o)
 		}
@@ -453,4 +466,85 @@ func (s *Store) companies() ([]string, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// Want is where an order asked to run (plant and line ids or names, "" when it named none).
+type Want struct{ Plant, Line string }
+
+// Wants are where the queued orders asked to run.
+func (s *Store) Wants(company string) (map[string]Want, error) {
+	rows, err := s.db.Query(`SELECT no, want_plant, want_line FROM orders WHERE company=? AND status=?`, company, Queued)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]Want{}
+	for rows.Next() {
+		var no string
+		var w Want
+		if err := rows.Scan(&no, &w.Plant, &w.Line); err != nil {
+			return nil, err
+		}
+		out[no] = w
+	}
+	return out, rows.Err()
+}
+
+// Assign is where a published plan puts a queued order: its line and its place on it (1 first).
+type Assign struct {
+	No        string
+	Plant     string
+	PlantName string
+	Line      string
+	LineName  string
+	Seq       int
+}
+
+// Queued is the order of the queue: "plant/line" → the queued orders in the order the lines take them.
+func (s *Store) Queued(company string) (map[string][]string, error) {
+	q, err := s.queue(company, "idle")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for k, os := range q.Queue {
+		for _, o := range os {
+			out[k] = append(out[k], o.No)
+		}
+	}
+	return out, nil
+}
+
+// applyPlan gives the queued orders the plan's lines and places, holds back those it holds, and
+// takes the rest out of the plan (they run after the planned ones by due date). It says how many
+// orders the plan placed or held.
+func (s *Store) applyPlan(company string, as []Assign, hold []string, now time.Time) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE orders SET seq=0, hold=0 WHERE company=? AND status=? AND (seq<>0 OR hold<>0)`, company, Queued); err != nil {
+		return 0, err
+	}
+	n := 0
+	count := func(res sql.Result, err error) error {
+		if err == nil {
+			k, _ := res.RowsAffected()
+			n += int(k)
+		}
+		return err
+	}
+	for _, a := range as {
+		if err := count(tx.Exec(`UPDATE orders SET plant=?, plant_name=?, line=?, line_name=?, problem='', seq=?, hold=0, updated=? WHERE company=? AND no=? AND status=?`,
+			a.Plant, a.PlantName, a.Line, a.LineName, a.Seq, ms(now), company, a.No, Queued)); err != nil {
+			return 0, err
+		}
+	}
+	for _, no := range hold {
+		if err := count(tx.Exec(`UPDATE orders SET seq=0, hold=1, updated=? WHERE company=? AND no=? AND status=?`, ms(now), company, no, Queued)); err != nil {
+			return 0, err
+		}
+	}
+	return n, tx.Commit()
 }

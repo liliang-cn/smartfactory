@@ -34,6 +34,7 @@ import (
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/ops"
+	"smartfactory/internal/plan"
 	"smartfactory/internal/series"
 	"smartfactory/internal/sfconv"
 	"smartfactory/internal/stores"
@@ -96,6 +97,8 @@ type Server struct {
 	Tables *tables.Service
 	// Stores are the companies' stores, dies and new parts (nil without data).
 	Stores *stores.Service
+	// Plans are the companies' production plans (nil without data).
+	Plans *plan.Service
 	// Health is the server's own vitals (nil: the 运行状况 page says it is off); Model names the
 	// language model the assistants use, false when none is set.
 	Health *health.Sampler
@@ -175,6 +178,7 @@ func (s *Server) Handler() http.Handler {
 	s.checkRoutes(mux)
 	s.tableRoutes(mux)
 	s.storeRoutes(mux)
+	s.planRoutes(mux)
 	s.valueRoutes(mux)
 	s.anomalyRoutes(mux)
 	s.pbsRoutes(mux)

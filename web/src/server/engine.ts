@@ -7,7 +7,7 @@ import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry,
 import { companyOntology } from '@/config/ontology';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg, type StepCfg } from '@/config/schema';
 import { History } from '@/sim/history';
-import { isMachineSpec, linkPlants, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
+import { countSpan, isMachineSpec, linkPlants, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
 import { reported } from '@/sim/venue';
 import type { Calibration, Command, ExtOrder, OrderEvent } from '@/sim/types';
 import type { PlantLayout } from '@/core/layout';
@@ -416,6 +416,94 @@ function syncOrders(c: string, json: string): string {
 /** Stops taking ERP orders: lines make up their own again. */
 function stopOrders(c: string) {
   feeds.delete(c);
+}
+
+// ---------- production planning ----------
+//
+// The server plans the ERP orders (finite capacity, changeovers, material, dies) in Go. It asks
+// here what each line is: what it makes, how fast, how long a changeover takes, its calendar, what
+// it runs now; and it checks a plan by running it on an offline copy of the plant.
+
+/** What a plan needs to know of each line of a company. */
+function planModel(c: string): string {
+  const co = get(c);
+  if (!co) return 'null';
+  return JSON.stringify({
+    now: co.plants[0]?.wall() ?? Date.now(),
+    plants: co.plants.map((p) => ({
+      id: p.layout.id, name: p.layout.name, calendar: p.layout.calendar ?? {}, unit: p.layout.unit,
+      lines: p.lines.map((l) => {
+        const neck = Math.max(...l.stations.map((a) => a.cycle));
+        const tooled = l.stations.filter((a) => a.tool);
+        const kpi = p.lineKpi(l);
+        const vs = p.variants(l);
+        const pr = l.layout.product;
+        // a changeover is the slowest tool change of the line's machines, plus the units set up after it
+        const toolChange = tooled.reduce((m, a) => Math.max(m, (a.tool!.change ?? 0) + (a.tool!.setup ?? 0) * neck), 0);
+        const stopped = l.stations.filter((a) => a.state === 'stopped' || (a.fault && p.clock - a.fault.at > 900));
+        const running = l.job?.ext ? { no: l.job.no, part: l.job.partNo, qty: l.job.qty, good: l.job.good } : null;
+        const last = l.job ?? l.last;
+        return {
+          id: l.id, no: l.layout.no, name: l.name, product: pr.key, productName: pr.name,
+          parts: vs.map((v) => ({ partNo: v.partNo, name: v.name })),
+          neck, perf: kpi.perf, quality: kpi.quality, span: countSpan(l), planEff: l.planEff ?? 0,
+          changeover: l.layout.changeover ?? null, toolChange,
+          tools: [...new Set(tooled.map((a) => a.tool!.label))],
+          presses: tooled.map((a) => ({ id: a.id, kind: a.tool!.label })),
+          crew: l.stations.some((a) => a.machine?.crew !== false),
+          running, last: last ? last.partNo : '',
+          down: stopped.length ? stopped.map((a) => `${a.id}${a.fault ? `故障：${a.fault.text}` : '停机'}`).join('；') : '',
+        };
+      }),
+    })),
+  });
+}
+
+/**
+ * Runs a plan on an offline copy of the company (restored from the live state): each line takes
+ * the plan's orders in turn ({"plant/line": orders}) and waits when it has none. Returns when each
+ * order started and finished in the run (epoch ms), within `hours`.
+ */
+function planRun(c: string, json: string, hours: number, dt: number): string {
+  return result(() => {
+    const co = get(c);
+    if (!co) throw new Error(`没有公司 ${c}`);
+    const queue = (JSON.parse(json || '{}') ?? {}) as Record<string, ExtOrder[]>;
+    const events: { kind: string; no: string; plant: string; line: string; at: number; good: number; scrap: number }[] = [];
+    const steps: [PlantSim, Set<string>, Map<string, ExtOrder[]>][] = [];
+    const t0 = co.plants[0]?.wall() ?? Date.now();
+    for (const p of co.plants) {
+      const ids = new Set<string>();
+      const q = new Map<string, ExtOrder[]>();
+      for (const l of p.lines) {
+        const k = `${p.layout.id}/${l.id}`;
+        if (queue[k]?.length || l.job?.ext) {
+          ids.add(l.id);
+          q.set(l.id, [...(queue[k] ?? [])]);
+        }
+      }
+      if (!ids.size) continue;
+      p.headless = true;
+      p.planFeed = {
+        take: (line) => q.get(line.id)?.shift() ?? null,
+        event: (e) => events.push({ kind: e.kind, no: e.no, plant: e.plant, line: e.line, at: p.wall(), good: e.good, scrap: e.scrap }),
+      };
+      // a running ERP order goes on in the copy: it counts as started when the run starts
+      for (const l of p.lines) if (l.job?.ext && ids.has(l.id)) events.push({ kind: 'running', no: l.job.no, plant: p.layout.id, line: l.id, at: p.wall(), good: l.job.good, scrap: l.job.scrap });
+      // a line that made up its own order lets it go: the plan's come first
+      for (const l of p.lines) if (ids.has(l.id) && l.job && !l.job.ext) { l.last = l.job; l.job = undefined; }
+      steps.push([p, ids, q]);
+    }
+    const end = hours * 3600;
+    let t = 0;
+    for (; t < end - 1e-9; t += dt) {
+      for (const [p, ids] of steps) p.stepLines(ids, dt);
+      // every order of the plan done: no need to run on
+      if (Math.round(t / dt) % 300 === 0 && steps.every(([p, ids, q]) => p.lines.every((l) => !ids.has(l.id) || (!l.job && !q.get(l.id)?.length)))) break;
+    }
+    const left = steps.flatMap(([p, ids]) => p.lines.filter((l) => ids.has(l.id) && l.job?.ext).map((l) => ({ no: l.job!.no, plant: p.layout.id, line: l.id, good: l.job!.good, qty: l.job!.qty })));
+    return { start: t0, end: t0 + t * 1000, hours: t / 3600, events, left };
+  });
 }
 
 // ---------- calibration (parameters fitted from measurements) ----------
@@ -1039,5 +1127,5 @@ function list(): string {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
   addIndustry, addCompany, checkIndustry, checkCompany, scopeModel, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
-  tables, reportTable, tableSessions, materials, setHeats, mountTool,
+  tables, reportTable, tableSessions, materials, setHeats, mountTool, planModel, planRun,
 };

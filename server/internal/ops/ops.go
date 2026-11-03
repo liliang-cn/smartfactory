@@ -25,6 +25,7 @@ import (
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
 	"smartfactory/internal/mqttauth"
+	"smartfactory/internal/plan"
 	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 	"smartfactory/internal/tags"
@@ -65,6 +66,8 @@ type Ops struct {
 	Tables *tables.Service
 	// Stores are the companies' stores, dies and new parts in development.
 	Stores *stores.Service
+	// Plans are the companies' production plans.
+	Plans *plan.Service
 }
 
 // Error is an operation refused or failed, with what an HTTP answer would say about it.

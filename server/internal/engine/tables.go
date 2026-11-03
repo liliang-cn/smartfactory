@@ -6,7 +6,7 @@ import (
 )
 
 // optionalFns are engine functions an older bundle may lack; their wrappers answer empty then.
-var optionalFns = []string{"tables", "reportTable", "tableSessions", "materials", "setHeats", "mountTool"}
+var optionalFns = []string{"tables", "reportTable", "tableSessions", "materials", "setHeats", "mountTool", "planModel", "planRun"}
 
 // Table is a restaurant table of a plant as the twin has it now.
 type Table struct {

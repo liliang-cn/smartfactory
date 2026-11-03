@@ -621,8 +621,21 @@
             "type": "number",
             "minimum": 0
           }
+        },
+        "off": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          }
         }
       }
+    },
+    "changeover": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1440
     },
     "pace": {
       "default": 0,

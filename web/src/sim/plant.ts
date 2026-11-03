@@ -161,6 +161,8 @@ export class PlantSim {
   heats?: { no: string; mill: string; material: string; kg: number }[];
   /** nobody will look at sparklines (history backfill, what-if runs): skip keeping them */
   headless = false;
+  /** a headless run of a production plan: the orders each line is to run, in turn, in place of made-up ones */
+  planFeed?: OrderFeed;
   /** `${asset} ${code}` of every active alarm, so clearing a condition that is not raised is cheap */
   private raised = new Set<string>();
   /** reconditioned tools coming back to stock: [inventory key, elapsed when back] */
@@ -544,7 +546,9 @@ export class PlantSim {
     const n = cal?.night;
     this.night = !!n && (n.from < n.to ? h >= n.from && h < n.to : h >= n.from || h < n.to);
     const was = this.closed;
-    this.closed = this.shut(h);
+    // a day off (周日休息): the lines take in nothing all day, like closed hours
+    const off = cal?.off?.includes(new Date(local).getUTCDay()) ?? false;
+    this.closed = this.shut(h) || off;
     // closed hours are planned stops: not counted against the lines' performance
     if (this.closed && !was) for (const line of this.lines) line.pauses.push([this.elapsed, Infinity]);
     // closing time: guests still at their tables finish up within half an hour (a stay overnight goes on)
@@ -587,7 +591,7 @@ export class PlantSim {
    */
   private newJob(line: Line) {
     // what-if runs and backfills make up their own orders and leave the ERP's queue alone
-    const ext = this.headless ? undefined : this.orders?.take(line);
+    const ext = this.headless ? this.planFeed?.take(line) : this.orders?.take(line);
     if (ext === null) {
       // the ERP has nothing for this line: it waits, and remembers the part it last ran
       if (line.job) line.last = line.job;
@@ -666,7 +670,7 @@ export class PlantSim {
     };
     line.last = undefined;
     if (prev && prev.variant !== v) this.changeover(line, prev, line.job);
-    this.orders?.event({ kind: 'start', no: o.no, plant: this.layout.id, line: line.id, good: 0, scrap: 0, plantName: this.layout.name, lineName: line.name });
+    (this.headless ? this.planFeed : this.orders)?.event({ kind: 'start', no: o.no, plant: this.layout.id, line: line.id, good: 0, scrap: 0, plantName: this.layout.name, lineName: line.name });
   }
 
   /**
@@ -746,7 +750,7 @@ export class PlantSim {
       const ran = Math.min(1, Math.max(0.2, (j.qty * neck) / Math.max(1, (j.done - j.issued) / 1000)));
       line.planEff = 0.7 * (line.planEff ?? 0.75) + 0.3 * ran;
       this.history?.jobDone(line, j);
-      if (j.ext && !this.headless) this.orders?.event({ kind: 'done', no: j.no, plant: this.layout.id, line: line.id, good: j.good, scrap: j.scrap, plantName: this.layout.name, lineName: line.name });
+      if (j.ext) (this.headless ? this.planFeed : this.orders)?.event({ kind: 'done', no: j.no, plant: this.layout.id, line: line.id, good: j.good, scrap: j.scrap, plantName: this.layout.name, lineName: line.name });
       // for the company's own sites: into stock for the next delivery round; else it leaves with the next scheduled pickup
       if (this.depot && this.depot.outletNames().includes(j.customer)) this.depot.add(line, j);
       else this.schedule({ at: j.done + rand(2, 16) * 3600_000, kind: 'ship', data: { line: line.id, job: { ...j, escapes: { ...(j.escapes ?? {}) } } } });

@@ -579,7 +579,15 @@ export const Industry = z.object({
      * weekday favours (the customers' call-off schedule) — more changeovers on mixed days
      */
     week: z.array(z.number().min(0)).length(7).optional(),
+    /** weekdays the plant does not run (Sunday 0, Saturday 6), e.g. [0] for 周日休息: lines take in nothing that day */
+    off: z.array(z.number().int().min(0).max(6)).optional(),
   }).default({}),
+  /**
+   * minutes a line takes to change from one part number to another (dies, fixtures, first-article
+   * check), for production planning. Default: the longest tool change of the line's machines (a
+   * forging die about 90), else 30 when a product has several part numbers
+   */
+  changeover: z.number().min(0).max(24 * 60).optional(),
   /**
    * how far real cycles run over the nominal one: each unit takes cycle × (1 + |N(0, pace)|), so
    * performance sits a few percent under 100 % the way it does on a real line (0 = always nominal)
@@ -619,6 +627,8 @@ export const LineCfg = z.object({
   steps: z.array(Step).optional(),
   /** build this many identical lines */
   repeat: z.number().int().min(1).default(1),
+  /** minutes this line takes to change part numbers, in place of the industry's `changeover` */
+  changeover: z.number().min(0).max(24 * 60).optional(),
   /** belt speed m/s at 100 % */
   speed: z.number().positive().optional(),
   /** belt top height in metres */

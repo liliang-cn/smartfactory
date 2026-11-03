@@ -90,6 +90,8 @@ export interface LineLayout {
   order: OrderInfo;
   /** the places (tables, pitches) of its first station with slots, in slot order */
   places: PlaceLayout[];
+  /** minutes to change part numbers, as configured (the line's, else the industry's) */
+  changeover?: number;
 }
 
 /** An area of the plant: the band of the hall its lines stand in. */
@@ -404,6 +406,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       lane: z + beltW / 2 + 3.2,
       area: areaCfg[area].code,
       places: places.map((p) => ({ ...p, z: r1(z + p.z) })),
+      changeover: cfg.changeover ?? industry.changeover,
       order: {
         no: cfg.order?.no ?? `${industry.terms.order?.prefix ?? 'MO'}-261005-${plantIndex + 1}${pad2(n)}`,
         part: cfg.order?.part ?? product.name,
