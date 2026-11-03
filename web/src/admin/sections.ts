@@ -1,7 +1,7 @@
 // A company's pages: the sidebar lists them in these groups, the company page shows the one picked.
 import {
   BookOpenTextIcon, BotIcon, BoxIcon, ClipboardCheckIcon, ClipboardListIcon, KeyRoundIcon, PlugZapIcon, ScrollTextIcon, ShieldCheckIcon,
-  FlaskConicalIcon, GaugeIcon, HammerIcon, SlidersHorizontalIcon, TrendingUpIcon, WarehouseIcon,
+  FlaskConicalIcon, GaugeIcon, HammerIcon, ListTreeIcon, SlidersHorizontalIcon, TrendingUpIcon, WarehouseIcon,
 } from 'lucide-react';
 
 export const SECTIONS = [
@@ -12,6 +12,7 @@ export const SECTIONS = [
     { id: 'guard', label: '指令', icon: ShieldCheckIcon },
   ] },
   { group: '物料与研发', tabs: [
+    { id: 'bom', label: 'BOM', icon: ListTreeIcon },
     { id: 'stores', label: '库房', icon: WarehouseIcon },
     { id: 'dies', label: '模具', icon: HammerIcon },
     { id: 'rnd', label: '研发', icon: FlaskConicalIcon },

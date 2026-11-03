@@ -195,7 +195,7 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 		all[t.name] = t
 	}
 	if r.Stores != nil {
-		for _, t := range storeTools(r.Stores, a.Company) {
+		for _, t := range append(storeTools(r.Stores, a.Company), bomTools(r.Stores, r.Orders, a.Company)...) {
 			all[t.name] = t
 		}
 	}

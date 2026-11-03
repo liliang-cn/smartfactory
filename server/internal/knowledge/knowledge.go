@@ -62,7 +62,13 @@ type Base struct {
 	Calibrations func(company string) ([]CalibInfo, error)
 	Commands     func(company string, since time.Time) ([]CommandInfo, error)
 	edirty       map[string]bool
-	ekick        chan struct{}
+
+	// BOMs reads a company's BOMs in effect (bom.go); nil keeps none.
+	BOMs   func(company string) ([]BOMInfo, error)
+	bmu    sync.Mutex
+	bdirty map[string]bool
+	bkick  chan struct{}
+	ekick  chan struct{}
 }
 
 type company struct {
@@ -78,7 +84,8 @@ func Open(dir string, eng *engine.Engine, log *slog.Logger) (*Base, error) {
 		log = slog.Default()
 	}
 	return &Base{dir: dir, eng: eng, log: log, dbs: map[string]*company{}, ontos: map[string]*ontoDB{}, dirty: map[string]bool{}, kick: make(chan struct{}, 1),
-		edirty: map[string]bool{}, ekick: make(chan struct{}, 1)}, nil
+		edirty: map[string]bool{}, ekick: make(chan struct{}, 1),
+		bdirty: map[string]bool{}, bkick: make(chan struct{}, 1)}, nil
 }
 
 func (b *Base) Close() {
@@ -115,7 +122,7 @@ func (b *Base) open(id string) (*company, error) {
 	prev, _ := os.ReadFile(mark)
 	reset := strings.TrimSpace(string(prev)) != sig
 	if reset {
-		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json"} {
+		for _, f := range []string{id + ".db", id + ".db-wal", id + ".db-shm", id + ".process.json", id + ".orders.json", id + ".events.json", id + ".boms.json"} {
 			os.Remove(filepath.Join(b.dir, f))
 		}
 	}
@@ -139,6 +146,7 @@ func (b *Base) open(id string) (*company, error) {
 		go func() {
 			b.OrdersChanged(id)
 			b.EventsChanged(id)
+			b.BOMsChanged(id)
 		}()
 	}
 	c := &company{db: db}
@@ -281,6 +289,8 @@ const (
 	TSupplier = "supplier"
 	TCustomer = "customer"
 	TOrder    = "order"
+	// a component in a BOM: a forging, a bought-in or standard part, raw material, a consumable
+	TComponent = "component"
 	// what happened to a machine: a check filled in on it, a hint that a reading is unusual, its
 	// calibration, a command an AI sent it, a reading out of the ontology's limits
 	TCheck       = "check"
@@ -302,6 +312,9 @@ const (
 	RForCustomer = "for_customer"
 	ROfProduct   = "of_product"
 	RRunsOn      = "runs_on"
+	// a part uses its components (its BOM), and is a part number of a product family
+	RUses      = "uses"
+	RVariantOf = "variant_of"
 	// each of what happened is linked to the station it happened on
 	RCheckedOn  = "checked_on"
 	RSeenOn     = "seen_on"
@@ -312,7 +325,7 @@ const (
 
 // relations are the relation types the graph keeps (the rest are CortexDB's own: mentions, …).
 var relations = []string{RHasPlant, RHasArea, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn,
-	RCheckedOn, RSeenOn, RCalibrates, RTargets, RBreachedOn}
+	RCheckedOn, RSeenOn, RCalibrates, RTargets, RBreachedOn, RUses, RVariantOf}
 
 func (b *Base) model(id string) (*Model, error) {
 	js := b.eng.ProcessModel(id)
@@ -799,7 +812,7 @@ func (b *Base) vocabulary(id string) [][2]string {
 		}
 	}
 	add(m.Name, TCompany)
-	for _, v := range b.orderVocabulary(id) {
+	for _, v := range append(b.orderVocabulary(id), b.bomVocabulary(id)...) {
 		add(v[0], v[1])
 	}
 	out := make([][2]string, 0, len(seen))
@@ -1125,7 +1138,7 @@ type Entity struct {
 	Detail []Fact `json:"detail,omitempty"`
 }
 
-var kinds = []string{TCompany, TPlant, TArea, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TCheck, TAnomaly, TCalibration, TCommand, TViolation}
+var kinds = []string{TCompany, TPlant, TArea, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TComponent, TCheck, TAnomaly, TCalibration, TCommand, TViolation}
 
 // Lookup is the thing called name (of kind, if given) and its relations. What happened to a
 // station comes after the rest, each kind the latest first, with what it was in a line (Title).
@@ -1316,6 +1329,8 @@ type Stats struct {
 	// Events are what recently happened to the machines (checks, hints, calibrations, AI
 	// commands), one passage each.
 	Events int `json:"events"`
+	// BOMs are the part numbers with a BOM in effect, one passage each.
+	BOMs int `json:"boms"`
 }
 
 func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
@@ -1348,7 +1363,8 @@ func (b *Base) Stats(ctx context.Context, company string) (Stats, error) {
 	st.Process = len(ps.IDs)
 	st.Orders = len(b.orderState(company).Items)
 	st.Events = len(b.eventState(company).Items)
-	st.Docs -= st.Process + st.Orders + st.Events
+	st.BOMs = len(b.bomState(company).Items)
+	st.Docs -= st.Process + st.Orders + st.Events + st.BOMs
 	return st, nil
 }
 

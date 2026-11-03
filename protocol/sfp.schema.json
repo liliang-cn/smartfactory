@@ -4159,6 +4159,9 @@
         "events": {
           "type": "number"
         },
+        "boms": {
+          "type": "number"
+        },
         "library": {
           "type": "number"
         },
@@ -4267,6 +4270,7 @@
                 "supplier",
                 "customer",
                 "order",
+                "component",
                 "check",
                 "anomaly",
                 "calibration",
@@ -4402,6 +4406,7 @@
                   "supplier",
                   "customer",
                   "order",
+                  "component",
                   "check",
                   "anomaly",
                   "calibration",
@@ -4451,7 +4456,9 @@
                   "seen_on",
                   "calibrates",
                   "targets",
-                  "breached_on"
+                  "breached_on",
+                  "uses",
+                  "variant_of"
                 ]
               }
             },

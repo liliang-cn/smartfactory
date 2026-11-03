@@ -94,7 +94,7 @@ type OntConstraint struct {
 // The built-in classes, each the kind of thing in the knowledge graph it is.
 var builtinClasses = []struct{ Name, Kind string }{
 	{"公司", TCompany}, {"工厂", TPlant}, {"车间", TArea}, {"产线", TLine}, {"工位", TStation}, {"设备", TMachine}, {"产品", TProduct},
-	{"供应商", TSupplier}, {"客户", TCustomer}, {"工单", TOrder},
+	{"供应商", TSupplier}, {"客户", TCustomer}, {"工单", TOrder}, {"物料", TComponent},
 	{"点检", TCheck}, {"读数异常", TAnomaly}, {"校准", TCalibration}, {"AI指令", TCommand}, {"约束告警", TViolation},
 }
 
@@ -104,6 +104,7 @@ var builtinRelations = []struct{ Name, Domain, Range, Type string }{
 	{"有产线", "工厂", "产线", RHasLine}, {"有工位", "产线", "工位", RHasStation},
 	{"生产", "产线", "产品", RMakes}, {"设备是", "工位", "设备", RIsA}, {"下游", "工位", "工位", RFeeds},
 	{"供应", "供应商", "产品", RSupplies}, {"卖给", "产品", "客户", RSoldTo},
+	{"用到", "产品", "物料", RUses},
 }
 
 // declares is whether the ontology declares a relation of that name (nil declares none).
@@ -154,7 +155,7 @@ const (
 
 	// ontologyFormat changes whenever compileOntology writes differently, so every ontology is
 	// loaded again.
-	ontologyFormat = "1"
+	ontologyFormat = "2"
 )
 
 var (

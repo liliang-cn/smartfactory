@@ -25,6 +25,7 @@ export const KIND: Record<Kind, { label: string; color: string; r: number }> = {
   supplier: { label: '供应商', color: '#b99a6a', r: 5.5 },
   customer: { label: '客户', color: '#8f6ae0', r: 5.5 },
   order: { label: '工单', color: '#e0526b', r: 4.4 },
+  component: { label: '物料', color: '#7a8ea8', r: 3.8 },
   check: { label: '点检', color: '#0f9fb3', r: 3.2 },
   anomaly: { label: '异常', color: '#e0a100', r: 3.2 },
   calibration: { label: '校准', color: '#c056b5', r: 3.2 },
@@ -34,7 +35,7 @@ export const KIND: Record<Kind, { label: string; color: string; r: number }> = {
 };
 
 const PRIORITY: Record<Kind, number> = {
-  company: 0, plant: 1, area: 2, class: 2, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9, violation: 9,
+  company: 0, plant: 1, area: 2, class: 2, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, component: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9, violation: 9,
 };
 
 /** what happened at a station, and how it is linked to it */

@@ -10,9 +10,9 @@ import (
 
 // storeKinds are the assistants that get the store tools, and which.
 var storeKinds = map[string][]string{
-	"docs":    {"stock_query", "die_status", "heat_trace", "rnd_projects"},
-	"notes":   {"die_status", "heat_trace", "rnd_projects", "stock_query"},
-	"service": {"heat_trace", "stock_query"},
+	"docs":    {"stock_query", "die_status", "heat_trace", "rnd_projects", "bom_query", "where_used", "material_shortage"},
+	"notes":   {"die_status", "heat_trace", "rnd_projects", "stock_query", "bom_query", "where_used", "material_shortage"},
+	"service": {"heat_trace", "stock_query", "bom_query", "material_shortage"},
 }
 
 // storeToolsOf are the store tools an assistant of a kind works with (none without stores).
@@ -34,6 +34,8 @@ func storePrompt(have bool, kind string) string {
 - 问模具（某台设备上的模具还能打多少件、在哪、翻新过几次），用 die_status，可以直接填设备编号；出处写【模具台账】。
 - 问某个工单用的哪个炉号的料、某炉钢用到了哪些工单、钢厂和质保书，用 heat_trace；出处写【炉号追溯】。客户投诉、质量问题要追到原材料时也先查它。
 - 问新品开发、试锻情况，用 rnd_projects；出处写【研发项目】。
+- 问某个零件用到哪些物料（标准件、原材料、外购件、辅料）、BOM 是哪个版本、做多少件要多少料，用 bom_query；问某样物料用在哪些零件上，用 where_used；出处写【BOM】。
+- 问缺什么料、某样料（如 40Cr 棒料）缺多少、工单齐不齐套，用 material_shortage，它按在做和排队的工单展开 BOM、按排产顺序分库存；出处写【齐套】。
 `
 }
 

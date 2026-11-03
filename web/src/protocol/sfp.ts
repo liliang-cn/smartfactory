@@ -764,20 +764,23 @@ export const SaveTemplate = z.object({
  * What a thing in the graph is: the process, the production orders from the ERP, and what recently happened to a machine —
  * check (a form out of spec, or a station's latest checks) · anomaly (a hint that a reading is unusual) · calibration · command (one an AI sent) · violation (a reading out of an ontology constraint)
  */
-export const EntityKind = z.enum(['company', 'plant', 'area', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command', 'violation']);
+export const EntityKind = z.enum(['company', 'plant', 'area', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'component', 'check', 'anomaly', 'calibration', 'command', 'violation']);
 /**
  * has_plant · has_area (plant → 车间) · has_line (plant or 车间 → line) · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to ·
  * for_customer (order → customer) · of_product (order → product) · runs_on (order → line) ·
+ * uses (product → component, its BOM) · variant_of (part number → product family) ·
  * checked_on (check → station) · seen_on (anomaly → station) · calibrates (calibration → station) · targets (command → station) · breached_on (violation → station)
  */
 export const RelationType = z.enum(['has_plant', 'has_area', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on',
-  'checked_on', 'seen_on', 'calibrates', 'targets', 'breached_on']);
+  'checked_on', 'seen_on', 'calibrates', 'targets', 'breached_on', 'uses', 'variant_of']);
 
 export const KnowledgeOverview = z.object({
   kinds: z.record(str, num),
   relations: z.record(str, num),
   /** passages from documents, from the process, one per production order kept, and one per thing that happened to a machine */
   docs: num, process: num, orders: num, events: num,
+  /** part numbers with a BOM in effect, one passage each */
+  boms: num.optional(),
   /** documents in the library, and how many are in the knowledge base */
   library: num, indexed: num,
 }).meta({ description: 'GET /api/knowledge/{company} — members and above' });

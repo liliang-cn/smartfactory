@@ -20,6 +20,7 @@ const REL: Record<string, [string, string]> = {
   has_plant: ['有工厂', '属于公司'], has_area: ['有车间', '属于工厂'], has_line: ['有产线', '属于'], makes: ['生产', '由这条线生产'],
   has_station: ['有工位', '在产线'], is_a: ['是', '这种设备的工位'], feeds: ['下游', '上游'], supplies: ['供应', '供应商'], sold_to: ['卖给', '买它'],
   for_customer: ['客户', '工单'], of_product: ['产品', '工单'], runs_on: ['产线', '工单'],
+  uses: ['用到', '用在'], variant_of: ['属于', '料号'],
   checked_on: ['工位', '点检'], seen_on: ['工位', '读数异常'], calibrates: ['工位', '校准'], targets: ['工位', 'AI 指令'], breached_on: ['工位', '约束告警'],
 };
 const relLabel = (type: string, out: boolean) => REL[type]?.[out ? 0 : 1] ?? type;
@@ -248,7 +249,7 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
 
   if (error) return <section className="rounded-[18px] bg-card p-5 shadow-float"><p className="text-[13px] text-destructive">{error}</p></section>;
   const k = st?.kinds ?? {};
-  const counts: [api.EntityKind, number][] = (['plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command', 'violation'] as const)
+  const counts: [api.EntityKind, number][] = (['plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'component', 'check', 'anomaly', 'calibration', 'command', 'violation'] as const)
     .map((x) => [x, k[x] ?? 0]);
   return (
     <div className="grid gap-5">
@@ -262,7 +263,7 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
         ))}
         <span className="h-5 w-px bg-border max-sm:hidden" />
         <span className="text-[12.5px] text-muted-foreground">
-          {st ? <>工艺 <b className="text-foreground tabular-nums">{st.process}</b> 段，{st.orders > 0 && <>工单 <b className="text-foreground tabular-nums">{st.orders}</b> 张，</>}{st.events > 0 && <>设备记录 <b className="text-foreground tabular-nums">{st.events}</b> 条，</>}文档 <b className="text-foreground tabular-nums">{st.docs}</b> 段（资料库 {st.library} 篇{st.library > st.indexed ? `，${st.library - st.indexed} 篇还没入库` : ''}）</> : ' '}
+          {st ? <>工艺 <b className="text-foreground tabular-nums">{st.process}</b> 段，{st.orders > 0 && <>工单 <b className="text-foreground tabular-nums">{st.orders}</b> 张，</>}{(st.boms ?? 0) > 0 && <>BOM <b className="text-foreground tabular-nums">{st.boms}</b> 份，</>}{st.events > 0 && <>设备记录 <b className="text-foreground tabular-nums">{st.events}</b> 条，</>}文档 <b className="text-foreground tabular-nums">{st.docs}</b> 段（资料库 {st.library} 篇{st.library > st.indexed ? `，${st.library - st.indexed} 篇还没入库` : ''}）</> : ' '}
         </span>
         <div className="ml-auto flex items-center gap-2">
           <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as 'graph' | 'ontology')} className="rounded-xl bg-surface p-0.5" aria-label="看什么">

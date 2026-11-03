@@ -25,6 +25,8 @@ import { useConsole } from './Console';
 import { useCompany } from './layouts';
 import { Panel } from './Panel';
 import { go } from './router';
+import { Needs } from './Bom';
+import * as S from './storesApi';
 
 type Status = api.Order['status'];
 const STATUS: Record<Status, { label: string; tone: string }> = {
@@ -64,7 +66,7 @@ function Progress({ o }: { o: api.Order }) {
 }
 
 /** The orders each line is running, as the line sees them. */
-function Running({ list, onCancel }: { list: api.Order[]; onCancel?(o: api.Order): void }) {
+function Running({ list, onCancel, kits, onKit }: { list: api.Order[]; onCancel?(o: api.Order): void; kits?: Map<string, S.Kit>; onKit(k: S.Kit): void }) {
   if (!list.length) return null;
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3 max-sm:grid-cols-1">
@@ -83,10 +85,39 @@ function Running({ list, onCancel }: { list: api.Order[]; onCancel?(o: api.Order
             <small className="truncate text-[12px] text-muted-foreground">{[o.partNo, o.name, o.customer].filter(Boolean).join('，')}</small>
           </div>
           <Progress o={o} />
+          {kits?.get(o.no)?.rev && <div><KitChip k={kits.get(o.no)} onOpen={onKit} /></div>}
           {o.due && <small className={cn('text-[12px]', late(o) ? 'font-bold text-destructive' : 'text-muted-foreground')}>交期 {fmt(o.due)}{late(o) ? '，已过' : ''}</small>}
         </div>
       ))}
     </div>
+  );
+}
+
+/** Whether an order's materials are all there, by its BOM against the stores (orders ahead take theirs first). */
+function KitChip({ k, onOpen }: { k?: S.Kit; onOpen(k: S.Kit): void }) {
+  if (!k?.rev) return <span className="text-[12px] text-muted-foreground">没有 BOM</span>;
+  if (k.qty <= 0) return <span className="text-[12px] text-muted-foreground">已做完</span>;
+  return (
+    <button type="button" onClick={() => onOpen(k)}
+      className={cn('rounded-md px-1.5 py-0.5 text-[12px] font-bold whitespace-nowrap', k.ready ? 'bg-success-soft text-success' : 'bg-danger-soft text-destructive')}>
+      {k.ready ? '齐套' : `缺 ${k.short} 样`}
+    </button>
+  );
+}
+
+function KitDialog({ k, onClose }: { k: S.Kit | null; onClose(): void }) {
+  return (
+    <Dialog open={!!k} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle>{k?.no} 物料齐套</DialogTitle>
+          <DialogDescription>
+            按 {k?.part} 的 BOM {k?.rev} 版，算还没做的 {k?.qty} 件要多少料。库存先分给排在它前面的工单，剩下的才算它的。
+          </DialogDescription>
+        </DialogHeader>
+        {k && <Needs needs={k.needs} given />}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -208,6 +239,8 @@ export function OrderBoard({ c }: { c: api.Company }) {
   const [entering, setEntering] = useState(false);
   const [cancelling, setCancelling] = useState<api.Order | null>(null);
   const [pulling, setPulling] = useState(false);
+  const [kit, setKit] = useState<S.Kitting | null>(null);
+  const [kitOpen, setKitOpen] = useState<S.Kit | null>(null);
   const status = VIEWS.find((v) => v.id === view)!.status;
   const load = useCallback(() => {
     api.orders(c.id, [...status], q.trim()).then((l) => { setList(l); setError(undefined); }, (e: Error) => setError(e.message));
@@ -218,6 +251,16 @@ export function OrderBoard({ c }: { c: api.Company }) {
     const t = setInterval(() => { if (!document.hidden) load(); }, 3000);
     return () => clearInterval(t);
   }, [load]);
+  // how the open orders' materials stand, by their BOMs (again when the orders change)
+  const openNos = (list ?? []).filter((o) => o.status === 'running' || o.status === 'queued').map((o) => `${o.no}:${o.qty}:${o.good}`).join(',');
+  useEffect(() => {
+    const f = () => S.kitting(c.id).then(setKit, () => setKit(null));
+    f();
+    const t = setInterval(() => { if (!document.hidden) f(); }, 20_000);
+    return () => clearInterval(t);
+  }, [c.id, openNos]);
+  const kits = useMemo(() => new Map((kit?.orders ?? []).map((k) => [k.no, k])), [kit]);
+  const withBOM = (kit?.orders ?? []).some((k) => k.rev);
   const running = (list ?? []).filter((o) => o.status === 'running');
   const rest = (list ?? []).filter((o) => o.status !== 'running');
   // a queued order's place in its line's queue
@@ -285,12 +328,27 @@ export function OrderBoard({ c }: { c: api.Company }) {
           </p>
         )}
         <div className="grid gap-4">
-          <Running list={running} onCancel={operator ? setCancelling : undefined} />
+          {view === 'open' && withBOM && (kit?.short.length ?? 0) > 0 && (
+            <div className="rounded-xl border border-destructive/25 bg-danger-soft/50 px-4 py-3 text-[13px]">
+              <b className="text-destructive">在做和排队的工单缺 {kit!.short.length} 样料</b>
+              <ul className="mt-1.5 grid gap-1 text-[12.5px]">
+                {kit!.short.map((s) => (
+                  <li key={s.code + s.unit}>
+                    <b>{[s.grade && !s.name.includes(s.grade) ? s.grade : '', s.name, s.spec && !s.name.includes(s.spec) ? s.spec : ''].filter(Boolean).join(' ')}</b>
+                    ：一共要 {S.qty(s.need, s.unit)}，{s.problem ? s.problem : `库房 ${S.qty(s.stock, s.unit)}`}，<b className="text-destructive">缺 {S.qty(s.short, s.unit)}</b>
+                    <span className="text-muted-foreground">（{s.orders.join('、')}）</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <Running list={running} onCancel={operator ? setCancelling : undefined} kits={withBOM ? kits : undefined} onKit={setKitOpen} />
           {rest.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow className="text-[12px]">
                   <TableHead>工单</TableHead><TableHead>做什么</TableHead><TableHead>产线</TableHead><TableHead className="w-40">完成</TableHead>
+                  {withBOM && view === 'open' && <TableHead>物料</TableHead>}
                   <TableHead className="max-md:hidden">交期</TableHead><TableHead className="max-lg:hidden">来自</TableHead><TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -305,6 +363,7 @@ export function OrderBoard({ c }: { c: api.Company }) {
                       )}
                     </TableCell>
                     <TableCell>{o.status === 'queued' ? <span className="text-muted-foreground tabular-nums">{o.qty} {unit}</span> : <Progress o={o} />}</TableCell>
+                    {withBOM && view === 'open' && <TableCell><KitChip k={kits.get(o.no)} onOpen={setKitOpen} /></TableCell>}
                     <TableCell className={cn('max-md:hidden', late(o) ? 'font-bold text-destructive' : 'text-muted-foreground')}>{fmt(o.due)}</TableCell>
                     <TableCell className="text-[12px] text-muted-foreground max-lg:hidden">{SOURCE[o.source]}<div>{o.finished ? `${fmt(o.finished)} 完成` : ago(o.created)}</div></TableCell>
                     <TableCell className="text-right">
@@ -320,6 +379,7 @@ export function OrderBoard({ c }: { c: api.Company }) {
         </div>
       </Panel>
       <Enter c={c} open={entering} onOpenChange={setEntering} onSent={load} />
+      <KitDialog k={kitOpen} onClose={() => setKitOpen(null)} />
       <AlertDialog open={!!cancelling} onOpenChange={(v) => !v && setCancelling(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -28,6 +28,7 @@ import { StoresPanel } from './Stores';
 import { DiesPanel } from './Dies';
 import { RnDPanel } from './RnD';
 import { StructurePanel } from './Structure';
+import { BOMPanel } from './Bom';
 import { GuardPanel } from './Guard';
 import { HealthPanel } from './Health';
 import { ValuePanel } from './Value';
@@ -263,6 +264,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
         <TabsContent value="calib"><Calibration c={c} /></TabsContent>
         <TabsContent value="guard"><GuardPanel c={c} /></TabsContent>
         <TabsContent value="checks"><ChecksPanel c={c} /></TabsContent>
+        <TabsContent value="bom"><BOMPanel c={c} /></TabsContent>
         <TabsContent value="stores"><StoresPanel c={c} /></TabsContent>
         <TabsContent value="dies"><DiesPanel c={c} /></TabsContent>
         <TabsContent value="rnd"><RnDPanel c={c} /></TabsContent>

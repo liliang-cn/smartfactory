@@ -121,13 +121,17 @@ type Twin interface {
 	CompanyIDs() []string
 }
 
-// Service keeps every company's stores, dies and development projects in {data}/stores.db.
+// Service keeps every company's stores, dies, development projects and BOMs in {data}/stores.db.
 type Service struct {
 	Twin Twin
 	Log  *slog.Logger
 	Now  func() time.Time
 	// Categories are the categories a company's industry packs declare (nil: none).
 	Categories func(company string) []Category
+	// Products are the part numbers a company's lines make, from its config (nil: none known).
+	Products func(company string) []ProductRef
+	// BOMChanged hears that a company's BOMs changed (nil: no one).
+	BOMChanged func(company string)
 	// Event hears what deserves a note in the activity log: a die near the end of its life, an item
 	// below its safety stock (nil: no one).
 	Event func(company, kind, target, text string)
@@ -175,6 +179,10 @@ func Open(dir string, twin Twin, log *slog.Logger) (*Service, error) {
 		CREATE TABLE IF NOT EXISTS trials (company TEXT NOT NULL, project TEXT NOT NULL, id TEXT NOT NULL, at INTEGER NOT NULL, json TEXT NOT NULL,
 			PRIMARY KEY (company, id));
 		CREATE INDEX IF NOT EXISTS trials_project ON trials (company, project, at);
+		CREATE TABLE IF NOT EXISTS boms (company TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, PRIMARY KEY (company, id));
+		CREATE TABLE IF NOT EXISTS ecos (company TEXT NOT NULL, id TEXT NOT NULL, part TEXT NOT NULL, at INTEGER NOT NULL, json TEXT NOT NULL,
+			PRIMARY KEY (company, id));
+		CREATE INDEX IF NOT EXISTS ecos_part ON ecos (company, part, at);
 		CREATE TABLE IF NOT EXISTS seeded (company TEXT PRIMARY KEY)`); err != nil {
 		db.Close()
 		return nil, err

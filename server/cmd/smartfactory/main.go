@@ -512,6 +512,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		}
 		defer store.Close()
 		store.Categories = func(company string) []stores.Category { return storeCategories(eng, company) }
+		store.Products = func(company string) []stores.ProductRef { return storeProducts(eng, company) }
 		if trail != nil {
 			system := auth.Who{Name: "库房"}
 			store.Event = func(company, kind, target, text string) {
@@ -521,6 +522,12 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		go store.Run(ctx)
 		if assistants != nil {
 			assistants.Stores = store
+		}
+		// the BOMs in effect in each company's knowledge base: product —uses→ component
+		if kb != nil {
+			kb.BOMs = func(company string) ([]knowledge.BOMInfo, error) { return bomInfos(store, company) }
+			store.BOMChanged = kb.BOMsChanged
+			go kb.RunBOMs(ctx)
 		}
 	}
 	// what happens to the machines (checks, reading hints, calibrations, AI commands), in each

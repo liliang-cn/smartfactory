@@ -204,11 +204,11 @@ func TestProjectReleasesItsTrialDie(t *testing.T) {
 	if err != nil || p.Stage != "试锻" || len(p.Trials) != 1 || len(p.Dies) != 1 {
 		t.Fatalf("after a trial: %+v %v", p, err)
 	}
-	if _, err := s.Release("acme", "厂长", p.ID); !strings.Contains(problems(err), "合格") {
+	if _, err := s.Release("acme", "厂长", p.ID, SignOff{}); !strings.Contains(problems(err), "合格") {
 		t.Fatalf("released without a good trial: %v", err)
 	}
 	s.AddTrial("acme", "周", Trial{Project: p.ID, Die: "T-1", Qty: 20, Good: 20, Result: "合格"})
-	p, err = s.Release("acme", "厂长", p.ID)
+	p, err = s.Release("acme", "厂长", p.ID, SignOff{})
 	if err != nil || p.Stage != "量产" || p.Released == nil || p.Dies[0].Place != InStore {
 		t.Fatalf("released: %+v %v", p, err)
 	}

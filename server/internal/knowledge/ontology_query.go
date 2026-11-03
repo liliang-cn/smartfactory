@@ -177,7 +177,7 @@ func classesOf(m *Model) []OntClassInfo {
 
 // recordKinds are the built-in classes whose things are not in the ontology (orders and what
 // happened to the machines change by the minute): the knowledge graph counts them.
-var recordKinds = map[string]bool{TOrder: true, TCheck: true, TAnomaly: true, TCalibration: true, TCommand: true, TViolation: true}
+var recordKinds = map[string]bool{TOrder: true, TComponent: true, TCheck: true, TAnomaly: true, TCalibration: true, TCommand: true, TViolation: true}
 
 func relationText(r OntRelation) string {
 	or := func(s string) string { return cmp.Or(s, "任何东西") }

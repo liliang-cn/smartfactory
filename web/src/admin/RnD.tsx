@@ -1,14 +1,16 @@
 // 研发: new parts being developed for customers — the drawing and die design revisions, the trial
 // die, every trial forging with its settings and what inspection found — up to the sign-off that
-// lets the line make it.
+// lets the line make it — and with it, the part's BOM revision and drawing revision going in
+// effect, recorded as an engineering change.
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { BadgeCheckIcon, FlaskConicalIcon, PlusIcon } from 'lucide-react';
+import { BadgeCheckIcon, FlaskConicalIcon, ListTreeIcon, PlusIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type * as api from './api';
 import * as S from './storesApi';
 import { Panel } from './Panel';
+import { go } from './router';
 import { Empty, Field, FormDialog, Pick, Text } from './StoreForm';
 
 const RESULT_TONE: Record<string, string> = { 合格: 'text-success', 需改模: 'text-warning', 需改工艺: 'text-warning', 不合格: 'text-destructive' };
@@ -18,13 +20,25 @@ export function RnDPanel({ c }: { c: api.Company }) {
   const [error, setError] = useState<string>();
   const [edit, setEdit] = useState<Partial<S.Project> | null>(null);
   const [trial, setTrial] = useState<S.Project | null>(null);
-  const load = useCallback(() => S.rnd(c.id).then((d) => { setData(d); setError(undefined); }, (e) => setError((e as Error).message)), [c.id]);
+  const [signing, setSigning] = useState<S.Project | null>(null);
+  // each part's BOM, as the BOM page has it
+  const [parts, setParts] = useState<S.PartRow[]>([]);
+  const load = useCallback(() => {
+    S.bomOverview(c.id).then((d) => setParts(d.parts), () => {});
+    return S.rnd(c.id).then((d) => { setData(d); setError(undefined); }, (e) => setError((e as Error).message));
+  }, [c.id]);
   useEffect(() => { load(); }, [load]);
   if (error) return <Panel><p className="text-[13px] text-destructive">研发项目读不出来：{error}</p></Panel>;
   if (!data) return null;
-  const release = async (p: S.Project) => {
-    try { await S.releaseProject(c.id, p.id); toast.success(`${p.part} 已批准量产，试制模具转入模具库`); load(); } catch (e) { toast.error(S.problemsOf(e).join('；')); }
+  const draft = async (p: S.Project) => {
+    try {
+      const b = await S.draftProjectBOM(c.id, p.id);
+      toast.success(`已按项目起了 ${b.part} ${b.rev} 版 BOM 草稿，去 BOM 页把料补全`);
+      load();
+    } catch (e) { toast.error(S.problemsOf(e).join('；')); }
   };
+  const bomOf = (p: S.Project) => parts.find((x) => x.part.toUpperCase() === p.part.toUpperCase());
+  const toBOM = (p: S.Project) => go(`${location.pathname}?tab=bom&part=${encodeURIComponent(p.part)}`);
   return (
     <div className="grid gap-5">
       <Panel title="新品开发" aside={data.operator && <Button className="h-9 rounded-lg font-bold" onClick={() => setEdit({ stage: data.stages[0] })}><PlusIcon />新项目</Button>}>
@@ -47,7 +61,7 @@ export function RnDPanel({ c }: { c: api.Company }) {
                     <div className="ml-auto flex gap-1">
                       <Button size="sm" variant="outline" className="h-8 rounded-lg font-bold" onClick={() => setTrial(p)}><FlaskConicalIcon />记试锻</Button>
                       <Button size="sm" variant="ghost" className="h-8 rounded-lg font-bold" onClick={() => setEdit(p)}>改</Button>
-                      {(p.trials ?? []).some((t) => t.result === '合格') && <Button size="sm" className="h-8 rounded-lg font-bold" onClick={() => release(p)}><BadgeCheckIcon />批准量产</Button>}
+                      {(p.trials ?? []).some((t) => t.result === '合格') && <Button size="sm" className="h-8 rounded-lg font-bold" onClick={() => setSigning(p)}><BadgeCheckIcon />批准量产</Button>}
                     </div>
                   )}
                 </div>
@@ -59,6 +73,17 @@ export function RnDPanel({ c }: { c: api.Company }) {
                 </ol>
                 {(p.dies ?? []).length > 0 && <p className="mt-2 text-[12.5px]">模具：{p.dies!.map((d) => `${d.no}（${{ press: '在机', store: '在库', repair: '返修中', trial: '试制中', scrap: '已报废' }[d.place]}）`).join('、')}</p>}
                 {p.note && <p className="mt-1 text-[12.5px] text-muted-foreground">{p.note}</p>}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]">
+                  <ListTreeIcon className="size-3.5 text-muted-foreground" />
+                  {(() => {
+                    const b = bomOf(p);
+                    if (b?.active) return <span>BOM {b.active} 版生效{b.drawing ? `（图纸 ${b.drawing} 版）` : ''}{b.drafts ? `，另有 ${b.drafts} 份草稿` : ''}</span>;
+                    if (b?.drafts) return <span>BOM 有 {b.drafts} 份草稿，批准量产时选一份生效</span>;
+                    return <span className="text-muted-foreground">还没有 BOM</span>;
+                  })()}
+                  {data.operator && !bomOf(p)?.revisions && <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[12px] font-bold" onClick={() => draft(p)}>按项目起草 BOM</Button>}
+                  {bomOf(p)?.revisions ? <button type="button" className="font-bold text-primary" onClick={() => toBOM(p)}>去 BOM 页</button> : null}
+                </div>
                 {(p.trials ?? []).length > 0 && (
                   <ul className="mt-3 grid gap-1.5 border-t pt-3 text-[12.5px]">
                     {p.trials!.map((t) => (
@@ -81,6 +106,7 @@ export function RnDPanel({ c }: { c: api.Company }) {
       </Panel>
       {edit && <ProjectDialog c={c} p={edit} stages={data.stages} onClose={() => setEdit(null)} onSaved={load} />}
       {trial && <TrialDialog c={c} p={trial} results={data.results} onClose={() => setTrial(null)} onSaved={load} />}
+      {signing && <SignOffDialog c={c} p={signing} onClose={() => setSigning(null)} onSaved={load} />}
     </div>
   );
 }
@@ -138,6 +164,47 @@ function TrialDialog({ c, p, results, onClose, onSaved }: { c: api.Company; p: S
       <Field label="合格件数"><Text type="number" value={t.good} onChange={(v) => setT({ ...t, good: v as unknown as number })} /></Field>
       <Field label="参数" wide><Text value={t.params} onChange={(v) => setT({ ...t, params: v })} placeholder="加热 1180°C，始锻 1150°C，预锻一次 + 终锻一次" /></Field>
       <Field label="检验发现" wide><Text value={t.findings} onChange={(v) => setT({ ...t, findings: v })} placeholder="R 角充不满 3 件；飞边偏大" /></Field>
+    </FormDialog>
+  );
+}
+
+/** Signing a part off: its trial dies go into the die store, and a BOM draft goes in effect with the drawing revision, as a change record. */
+function SignOffDialog({ c, p, onClose, onSaved }: { c: api.Company; p: S.Project; onClose(): void; onSaved(): void }) {
+  const [drafts, setDrafts] = useState<S.BOM[] | null>(null);
+  const [bom, setBom] = useState('');
+  const [drawing, setDrawing] = useState(p.drawing ?? '');
+  const [why, setWhy] = useState('');
+  const [problems, setProblems] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    S.bomPart(c.id, p.part).then((d) => {
+      const ds = d.revisions.filter((b) => b.status === '草稿');
+      setDrafts(ds);
+      setBom(ds[ds.length - 1]?.id ?? '');
+    }, () => setDrafts([]));
+  }, [c.id, p.part]);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await S.releaseProject(c.id, p.id, { bom: bom || undefined, drawing, why });
+      const b = drafts?.find((x) => x.id === bom);
+      toast.success(`${p.part} 已批准量产，试制模具转入模具库${b ? `，BOM ${b.rev} 版生效` : ''}`);
+      onClose();
+      onSaved();
+    } catch (e) { setProblems(S.problemsOf(e)); } finally { setBusy(false); }
+  };
+  return (
+    <FormDialog open onOpenChange={(v) => !v && onClose()} title={`批准量产：${p.name}`} problems={problems} busy={busy} onSave={save} save="批准量产">
+      <p className="col-span-2 text-[12.5px] text-muted-foreground max-sm:col-span-1">
+        批准后阶段改为量产，试制模具转入模具库。选了 BOM 的话，那份草稿随之生效（原来生效的版本停用），并记一条变更记录，写明改了什么、为什么、谁批准的。
+      </p>
+      <Field label="随之生效的 BOM" wide>
+        {drafts === null ? <p className="text-[12.5px] font-normal text-muted-foreground">正在读 BOM…</p> : drafts.length === 0
+          ? <p className="text-[12.5px] font-normal text-muted-foreground">这个零件还没有 BOM 草稿，可以先批准，BOM 以后在 BOM 页生效。</p>
+          : <Pick value={bom || 'none'} onChange={(v) => setBom(v === 'none' ? '' : v)} options={[...drafts.map((b): [string, string] => [b.id, `${b.rev} 版草稿（${b.lines.length} 行${b.source && b.source !== '手工' ? `，${b.source}` : ''}）`]), ['none', '这次不动 BOM']]} />}
+      </Field>
+      <Field label="图纸版本"><Text value={drawing} onChange={setDrawing} placeholder="B" /></Field>
+      <Field label="为什么（写进变更记录）"><Text value={why} onChange={setWhy} placeholder={`新品 ${p.part} 试锻合格，批准量产`} /></Field>
     </FormDialog>
   );
 }

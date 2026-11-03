@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -221,8 +222,17 @@ func (s *Service) putTrial(company string, t Trial) error {
 	return err
 }
 
-// Release signs a project off for production: its trial dies go into the store as production dies.
-func (s *Service) Release(company, who, id string) (*Project, error) {
+// SignOff is what goes with a project's sign-off: the BOM revision it puts in effect (a draft of
+// the part), the drawing revision it is made to, and why (for the change record).
+type SignOff struct {
+	BOM     string `json:"bom,omitempty"`
+	Drawing string `json:"drawing,omitempty"`
+	Why     string `json:"why,omitempty"`
+}
+
+// Release signs a project off for production: its trial dies go into the store as production
+// dies, and the BOM revision it names goes in effect with an ECO that points back at it.
+func (s *Service) Release(company, who, id string, so SignOff) (*Project, error) {
 	p, err := s.ProjectOf(company, id)
 	if err != nil {
 		return nil, err
@@ -232,6 +242,26 @@ func (s *Service) Release(company, who, id string) (*Project, error) {
 	}
 	if !slices.ContainsFunc(p.Trials, func(t Trial) bool { return t.Result == "合格" }) {
 		return nil, &Problems{[]string{"还没有一次合格的试锻，不能批准量产"}}
+	}
+	so.Drawing = strings.TrimSpace(so.Drawing)
+	if so.BOM != "" {
+		b, err := s.BOMOf(company, so.BOM)
+		if err != nil || b.ID != so.BOM {
+			return nil, &Problems{[]string{"没有这个 BOM 版本"}}
+		}
+		if !strings.EqualFold(b.Part, p.Part) {
+			return nil, &Problems{[]string{fmt.Sprintf("BOM 是 %s 的，不是 %s 的", b.Part, p.Part)}}
+		}
+		why := strings.TrimSpace(so.Why)
+		if why == "" {
+			why = fmt.Sprintf("新品 %s 试锻合格，批准量产", p.Part)
+		}
+		if _, _, err := s.ReleaseBOM(company, who, b.ID, Release{Why: why, Drawing: cmp.Or(so.Drawing, p.Drawing), Project: p.ID}); err != nil {
+			return nil, err
+		}
+	}
+	if so.Drawing != "" {
+		p.Drawing = so.Drawing
 	}
 	for _, d := range p.Dies {
 		if d.Place == InTrial {
@@ -248,4 +278,24 @@ func (s *Service) Release(company, who, id string) (*Project, error) {
 		return nil, err
 	}
 	return s.ProjectOf(company, p.ID)
+}
+
+// DraftBOM starts a draft BOM for a project's part from what the project knows: the bar it is
+// forged from, by the forging's weight until the cut weight is settled.
+func (s *Service) DraftBOM(company, who, id string) (*BOM, error) {
+	p, err := s.ProjectOf(company, id)
+	if err != nil {
+		return nil, err
+	}
+	b := BOM{Part: p.Part, Name: p.Name, Drawing: p.Drawing, Source: "研发", Project: p.ID, Note: "由研发项目起的草稿"}
+	if p.Grade != "" {
+		qty, note := p.Weight, "先按锻件重量填的，下料重量定了再改"
+		if qty <= 0 {
+			qty, note = 1, "下料重量还没定"
+		}
+		b.Lines = append(b.Lines, BOMLine{Code: p.Grade + "-棒料", Name: p.Grade + " 圆钢", Kind: Raw, Grade: p.Grade, Qty: qty, Unit: "kg", Op: "下料", Note: note})
+	} else {
+		b.Lines = append(b.Lines, BOMLine{Code: p.Part + "-毛坯", Name: p.Name + " 毛坯", Kind: Raw, Qty: 1, Unit: "件", Note: "毛坯还没定，改成实际的原材料"})
+	}
+	return s.SaveBOM(company, who, b)
 }

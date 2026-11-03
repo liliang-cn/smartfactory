@@ -220,11 +220,18 @@ func (o *Ops) AddTrial(who auth.Who, via, company string, t stores.Trial) (*stor
 	return v, storesError(err)
 }
 
-func (o *Ops) ReleaseProject(who auth.Who, via, company, id string) (*stores.Project, error) {
+func (o *Ops) ReleaseProject(who auth.Who, via, company, id string, so stores.SignOff) (*stores.Project, error) {
 	if err := o.stores(who, company, auth.Operator); err != nil {
 		return nil, err
 	}
-	v, err := o.Stores.Release(company, who.Name, id)
-	o.Audit.Record(who, via, company, "rnd.release", id, "", err)
+	v, err := o.Stores.Release(company, who.Name, id, so)
+	detail := ""
+	if so.BOM != "" {
+		detail = "BOM 随之生效"
+		if so.Drawing != "" {
+			detail += "，图纸 " + so.Drawing + " 版"
+		}
+	}
+	o.Audit.Record(who, via, company, "rnd.release", id, detail, err)
 	return v, storesError(err)
 }

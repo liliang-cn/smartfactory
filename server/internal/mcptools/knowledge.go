@@ -36,7 +36,7 @@ type DocPart struct {
 	Text    string `json:"text"`
 }
 
-var graphKinds = []string{knowledge.TCompany, knowledge.TPlant, knowledge.TLine, knowledge.TStation, knowledge.TMachine, knowledge.TProduct, knowledge.TSupplier, knowledge.TCustomer, knowledge.TOrder}
+var graphKinds = []string{knowledge.TCompany, knowledge.TPlant, knowledge.TLine, knowledge.TStation, knowledge.TMachine, knowledge.TProduct, knowledge.TSupplier, knowledge.TCustomer, knowledge.TOrder, knowledge.TComponent}
 
 type kbSearchIn struct {
 	Company  string   `json:"company" jsonschema:"company id"`
