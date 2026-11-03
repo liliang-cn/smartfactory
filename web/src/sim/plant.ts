@@ -2216,8 +2216,10 @@ export class PlantSim {
   snapshot() {
     const k = this.kpis();
     const L = this.layout;
+    const areaName = new Map(L.areas.map((a) => [a.code, a.name]));
     return {
       id: L.id, name: L.name, hall: L.hall, unit: L.unit,
+      areas: L.areas.map((a) => ({ code: a.code, name: a.name, lines: a.lines })),
       kpis: {
         oee: r2(k.oee), avail: r2(k.avail), perf: r2(k.perf), quality: r2(k.quality),
         throughputPerHour: r2(k.tp), good: k.good, scrap: k.scrap, powerKW: r2(k.power), energyKWh: r2(k.energy), clock: hhmm(this.clock),
@@ -2242,7 +2244,7 @@ export class PlantSim {
       inbound: this.inbound ? { supplier: this.inbound.supplier, due: hhmm(((this.inbound.due + 8 * 3600_000) % 86_400_000) / 1000), late: this.inbound.late && this.wall() >= this.inbound.due } : undefined,
       coldChain: this.cold[1] ? r2(this.cold[0] / this.cold[1]) : undefined,
       lines: this.lines.map((l, i) => ({
-        id: l.id, name: l.name, product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: r2(k.lines[i].tp), measuredShare: r2(k.lines[i].measured),
+        id: l.id, name: l.name, area: areaName.get(l.layout.area), product: l.layout.product.name, oee: r2(k.lines[i].oee), throughputPerHour: r2(k.lines[i].tp), measuredShare: r2(k.lines[i].measured),
         good: l.good, scrap: l.scrap,
       })),
       alarms: this.alarms.slice(0, 60).map((x) => ({ asset: x.asset, text: x.text, prio: x.prio, at: hhmm(x.at), active: x.active, acked: x.acked })),
@@ -2251,7 +2253,7 @@ export class PlantSim {
         capacity: i.cap, available: i.avail, inUse: i.kind === 'lend' ? i.cap - i.avail : undefined,
       })),
       assets: [...this.assets.values()].map((a) => ({
-        id: a.id, name: a.name, type: a.type, line: a.line?.name, state: a.fault ? 'fault' : a.state, fault: a.fault?.text,
+        id: a.id, name: a.name, type: a.type, line: a.line?.name, area: a.line ? areaName.get(a.line.layout.area) : undefined, state: a.fault ? 'fault' : a.state, fault: a.fault?.text,
         temp: r2(a.temp), power: r2(a.power), vib: r2(a.vib), health: r2(a.health), util: r2(a.util), speed: r2(a.speed),
         // the machine's own body-temperature limits, so a reader can tell what the reading means
         tempWarn: a.spec?.warn, tempTrip: a.spec?.trip,

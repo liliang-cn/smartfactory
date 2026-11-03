@@ -87,7 +87,8 @@ machines.<key> = {
 ## 公司（company）
 { id, name, short（≤4 字，徽章）, industry（默认行业包）, plants: [{
   id, name, badge?（≤3 字）, hall（场地名）, sub?（一句说明）, site?: "hall"|"outdoor", industry?,
-  lines: [{ name（可含 {n}）, note?, product, route 或 steps, repeat?, input?（入场阶段）, speed?（m/s）, order?: {no, part, qty} }],
+  areas?: [{ name（车间名，如 熔化车间）, code?（如 MLT，默认 A1、A2…）, note? }]（一个厂分几个车间时写；不写就是一个车间，名字是 hall）,
+  lines: [{ name（可含 {n}）, note?, area?（所在车间的 name，默认第一个）, product, route 或 steps, repeat?, input?（入场阶段）, speed?（m/s）, order?: {no, part, qty} }],
   warehouse?（原料仓名）, finishedGoods?（成品区名）, carriers?: [进场车队, 出场车队]
 }]}
 

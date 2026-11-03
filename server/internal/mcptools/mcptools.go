@@ -54,6 +54,7 @@ type asset struct {
 	ID     string  `json:"id"`
 	Name   string  `json:"name"`
 	Type   string  `json:"type"`
+	Area   string  `json:"area,omitempty"`
 	Line   string  `json:"line,omitempty"`
 	State  string  `json:"state"`
 	Fault  string  `json:"fault,omitempty"`
@@ -113,15 +114,26 @@ type sitePlant struct {
 type plantIn struct {
 	Company string `json:"company" jsonschema:"company id, e.g. huaduan"`
 	Plant   string `json:"plant" jsonschema:"plant id, e.g. p1"`
+	Area    string `json:"area,omitempty" jsonschema:"only this area (车间) of the plant, by name or code, e.g. 压铸车间; omit for the whole plant"`
 }
 type plantOut struct {
-	Plant       string           `json:"plant"`
+	Plant string `json:"plant"`
+	// Areas are the plant's areas (车间) with their lines and machines and how many are in each state.
+	Areas       []areaOut        `json:"areas"`
 	Kpis        map[string]any   `json:"kpis"`
 	Lines       []map[string]any `json:"lines"`
 	ActiveAlarm int              `json:"activeAlarms"`
 	Faulted     []asset          `json:"faulted"`
 	LiveAssets  []asset          `json:"liveAssets"`
 	Inventory   []map[string]any `json:"inventory"`
+}
+
+type areaOut struct {
+	Code     string         `json:"code"`
+	Name     string         `json:"name"`
+	Lines    []string       `json:"lines"`
+	Machines int            `json:"machines"`
+	States   map[string]int `json:"states"`
 }
 
 type alarmsIn struct {
@@ -225,7 +237,7 @@ func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log, cmds
 			return nil, out, nil
 		}))
 
-	mcp.AddTool(s, &mcp.Tool{Name: "plant_status", Description: "KPIs (OEE, throughput, quality), per-line figures, inventory (in use / available / capacity), active alarm count, faulted machines and machines fed by live protocol data for one plant."},
+	mcp.AddTool(s, &mcp.Tool{Name: "plant_status", Description: "KPIs (OEE, throughput, quality), its areas (车间) with their lines and how many machines are in each state, per-line figures, inventory (in use / available / capacity), active alarm count, faulted machines and machines fed by live protocol data for one plant — or, given an area, for that area's lines and machines."},
 		guard(auth.Member, func(in plantIn) string { return in.Company }, func(_ context.Context, _ *mcp.CallToolRequest, in plantIn) (*mcp.CallToolResult, plantOut, error) {
 			snap, err := load(eng, in.Company)
 			if err != nil {
@@ -235,13 +247,57 @@ func New(hub *tags.Hub, eng *engine.Engine, version string, log *audit.Log, cmds
 			if err != nil {
 				return nil, plantOut{}, err
 			}
-			out := plantOut{Plant: p.Name + " " + p.Hall, Kpis: p.Kpis, Lines: p.Lines, Faulted: []asset{}, LiveAssets: []asset{}, Inventory: p.Inventory}
+			out := plantOut{Plant: p.Name + " " + p.Hall, Kpis: p.Kpis, Lines: p.Lines, Areas: []areaOut{}, Faulted: []asset{}, LiveAssets: []asset{}, Inventory: p.Inventory}
+			area := ""
+			if tree, err := eng.PBS(in.Company); err == nil {
+				for _, pn := range tree.Children {
+					if pn.ID != p.ID {
+						continue
+					}
+					for _, an := range pn.Children {
+						ao := areaOut{Code: an.ID, Name: an.Name, Lines: []string{}, Machines: an.Machines, States: an.States}
+						for _, ln := range an.Children {
+							ao.Lines = append(ao.Lines, ln.Name)
+						}
+						if in.Area != "" && (strings.EqualFold(in.Area, an.ID) || strings.Contains(an.Name, in.Area) || strings.Contains(in.Area, an.Name)) {
+							area = an.Name
+							out.Areas = []areaOut{ao}
+							break
+						}
+						out.Areas = append(out.Areas, ao)
+					}
+				}
+			}
+			if in.Area != "" && area == "" {
+				names := []string{}
+				for _, a := range out.Areas {
+					names = append(names, a.Name)
+				}
+				return nil, plantOut{}, fmt.Errorf("%s has no area %q; its areas: %s", p.Name, in.Area, strings.Join(names, ", "))
+			}
+			if area != "" {
+				out.Plant += " " + area
+				lines := []map[string]any{}
+				for _, l := range p.Lines {
+					if l["area"] == area {
+						lines = append(lines, l)
+					}
+				}
+				out.Lines = lines
+			}
+			outside := map[string]bool{} // assets of the plant not in the area asked for
+			for _, a := range p.Assets {
+				outside[a.ID] = area != "" && a.Area != area
+			}
 			for _, a := range p.Alarms {
-				if a.Active {
+				if a.Active && !outside[a.Asset] {
 					out.ActiveAlarm++
 				}
 			}
 			for _, a := range p.Assets {
+				if outside[a.ID] {
+					continue
+				}
 				if a.State == "fault" {
 					out.Faulted = append(out.Faulted, a)
 				}

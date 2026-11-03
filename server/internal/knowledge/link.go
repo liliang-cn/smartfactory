@@ -80,6 +80,10 @@ func terms(m *Model) []term {
 	codes := map[string]string{}       // machine code → machine
 	for _, p := range m.Plants {
 		add(p.Name, p.Name, TPlant)
+		for _, a := range p.areas() {
+			full := n.area[p.ID+"/"+a.Code]
+			add(full, full, TArea)
+		}
 		for _, l := range p.Lines {
 			full := n.line[p.ID+"/"+l.ID]
 			add(full, full, TLine)

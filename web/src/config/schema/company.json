@@ -79,6 +79,29 @@
             "default": "生产车间",
             "type": "string"
           },
+          "areas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "code": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9-]{1,12}$"
+                },
+                "note": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
           "site": {
             "default": "hall",
             "type": "string",
@@ -105,6 +128,9 @@
                 },
                 "note": {
                   "default": "",
+                  "type": "string"
+                },
+                "area": {
                   "type": "string"
                 },
                 "product": {

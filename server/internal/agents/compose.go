@@ -34,7 +34,8 @@ const architectPrompt = `你是 SmartFactory 的场景搭建员。管理员用�
    - 写 stores.categories（库房放什么，见指南「库房」）；靠模具成形的设备写 tooling，工厂的模具台账才有东西管；
    - propose_industry 检查；没通过就按它说的改，直到通过（通过一次就够，不要重复提交）。通过后它会放进管理员那边，建公司时一起装上。
 3. list_companies / get_company 看现成的公司怎么写产线（product + route 的组合、repeat、名字），照着写最稳。
-4. 按描述定工厂（plants）和每个工厂的产线（lines）：工厂 id 用 p1、p2…，name 像「一厂」「常州工厂」，hall 写车间名，badge 两三个字；同样的线用 repeat 加 {n}，比如 "曲轴 {n} 线"。
+4. 按描述定工厂（plants）和每个工厂的产线（lines）：工厂 id 用 p1、p2…，name 像「一厂」「常州工厂」，hall 写厂房或车间名，badge 两三个字；同样的线用 repeat 加 {n}，比如 "曲轴 {n} 线"。
+   一个厂分几个车间（描述里说了「熔化车间、压铸车间、机加车间」这样的）：在这个工厂里写 areas，按描述的顺序一个车间一项（name 用描述里的叫法，code 可以写两三个大写字母，如 MLT、DC、CNC），每条线写 area 指明在哪个车间（填车间的 name）。新建时产线按车间的顺序排；改已有的公司时照第 8 条不挪已有的线，线在哪个车间只看 area，不看先后。描述里提到的车间都要写进 areas，哪怕暂时没有产线（比如成品库）。只有一个车间就不写 areas，用 hall。
 5. 公司 id 用公司名的拼音或英文缩写，小写字母、数字、连字符；short 是 2～4 个字的简称；name 是全称。
 6. 每写好一版就调 propose_company 检查（用新行业包时 industry 写它的 id）；没通过就按它说的改，直到通过。通过的那一版会出现在管理员的表单里。
 7. 描述里没说的（车间名、几条线、节拍）按行业常见的规模定，在最后的回答里说出你做的假设。
@@ -163,7 +164,7 @@ func (r *Runner) Compose(ctx context.Context, who auth.Who, kind ComposeKind, br
 				return raw(js)
 			}},
 			tl{"propose_company", "检查一份公司配置（不会创建）。通过了就放进管理员的表单；没通过返回每个问题。", obj(map[string]any{
-				"config": map[string]any{"type": "object", "description": "完整的公司配置：id、name、short、industry、plants[{id,name,hall,badge,lines[{name,product,route,repeat,note}]}]"},
+				"config": map[string]any{"type": "object", "description": "完整的公司配置：id、name、short、industry、plants[{id,name,hall,badge,areas?[{name,code?,note?}],lines[{name,area?,product,route,repeat,note}]}]"},
 			}, "config"), func(a args) (any, error) {
 				cfg, ok := a["config"].(map[string]any)
 				if !ok {

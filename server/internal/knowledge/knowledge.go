@@ -194,13 +194,48 @@ type Plant struct {
 	Warehouse     string   `json:"warehouse"`
 	FinishedGoods string   `json:"finishedGoods"`
 	Carriers      []string `json:"carriers"`
-	Lines         []Line   `json:"lines"`
+	// Areas are its 车间 in order, each with the ids of its lines: one, the hall, when it lists none.
+	Areas []Area `json:"areas"`
+	Lines []Line `json:"lines"`
+}
+
+// Area is a plant's 车间 (the area level of the plant breakdown): a zone holding some of its lines.
+type Area struct {
+	Code  string   `json:"code"`
+	Name  string   `json:"name"`
+	Note  string   `json:"note"`
+	Lines []string `json:"lines"`
+}
+
+// areas is the plant's areas; a model written before plants had areas has one, the hall, with every line.
+func (p Plant) areas() []Area {
+	if len(p.Areas) > 0 {
+		return p.Areas
+	}
+	a := Area{Code: "A1", Name: cmp.Or(p.Hall, "生产车间")}
+	for _, l := range p.Lines {
+		a.Lines = append(a.Lines, l.ID)
+	}
+	return []Area{a}
+}
+
+// areaOf is the area a line stands in.
+func (p Plant) areaOf(line string) Area {
+	as := p.areas()
+	for _, a := range as {
+		if slices.Contains(a.Lines, line) {
+			return a
+		}
+	}
+	return as[0]
 }
 
 type Line struct {
-	ID       string    `json:"id"`
-	Name     string    `json:"name"`
-	Note     string    `json:"note"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Note string `json:"note"`
+	// Area is the code of the area it stands in.
+	Area     string    `json:"area"`
 	Product  Product   `json:"product"`
 	Stations []Station `json:"stations"`
 }
@@ -238,6 +273,7 @@ type Station struct {
 const (
 	TCompany  = "company"
 	TPlant    = "plant"
+	TArea     = "area"
 	TLine     = "line"
 	TStation  = "station"
 	TMachine  = "machine"
@@ -254,6 +290,7 @@ const (
 	TViolation   = "violation"
 
 	RHasPlant   = "has_plant"
+	RHasArea    = "has_area"
 	RHasLine    = "has_line"
 	RMakes      = "makes"
 	RHasStation = "has_station"
@@ -274,7 +311,7 @@ const (
 )
 
 // relations are the relation types the graph keeps (the rest are CortexDB's own: mentions, …).
-var relations = []string{RHasPlant, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn,
+var relations = []string{RHasPlant, RHasArea, RHasLine, RMakes, RHasStation, RIsA, RFeeds, RSupplies, RSoldTo, RForCustomer, ROfProduct, RRunsOn,
 	RCheckedOn, RSeenOn, RCalibrates, RTargets, RBreachedOn}
 
 func (b *Base) model(id string) (*Model, error) {
@@ -292,13 +329,28 @@ func (b *Base) model(id string) (*Model, error) {
 // names gives each thing in the model the name it is known by in the graph. A line or station
 // name that recurs in another plant gets the plant's name in front ("二厂 HP-101").
 type names struct {
+	area    map[string]string // plant/area code → name
 	line    map[string]string // plant/line → name
 	station map[string]string // plant/station → name
 }
 
 func nameModel(m *Model) names {
-	n := names{line: map[string]string{}, station: map[string]string{}}
-	lineCount, stCount := map[string]int{}, map[string]int{}
+	n := names{area: map[string]string{}, line: map[string]string{}, station: map[string]string{}}
+	lineCount, stCount, areaCount := map[string]int{}, map[string]int{}, map[string]int{}
+	for _, p := range m.Plants {
+		for _, a := range p.areas() {
+			areaCount[a.Name]++
+		}
+	}
+	for _, p := range m.Plants {
+		for _, a := range p.areas() {
+			n.area[p.ID+"/"+a.Code] = a.Name
+			// two plants' 生产车间, or an area named like its plant: the plant's name in front
+			if areaCount[a.Name] > 1 || a.Name == p.Name {
+				n.area[p.ID+"/"+a.Code] = p.Name + " " + a.Name
+			}
+		}
+	}
 	for _, p := range m.Plants {
 		for _, l := range p.Lines {
 			lineCount[l.Name]++
@@ -379,12 +431,23 @@ func processItems(m *Model) []item {
 			pl.rel(p.Name, RHasLine, ln)
 			lines = append(lines, fmt.Sprintf("%s（%s，%d 台设备）", ln, l.Product.Name, len(l.Stations)))
 		}
+		var areas []string
+		for _, a := range p.areas() {
+			an := n.area[p.ID+"/"+a.Code]
+			pl.ent(an, TArea, a.Note)
+			pl.rel(p.Name, RHasArea, an)
+			areas = append(areas, fmt.Sprintf("%s（%d 条线）", an, len(a.Lines)))
+		}
 		site := "车间"
 		if p.Site == "outdoor" {
 			site = "户外场地"
 		}
-		pl.text = fmt.Sprintf("%s的%s，%s「%s」，行业：%s。有 %d 条线：%s。原料存放在%s，成品放在%s%s。",
-			m.Name, p.Name, site, p.Hall, p.Industry, len(p.Lines), strings.Join(lines, "、"), p.Warehouse, p.FinishedGoods,
+		where := fmt.Sprintf("%s「%s」", site, p.Hall)
+		if len(p.Areas) > 1 {
+			where = fmt.Sprintf("分 %d 个车间：%s", len(p.Areas), strings.Join(areas, "、"))
+		}
+		pl.text = fmt.Sprintf("%s的%s，%s，行业：%s。有 %d 条线：%s。原料存放在%s，成品放在%s%s。",
+			m.Name, p.Name, where, p.Industry, len(p.Lines), strings.Join(lines, "、"), p.Warehouse, p.FinishedGoods,
 			func() string {
 				if len(p.Carriers) == 0 {
 					return ""
@@ -392,11 +455,16 @@ func processItems(m *Model) []item {
 				return "，由" + strings.Join(uniq(p.Carriers), "、") + "运给客户"
 			}())
 		out = append(out, pl)
+		out = append(out, areaItems(m, n, p)...)
 
 		for _, l := range p.Lines {
 			ln := n.line[p.ID+"/"+l.ID]
-			it := item{id: "proc:line:" + p.ID + ":" + l.ID, title: p.Name + " " + l.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "line": l.ID}}
+			ar := p.areaOf(l.ID)
+			an := n.area[p.ID+"/"+ar.Code]
+			it := item{id: "proc:line:" + p.ID + ":" + l.ID, title: p.Name + " " + l.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "area": ar.Code, "line": l.ID}}
 			it.ent(ln, TLine, l.Note)
+			it.ent(an, TArea, ar.Note)
+			it.rel(an, RHasLine, ln)
 			it.ent(l.Product.Name, TProduct, l.Product.PartNo)
 			it.rel(ln, RMakes, l.Product.Name)
 			var steps []string
@@ -424,8 +492,8 @@ func processItems(m *Model) []item {
 					slowest = s
 				}
 			}
-			it.text = fmt.Sprintf("%s %s%s生产%s。工序依次是：\n%s\n最慢的工序是 %s %s（%g 秒），决定这条线的节拍。",
-				p.Name, l.Name, paren(l.Note), l.Product.Name, strings.Join(steps, "\n"), slowest.ID, slowest.Name, slowest.Cycle)
+			it.text = fmt.Sprintf("%s %s%s在%s，生产%s。工序依次是：\n%s\n最慢的工序是 %s %s（%g 秒），决定这条线的节拍。",
+				p.Name, l.Name, paren(l.Note), ar.Name, l.Product.Name, strings.Join(steps, "\n"), slowest.ID, slowest.Name, slowest.Cycle)
 			out = append(out, it)
 			out = append(out, stationItems(n, p, l, ln)...)
 			if _, ok := products[l.Product.Key]; !ok {
@@ -476,18 +544,58 @@ func processItems(m *Model) []item {
 	return out
 }
 
+// areaItems are one passage per area (车间) of a plant: its lines and every machine in it, by tag,
+// so "压铸车间有哪些设备" is answered by the passage about 压铸车间.
+func areaItems(m *Model, n names, p Plant) []item {
+	areas := p.areas()
+	out := make([]item, 0, len(areas))
+	for _, a := range areas {
+		an := n.area[p.ID+"/"+a.Code]
+		it := item{id: "proc:area:" + p.ID + ":" + a.Code, title: p.Name + " " + a.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "area": a.Code}}
+		it.ent(an, TArea, a.Note)
+		it.ent(p.Name, TPlant, p.Hall)
+		it.rel(p.Name, RHasArea, an)
+		var lines, machines []string
+		count := 0
+		for _, l := range p.Lines {
+			if !slices.Contains(a.Lines, l.ID) {
+				continue
+			}
+			ln := n.line[p.ID+"/"+l.ID]
+			it.ent(ln, TLine, l.Note)
+			it.rel(an, RHasLine, ln)
+			lines = append(lines, fmt.Sprintf("%s（%s）", ln, l.Product.Name))
+			for _, s := range l.Stations {
+				machines = append(machines, n.station[p.ID+"/"+s.ID]+" "+s.Name)
+				count++
+			}
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s是%s%s的车间（编码 %s）%s", an, m.Name, p.Name, a.Code, paren(a.Note))
+		if len(lines) == 0 {
+			b.WriteString("，现在没有产线。")
+		} else {
+			fmt.Fprintf(&b, "，有 %d 条线：%s。共 %d 台设备：%s。", len(lines), strings.Join(lines, "、"), count, strings.Join(machines, "、"))
+		}
+		it.text = b.String()
+		out = append(out, it)
+	}
+	return out
+}
+
 // stationItems are one passage per station of a line: where it is, what it is, what comes before
 // and after it, so "HP-101 的上游" is answered by the passage about HP-101.
 func stationItems(n names, p Plant, l Line, ln string) []item {
 	out := make([]item, 0, len(l.Stations))
+	ar := p.areaOf(l.ID)
 	for i, s := range l.Stations {
 		sn := n.station[p.ID+"/"+s.ID]
-		it := item{id: "proc:station:" + p.ID + ":" + s.ID, title: sn + " " + s.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "line": l.ID, "station": s.ID}}
+		it := item{id: "proc:station:" + p.ID + ":" + s.ID, title: sn + " " + s.Name, meta: map[string]string{"kind": "process", "plant": p.ID, "area": ar.Code, "line": l.ID, "station": s.ID}}
 		it.ent(sn, TStation, s.Name)
 		it.ent(s.Label, TMachine, "")
 		it.ent(ln, TLine, l.Note)
 		var b strings.Builder
-		fmt.Fprintf(&b, "%s 是%s %s的第 %d 道工序：%s", sn, p.Name, l.Name, i+1, s.Name)
+		fmt.Fprintf(&b, "%s 是%s%s %s的第 %d 道工序：%s", sn, p.Name, ar.Name, l.Name, i+1, s.Name)
 		if s.Name != s.Label {
 			fmt.Fprintf(&b, "（%s）", s.Label)
 		}
@@ -544,7 +652,7 @@ func uniq(s []string) []string {
 }
 
 // processFormat changes whenever processItems writes differently, so every base is written again.
-const processFormat = "5"
+const processFormat = "6"
 
 // processState is what was last written for a company's process, so an unchanged process is not
 // written again.
@@ -1018,7 +1126,7 @@ type Entity struct {
 	Detail []Fact `json:"detail,omitempty"`
 }
 
-var kinds = []string{TCompany, TPlant, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TCheck, TAnomaly, TCalibration, TCommand, TViolation}
+var kinds = []string{TCompany, TPlant, TArea, TLine, TStation, TMachine, TProduct, TSupplier, TCustomer, TOrder, TCheck, TAnomaly, TCalibration, TCommand, TViolation}
 
 // Lookup is the thing called name (of kind, if given) and its relations. What happened to a
 // station comes after the rest, each kind the latest first, with what it was in a line (Title).

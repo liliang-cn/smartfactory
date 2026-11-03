@@ -212,9 +212,10 @@ function processModel(id: string): string {
     plants: c.plants.map(({ layout: p }) => ({
       id: p.id, name: p.name, hall: p.hall, site: p.site, industry: p.industry.name, unit: p.unit,
       warehouse: p.warehouse.name, finishedGoods: p.fg.name,
+      areas: p.areas.map((a) => ({ code: a.code, name: a.name, note: a.note, lines: a.lines })),
       carriers: p.freight.map((f) => f.carrier),
       lines: p.lines.map((l) => ({
-        id: l.id, name: l.name, note: l.note,
+        id: l.id, name: l.name, note: l.note, area: l.area,
         product: {
           key: l.product.key, name: l.product.name, stages: l.product.order, partNo: l.product.partNo, material: l.product.material,
           weight: l.product.weight, customers: (l.product.customers ?? []).map((x) => x.name), suppliers: (l.product.suppliers ?? []).map((x) => x.name),

@@ -605,6 +605,8 @@ export const LineCfg = z.object({
   /** "{n}" is replaced by the line number within the plant when `repeat` > 1 */
   name: z.string(),
   note: z.string().default(''),
+  /** the plant's area (车间) the line stands in, by its name; default the plant's first area */
+  area: z.string().optional(),
   /** product family key from the industry pack */
   product: z.string(),
   /** product stage units arrive in; defaults to the first stage (a paint shop takes body-in-white) */
@@ -634,12 +636,26 @@ export const LineCfg = z.object({
 }).refine((l) => l.route || l.steps, { message: '产线需要 route 或 steps 其中之一' });
 export type LineCfgT = z.infer<typeof LineCfg>;
 
+/**
+ * An area of a plant (区域 / 车间 in the plant breakdown: 熔化车间, 压铸车间, 成品库): a zone of
+ * the hall that holds some of the plant's lines. A plant that lists none has one area, its `hall`.
+ */
+export const AreaCfg = z.object({
+  name: z.string().min(1),
+  /** its code in the breakdown (MLT, DC …); default A1, A2 … in the order listed */
+  code: z.string().regex(/^[A-Za-z0-9-]{1,12}$/, '车间编码只能用字母、数字和 -，最多 12 个').optional(),
+  note: z.string().default(''),
+});
+export type AreaCfgT = z.infer<typeof AreaCfg>;
+
 export const PlantCfg = z.object({
   id: z.string(),
   name: z.string(),
   /** two or three characters on the site badge */
   badge: z.string().max(3).optional(),
   hall: z.string().default('生产车间'),
+  /** the plant's areas (车间), each holding the lines that name it; none: one area, the `hall` */
+  areas: z.array(AreaCfg).optional(),
   /** hall: an indoor workshop with walls; outdoor: grass, a fence and walkways (venues, yards, farms); shop: a shopfront onto the street */
   site: z.enum(['hall', 'outdoor', 'shop']).default('hall'),
   sub: z.string().optional(),
@@ -668,8 +684,46 @@ export const PlantCfg = z.object({
     transit: z.number().positive().default(1),
     items: z.record(z.string(), z.array(z.string()).min(1)),
   }).optional(),
+}).superRefine((p, ctx) => {
+  const names = (p.areas ?? []).map((a) => a.name.trim());
+  const codes = (p.areas ?? []).map((a, i) => a.code ?? `A${i + 1}`);
+  names.forEach((n, i) => { if (names.indexOf(n) !== i) ctx.addIssue({ code: 'custom', path: ['areas', i, 'name'], message: `车间「${n}」重复了` }); });
+  codes.forEach((c, i) => { if (codes.indexOf(c) !== i) ctx.addIssue({ code: 'custom', path: ['areas', i, 'code'], message: `车间编码 ${c} 重复了` }); });
+  if (!p.areas?.length) return;
+  p.lines.forEach((l, i) => {
+    if (l.area !== undefined && !names.includes(l.area.trim())) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'area'], message: `没有叫「${l.area}」的车间，只有：${names.join('、')}` });
+    }
+  });
 });
 export type PlantCfgT = z.infer<typeof PlantCfg>;
+
+/** An area of a plant as the breakdown has it: its code, name, note, and its lines (indexes into `plant.lines`). */
+export interface PlantArea { code: string; name: string; note: string; lines: number[] }
+
+/**
+ * A plant's areas (车间) and which of its lines stand in each. Listed areas come in their order;
+ * a plant without them has one area named after its hall, or — when its lines name areas — those,
+ * in the order the lines first name them. A line naming no area is in the first.
+ */
+export function plantAreas(p: { hall?: string; areas?: { name: string; code?: string; note?: string }[]; lines: { area?: string }[] }): PlantArea[] {
+  const hall = p.hall ?? '生产车间';
+  const out: PlantArea[] = p.areas?.length
+    ? p.areas.map((a, i) => ({ code: a.code ?? `A${i + 1}`, name: a.name.trim(), note: a.note ?? '', lines: [] }))
+    : [];
+  if (!out.length) {
+    for (const l of p.lines) {
+      const n = l.area?.trim();
+      if (n && !out.some((a) => a.name === n)) out.push({ code: `A${out.length + 1}`, name: n, note: '', lines: [] });
+    }
+  }
+  if (!out.length) out.push({ code: 'A1', name: hall, note: '', lines: [] });
+  p.lines.forEach((l, i) => {
+    const n = l.area?.trim();
+    (out.find((a) => a.name === n) ?? out[0]).lines.push(i);
+  });
+  return out;
+}
 
 export const Company = z.object({
   $schema: z.string().optional(),

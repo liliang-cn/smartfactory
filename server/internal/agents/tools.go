@@ -165,8 +165,8 @@ func tools(st *Store, eng *engine.Engine, company string) map[string]tool {
 				}
 				return st.SaveNote(company, n)
 			}},
-		{name: "twin_machines", desc: "孪生里设备现在的状态（实时）：按设备编号、名称、产线找，或按状态找（“故障”“停”“待机”“报警”），不填看全部。返回各状态各几台（states），出问题的排在前面：哪个厂、状态（state_text）、故障原因、机身温度（设备本体的温度和它自己的报警线、跳停线，不是工件、炉料或出炉温度）、功率、振动、健康度、稼动率、正在响的报警。问“现在怎么样、哪台停了、哪台最慢”都用它。",
-			params: obj(map[string]any{"query": prop("string", "设备编号（HP-101）、名称（热模锻压力机）、产线（曲轴 1 线）或状态（故障、停）；空字符串看全部")}, "query"),
+		{name: "twin_machines", desc: "孪生里设备现在的状态（实时）：按设备编号、名称、产线、车间找，或按状态找（“故障”“停”“待机”“报警”），不填看全部。返回各状态各几台（states），出问题的排在前面：哪个厂、状态（state_text）、故障原因、机身温度（设备本体的温度和它自己的报警线、跳停线，不是工件、炉料或出炉温度）、功率、振动、健康度、稼动率、正在响的报警。问“现在怎么样、哪台停了、哪台最慢”都用它。",
+			params: obj(map[string]any{"query": prop("string", "设备编号（HP-101）、名称（热模锻压力机）、产线（曲轴 1 线）、车间（压铸车间）或状态（故障、停）；空字符串看全部")}, "query"),
 			run: func(_ context.Context, a args) (any, error) {
 				return machines(eng, company, a.str("query"))
 			}},
@@ -279,7 +279,7 @@ func trouble(state string) int {
 }
 
 // Machines finds the company's machines matching query in the twin's current state: a machine
-// (HP-101, 热模锻压力机), a line, or a state ("故障", "停"); empty for all. The machines in
+// (HP-101, 热模锻压力机), a line, an area (压铸车间), or a state ("故障", "停"); empty for all. The machines in
 // trouble come first, with how many machines are in each state across what matched.
 func Machines(eng *engine.Engine, company, query string) (any, error) {
 	return machines(eng, company, query)
@@ -316,7 +316,7 @@ func machines(eng *engine.Engine, company, query string) (any, error) {
 	count := map[string]int{}
 	for _, p := range snap.Plants {
 		for _, a := range p.Assets {
-			text := strings.ToLower(strings.ReplaceAll(fmt.Sprint(a["id"], a["name"], a["line"], a["type"]), " ", ""))
+			text := strings.ToLower(strings.ReplaceAll(fmt.Sprint(a["id"], a["name"], a["line"], a["area"], a["type"]), " ", ""))
 			if q != "" && !strings.Contains(text, q) {
 				continue
 			}
@@ -331,7 +331,7 @@ func machines(eng *engine.Engine, company, query string) (any, error) {
 				continue
 			}
 			m := map[string]any{"plant": p.Name}
-			for _, k := range []string{"id", "name", "line", "state", "fault", "temp", "power", "vib", "health", "util", "speed", "tool", "live"} {
+			for _, k := range []string{"id", "name", "area", "line", "state", "fault", "temp", "power", "vib", "health", "util", "speed", "tool", "live"} {
 				if v, ok := a[k]; ok && v != "" && v != nil {
 					m[k] = v
 				}

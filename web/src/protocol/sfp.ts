@@ -764,13 +764,13 @@ export const SaveTemplate = z.object({
  * What a thing in the graph is: the process, the production orders from the ERP, and what recently happened to a machine —
  * check (a form out of spec, or a station's latest checks) · anomaly (a hint that a reading is unusual) · calibration · command (one an AI sent) · violation (a reading out of an ontology constraint)
  */
-export const EntityKind = z.enum(['company', 'plant', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command', 'violation']);
+export const EntityKind = z.enum(['company', 'plant', 'area', 'line', 'station', 'machine', 'product', 'supplier', 'customer', 'order', 'check', 'anomaly', 'calibration', 'command', 'violation']);
 /**
- * has_plant · has_line · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to ·
+ * has_plant · has_area (plant → 车间) · has_line (plant or 车间 → line) · makes · has_station · is_a (station → machine) · feeds (station → next station) · supplies · sold_to ·
  * for_customer (order → customer) · of_product (order → product) · runs_on (order → line) ·
  * checked_on (check → station) · seen_on (anomaly → station) · calibrates (calibration → station) · targets (command → station) · breached_on (violation → station)
  */
-export const RelationType = z.enum(['has_plant', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on',
+export const RelationType = z.enum(['has_plant', 'has_area', 'has_line', 'makes', 'has_station', 'is_a', 'feeds', 'supplies', 'sold_to', 'for_customer', 'of_product', 'runs_on',
   'checked_on', 'seen_on', 'calibrates', 'targets', 'breached_on']);
 
 export const KnowledgeOverview = z.object({

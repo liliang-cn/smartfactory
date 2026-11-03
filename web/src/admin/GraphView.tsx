@@ -17,6 +17,7 @@ export type Kind = api.EntityKind | 'class';
 export const KIND: Record<Kind, { label: string; color: string; r: number }> = {
   company: { label: '公司', color: '#1f2a44', r: 13 },
   plant: { label: '工厂', color: '#2f5bea', r: 10 },
+  area: { label: '车间', color: '#4a6fe8', r: 8 },
   line: { label: '产线', color: '#6f8ff5', r: 6.5 },
   station: { label: '工位', color: '#a9b4c8', r: 3.6 },
   machine: { label: '设备', color: '#f29a2e', r: 6 },
@@ -33,7 +34,7 @@ export const KIND: Record<Kind, { label: string; color: string; r: number }> = {
 };
 
 const PRIORITY: Record<Kind, number> = {
-  company: 0, plant: 1, class: 2, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9, violation: 9,
+  company: 0, plant: 1, area: 2, class: 2, product: 2, line: 3, machine: 4, customer: 5, supplier: 6, order: 7, station: 8, check: 9, anomaly: 9, calibration: 9, command: 9, violation: 9,
 };
 
 /** what happened at a station, and how it is linked to it */
@@ -41,7 +42,7 @@ const EVENT: Record<string, api.EntityKind> = { checked_on: 'check', seen_on: 'a
 const isEvent = (k: Kind) => k === 'check' || k === 'anomaly' || k === 'calibration' || k === 'command' || k === 'violation';
 
 const DIST: Record<string, number> = {
-  has_plant: 70, has_line: 46, makes: 46, has_station: 12, feeds: 9, is_a: 60, supplies: 40, sold_to: 40, runs_on: 18, for_customer: 40, of_product: 50,
+  has_plant: 70, has_area: 50, has_line: 46, makes: 46, has_station: 12, feeds: 9, is_a: 60, supplies: 40, sold_to: 40, runs_on: 18, for_customer: 40, of_product: 50,
   checked_on: 8, seen_on: 8, calibrates: 8, targets: 8, breached_on: 8, a: 70, sub: 45,
 };
 
@@ -56,10 +57,13 @@ export interface Drawn {
   edges: { from: string; to: string; type: string }[];
 }
 
-/** The plant each line, station, order and what happened at a station belongs to, following has_line, has_station, runs_on and the station's. */
+/** The plant each area, line, station, order and what happened at a station belongs to, following has_area, has_line, has_station, runs_on and the station's. */
 function plantsOf(g: Drawn) {
   const plant = new Map<string, string>();
-  for (const e of g.edges) if (e.type === 'has_line') plant.set(e.to, e.from);
+  const plants = new Set(g.nodes.filter((n) => n.kind === 'plant').map((n) => n.name));
+  for (const e of g.edges) if (e.type === 'has_area') plant.set(e.to, e.from);
+  // a line is in its plant, and in an area of it
+  for (const e of g.edges) if (e.type === 'has_line' && (plants.has(e.from) || plant.has(e.from))) plant.set(e.to, plant.get(e.from) ?? e.from);
   for (const e of g.edges) {
     if (e.type === 'has_station' && plant.has(e.from)) plant.set(e.to, plant.get(e.from)!);
     if (e.type === 'runs_on' && plant.has(e.to)) plant.set(e.from, plant.get(e.to)!);

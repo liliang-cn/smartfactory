@@ -30,16 +30,16 @@ type LineDraft = z.input<typeof LineCfg>;
 const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 /** A kind of line an industry can run: product and routing, as some company already runs it. */
-interface Kind { key: string; industry: string; label: string; detail: string; name: string; note: string; line: Omit<LineDraft, 'name' | 'repeat' | 'note' | 'order'> }
+interface Kind { key: string; industry: string; label: string; detail: string; name: string; note: string; line: Omit<LineDraft, 'name' | 'repeat' | 'note' | 'order' | 'area'> }
 
 const kindKey = (industry: string, l: Partial<LineDraft>) => {
-  const { name: _n, repeat: _r, note: _o, order: _x, ...rest } = l;
+  const { name: _n, repeat: _r, note: _o, order: _x, area: _a, ...rest } = l;
   return `${industry}|${JSON.stringify(rest, Object.keys(rest).sort())}`;
 };
 
 function kindsOf(templates: Map<string, Loaded>, industries: Map<string, IndustryCfg>): Kind[] {
   const out = new Map<string, Kind>();
-  const describe = (ind: IndustryCfg, l: Omit<LineDraft, 'name' | 'repeat' | 'note' | 'order'>) => {
+  const describe = (ind: IndustryCfg, l: Omit<LineDraft, 'name' | 'repeat' | 'note' | 'order' | 'area'>) => {
     const steps = l.steps ?? ind.routes[l.route ?? ''] ?? [];
     const labels = steps.map((s) => ind.machines[typeof s === 'string' ? s : s.machine]?.label ?? '?');
     return { label: ind.products[l.product]?.name ?? l.product, detail: `${labels.length} 道：${labels.slice(0, 4).join('、')}${labels.length > 4 ? '…' : ''}` };
@@ -50,7 +50,7 @@ function kindsOf(templates: Map<string, Loaded>, industries: Map<string, Industr
       const ind = industries.get(iid);
       if (!ind) continue;
       for (const l of p.lines) {
-        const { name, repeat: _r, note, order: _x, ...line } = l;
+        const { name, repeat: _r, note, order: _x, area: _a, ...line } = l;
         const key = kindKey(iid, l);
         if (!out.has(key)) out.set(key, { key, industry: iid, ...describe(ind, line), name, note, line });
       }
@@ -111,7 +111,11 @@ function clean(d: Draft): Draft {
   return {
     ...d,
     id: d.id.trim(), name: d.name.trim(), short: d.short.trim(),
-    plants: d.plants.map((p) => ({ ...p, name: p.name.trim(), hall: p.hall?.trim() || undefined, badge: p.badge?.trim() || undefined, lines: p.lines.map((l) => ({ ...l, name: l.name.trim() })) })),
+    plants: d.plants.map((p) => ({
+      ...p, name: p.name.trim(), hall: p.hall?.trim() || undefined, badge: p.badge?.trim() || undefined,
+      areas: p.areas?.length ? p.areas.map((a) => ({ ...a, name: a.name.trim() })) : undefined,
+      lines: p.lines.map((l) => ({ ...l, name: l.name.trim(), area: l.area?.trim() || undefined })),
+    })),
   };
 }
 
@@ -135,10 +139,41 @@ function Stepper({ value, onChange, min = 1, max = 12, label }: { value: number;
   );
 }
 
+/** The names in what was typed for a plant's 车间: 熔化车间、压铸车间 (or with commas or spaces). */
+const areaNames = (text: string) => [...new Set(text.split(/[、,，;；\s]+/).map((x) => x.trim()).filter(Boolean))];
+
+/** The plant's 车间 as they read in its field: its areas, or its one hall. */
+const areaText = (p: PlantDraft) => (p.areas?.length ? p.areas.map((a) => a.name).join('、') : p.hall ?? '');
+
+/** The plant with the 车间 typed: one is its hall; several are its areas, each line kept in its own when it is still there. */
+function withAreas(p: PlantDraft, text: string): PlantDraft {
+  const names = areaNames(text);
+  if (names.length <= 1) {
+    return { ...p, hall: names[0] ?? (p.areas?.length ? undefined : p.hall), areas: undefined, lines: p.lines.map(({ area: _a, ...l }) => l) };
+  }
+  const was = new Map((p.areas ?? []).map((a) => [a.name, a]));
+  return {
+    ...p,
+    hall: p.areas?.length ? p.hall : undefined,
+    areas: names.map((name) => ({ ...was.get(name), name })),
+    lines: p.lines.map((l) => (l.area && names.includes(l.area) ? l : { ...l, area: undefined })),
+  };
+}
+
 function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
   plant: PlantDraft; index: number; kinds: Kind[]; onChange(p: PlantDraft): void; onRemove(): void; canRemove: boolean;
 }) {
   const setLine = (i: number, l: LineDraft) => onChange({ ...plant, lines: plant.lines.map((x, j) => (j === i ? l : x)) });
+  // what is typed in the 车间 field, kept while typing (a trailing 、 is not a 车间 yet)
+  const [areasTyped, setAreasTyped] = useState(() => areaText(plant));
+  const shown = areaText(plant);
+  useEffect(() => {
+    if (areaNames(areasTyped).join('、') !== areaNames(shown).join('、')) setAreasTyped(shown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown]);
+  const areas = plant.areas ?? [];
+  const multi = areas.length > 1;
+  const cols = multi ? 'grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.2fr)_auto_32px]' : 'grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto_32px]';
   return (
     <section className="rounded-[18px] bg-card p-5 shadow-float max-sm:p-4">
       <div className="flex items-start gap-3">
@@ -147,8 +182,8 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
           <Field label="工厂名称">
             <Input value={plant.name} onChange={(e) => onChange({ ...plant, name: e.target.value })} className="h-9 rounded-xl" placeholder="一厂" />
           </Field>
-          <Field label="车间">
-            <Input value={plant.hall ?? ''} onChange={(e) => onChange({ ...plant, hall: e.target.value })} className="h-9 rounded-xl" placeholder="生产车间" />
+          <Field label="车间" hint={multi ? `${areas.length} 个车间，下面给每条线选在哪个车间` : '分几个车间就用顿号隔开写'}>
+            <Input value={areasTyped} onChange={(e) => { setAreasTyped(e.target.value); onChange(withAreas(plant, e.target.value)); }} className="h-9 rounded-xl" placeholder="生产车间，或 熔化车间、压铸车间" aria-label="车间" />
           </Field>
           <Field label="徽标">
             <Input value={plant.badge ?? ''} maxLength={3} onChange={(e) => onChange({ ...plant, badge: e.target.value })} className="h-9 rounded-xl" placeholder={`${index + 1}厂`} />
@@ -161,21 +196,27 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
         )}
       </div>
       <div className="mt-4 grid gap-2">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto_32px] gap-2 px-1 text-[12px] font-bold text-muted-foreground max-sm:hidden">
-          <span>产线名称</span><span>生产什么</span><span className="w-[92px]">几条</span><span />
+        <div className={cn('grid gap-2 px-1 text-[12px] font-bold text-muted-foreground max-sm:hidden', cols)}>
+          <span>产线名称</span>{multi && <span>在哪个车间</span>}<span>生产什么</span><span className="w-[92px]">几条</span><span />
         </div>
         {plant.lines.map((l, i) => {
           const current = kinds.find((k) => k.key === kindKey(k.industry, l));
           // a line the AI wrote with its own steps matches no kind on the list: still say what it makes
           const same = current ? undefined : kinds.find((k) => k.line.product === l.product);
           return (
-            <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto_32px] items-center gap-2 rounded-xl bg-surface/60 p-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto_32px]">
+            <div key={i} className={cn('grid items-center gap-2 rounded-xl bg-surface/60 p-1.5 max-sm:grid-cols-[minmax(0,1fr)_auto_32px]', cols)}>
               <Input value={l.name} onChange={(e) => setLine(i, { ...l, name: e.target.value })} className="h-9 rounded-xl bg-background" aria-label="产线名称"
                 title="{n} 换成第几条" />
+              {multi && (
+                <Select value={l.area && areas.some((a) => a.name === l.area) ? l.area : areas[0].name} onValueChange={(v) => setLine(i, { ...l, area: v })}>
+                  <SelectTrigger className="h-9 w-full rounded-xl bg-background max-sm:col-span-3 max-sm:row-start-3" aria-label="在哪个车间"><SelectValue /></SelectTrigger>
+                  <SelectContent>{areas.map((a) => <SelectItem key={a.name} value={a.name}>{a.name}</SelectItem>)}</SelectContent>
+                </Select>
+              )}
               <Select value={current?.key ?? ''} onValueChange={(v) => {
                 const k = kinds.find((x) => x.key === v)!;
                 const renamed = !current || l.name === current.name;
-                setLine(i, { ...k.line, name: renamed ? k.name : l.name, note: renamed ? k.note : l.note, repeat: l.repeat });
+                setLine(i, { ...k.line, name: renamed ? k.name : l.name, note: renamed ? k.note : l.note, repeat: l.repeat, area: l.area });
               }}>
                 <SelectTrigger className="h-9 w-full rounded-xl bg-background max-sm:col-span-3 max-sm:row-start-2" aria-label="生产什么">
                   <SelectValue placeholder="选一种产线">{current
@@ -199,7 +240,7 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
           );
         })}
         <button type="button" disabled={!kinds.length}
-          onClick={() => { const k = kinds[0]; onChange({ ...plant, lines: [...plant.lines, { ...k.line, name: k.name, note: k.note, repeat: 1 }] }); }}
+          onClick={() => { const k = kinds[0]; onChange({ ...plant, lines: [...plant.lines, { ...k.line, name: k.name, note: k.note, repeat: 1, area: plant.lines.at(-1)?.area }] }); }}
           className="flex h-9 w-fit items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-bold text-primary hover:bg-brand-soft">
           <PlusIcon className="size-4" />加一种产线
         </button>
@@ -315,7 +356,7 @@ function Preview({ plants, problems, draft }: { plants: PlantLayout[]; problems:
       </div>
       {plants.map((p) => (
         <figure key={p.id} className="grid gap-1.5">
-          <figcaption className="text-[12.5px] font-bold">{p.name} <span className="font-normal text-muted-foreground">{p.hall}</span></figcaption>
+          <figcaption className="text-[12.5px] font-bold">{p.name} <span className="font-normal text-muted-foreground">{p.areas.length > 1 ? p.areas.map((a) => a.name).join('、') : p.hall}</span></figcaption>
           <div className="rounded-xl bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))] p-2.5">
             <Blueprint plant={p} across={36} />
           </div>

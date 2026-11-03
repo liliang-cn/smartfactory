@@ -33,6 +33,7 @@ export function buildWorld(L: PlantLayout, campus = false): THREE.Group {
   if (outdoor) buildFence(g, box);
   else if (L.site === 'shop') buildShopfront(g, L);
   else buildWalls(g, box);
+  if (L.areas.length > 1) buildAreas(g, L);
   buildRoads(g, L, campus);
   buildTrees(g, L, campus);
   if (!campus) buildNeighbourhood(g, box);
@@ -89,6 +90,20 @@ function floorTexture(L: PlantLayout) {
       if (fill) { c.fillStyle = fill; c.fill(); }
       if (stroke) { c.setLineDash(dash); c.strokeStyle = stroke; c.lineWidth = 0.14 * S; c.stroke(); c.setLineDash([]); }
     };
+
+    // areas (车间): each band of the hall in its own light tint, edged in blue
+    if (L.areas.length > 1) {
+      const tints = outdoor ? ['rgba(255,255,255,0.16)', 'rgba(120,170,90,0.10)'] : ['rgba(91,124,240,0.07)', 'rgba(50,163,124,0.07)', 'rgba(242,154,46,0.07)'];
+      L.areas.forEach((a, i) => {
+        c.fillStyle = tints[i % tints.length];
+        c.fillRect(X(a.x0), Z(a.z0), X(a.x1) - X(a.x0), Z(a.z1) - Z(a.z0));
+        c.strokeStyle = 'rgba(31,63,176,0.35)';
+        c.lineWidth = 0.1 * S;
+        c.setLineDash([1.2 * S, 0.6 * S]);
+        c.strokeRect(X(a.x0) + 0.1 * S, Z(a.z0) + 0.1 * S, X(a.x1) - X(a.x0) - 0.2 * S, Z(a.z1) - Z(a.z0) - 0.2 * S);
+        c.setLineDash([]);
+      });
+    }
 
     for (const l of L.lines) {
       // line cell, and the dashed aisle edge on its front
@@ -153,6 +168,43 @@ function floorTexture(L: PlantLayout) {
     };
     centred(L.warehouse.name, (L.warehouse.x0 + L.warehouse.x1) / 2, L.warehouse.z1 + 1.8, 1.0);
     centred(L.fg.name, (L.fg.x0 + L.fg.x1) / 2, L.fg.z1 + 1.2, 0.9);
+  });
+}
+
+/**
+ * A plant of several areas (车间): a low partition between two, and at the left end of each a
+ * standing board with its name, readable from the default camera.
+ */
+function buildAreas(g: THREE.Object3D, L: PlantLayout) {
+  const wall = L.site === 'outdoor' ? bodyMat('#c79a68') : M.white;
+  const hall = L.site === 'hall';
+  const boardMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 });
+  L.areas.forEach((a, i) => {
+    if (i > 0 && hall) {
+      blk(g, wall, a.x1 - a.x0, 1.1, 0.16, (a.x0 + a.x1) / 2, 0, a.z0, 0.04);
+      blk(g, M.blue, a.x1 - a.x0, 0.08, 0.2, (a.x0 + a.x1) / 2, 1.1, a.z0, 0.02);
+    }
+    // the board stands in the aisle between the store and the lines, at the back of its area
+    const x = (L.warehouse.x1 + a.x0) / 2 + 0.6;
+    const z = a.z0 + (i > 0 ? 0.35 : 0.9);
+    const W = 4.2;
+    const H = 1.1;
+    const tex = canvasTex(512, 134, (c, w, h) => {
+      c.fillStyle = '#1f3fb0';
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = '#ffffff';
+      c.font = '800 70px "Plus Jakarta Sans Variable", "PingFang SC", sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(a.name, w / 2, h / 2 - 8, w * 0.92);
+      c.font = '700 26px "Plus Jakarta Sans Variable", "PingFang SC", sans-serif';
+      c.fillStyle = 'rgba(255,255,255,0.75)';
+      c.fillText(`${a.code} · ${a.lines.length} ${L.words.lines}`, w / 2, h - 22, w * 0.92);
+    });
+    const face = mesh(g, new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }), x, 2.0, z + 0.03, false);
+    face.castShadow = false;
+    blk(g, boardMat, W + 0.12, H + 0.12, 0.05, x, 2.0 - H / 2 - 0.06, z, 0.02);
+    for (const sx of [-1, 1]) blk(g, M.blue, 0.08, 1.5, 0.08, x + sx * (W / 2 - 0.3), 0, z - 0.04, 0.02);
   });
 }
 

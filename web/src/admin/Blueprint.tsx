@@ -1,5 +1,5 @@
 // A plant drawn from above as a floor plan, from the same layout the twin builds in 3D: the hall,
-// the raw-material store and finished goods, every line's belt and its machines in order.
+// the raw-material store and finished goods, its areas (车间), every line's belt and its machines in order.
 import { useId } from 'react';
 import type { PlantLayout } from '@/core/layout';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,8 @@ const ARCH_FILL: Record<string, string> = {
   manual: '#c58b4b', safety: '#9aa7bd', chamber: '#d06b3d', filler: '#3aa0c8', booth: '#8f6ae0', tank: '#46a6a0',
   roller: '#6475a0', frame: '#9aa7bd',
 };
+
+const AREA_FILL = ['rgba(91,124,240,0.08)', 'rgba(50,163,124,0.08)', 'rgba(242,154,46,0.08)'];
 
 /** across is about how many label heights fit across the drawing as it is shown (wider shows smaller text) */
 export function Blueprint({ plant, labels = true, across = 80, className }: { plant: PlantLayout; labels?: boolean; across?: number; className?: string }) {
@@ -35,6 +37,14 @@ export function Blueprint({ plant, labels = true, across = 80, className }: { pl
         fill={outdoor ? '#e7f3e4' : 'var(--card)'} stroke={outdoor ? '#7fb174' : 'var(--primary)'} strokeOpacity={outdoor ? 0.8 : 0.45}
         strokeWidth="0.25" strokeDasharray={outdoor ? '0.8 0.5' : undefined} />
       <rect x={box.x0} y={box.z0} width={box.x1 - box.x0} height={box.z1 - box.z0} rx="1.2" fill={`url(#${id}g)`} />
+      {plant.areas.length > 1 && plant.areas.map((a, i) => (
+        <g key={a.code}>
+          <rect x={a.x0} y={a.z0} width={a.x1 - a.x0} height={a.z1 - a.z0} fill={AREA_FILL[i % AREA_FILL.length]} />
+          {i > 0 && <line x1={a.x0} x2={a.x1} y1={a.z0} y2={a.z0} stroke="var(--primary)" strokeOpacity="0.55" strokeWidth="0.22" />}
+          {labels && <text x={a.x0 + 0.4} y={a.z0 + font * 0.95} fontSize={font * 0.85} fontWeight="800" fill="var(--primary)">{a.name}</text>}
+          <title>{`${a.name}：${a.lines.length} 条线`}</title>
+        </g>
+      ))}
       <rect x={plant.warehouse.x0} y={plant.warehouse.z0} width={plant.warehouse.x1 - plant.warehouse.x0} height={plant.warehouse.z1 - plant.warehouse.z0}
         rx="0.6" fill="#e9dcc4" stroke="#b99a6a" strokeWidth="0.15" />
       <rect x={plant.fg.x0} y={plant.fg.z0} width={plant.fg.x1 - plant.fg.x0} height={plant.fg.z1 - plant.fg.z0}

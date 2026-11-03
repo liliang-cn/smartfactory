@@ -217,7 +217,7 @@ func TestOntology(t *testing.T) {
 		t.Fatal(err)
 	}
 	ov, err = kb.OntologyOverview(ctx, "huaduan")
-	if err != nil || ov.Declared || ov.Classes[3].Name != "工位" || ov.Classes[3].Asserted < 50 {
+	if err != nil || ov.Declared || ov.Classes[4].Name != "工位" || ov.Classes[4].Asserted < 50 || ov.Classes[2].Name != "车间" || ov.Classes[2].Asserted != 3 {
 		t.Errorf("huaduan: %+v %v", ov, err)
 	}
 	if _, err := os.Stat(kb.ontoPath("huaduan")); err == nil {

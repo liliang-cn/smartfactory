@@ -119,6 +119,23 @@ export async function call<T>(method: string, path: string, json?: unknown): Pro
 }
 
 export const overview = () => call<Overview>('GET', '/api/admin');
+
+/** One node of a company's plant breakdown (GET /api/pbs/{company}): company › plant › area › line › machine. */
+export interface PBSNode {
+  kind: 'company' | 'plant' | 'area' | 'line' | 'machine';
+  /** the plant's or line's id, the area's code, the machine's tag (位号) */
+  id: string;
+  name: string;
+  sub?: string;
+  state?: string;
+  fault?: string;
+  machines: number;
+  lines: number;
+  /** how many machines under it are in each state now */
+  states: Record<string, number>;
+  children?: PBSNode[];
+}
+export const pbs = (c: string) => call<PBSNode>('GET', `/api/pbs/${encodeURIComponent(c)}`);
 export const createCompany = (cfg: CompanyCfg | unknown) => call<CompanyCreated>('POST', '/api/admin/companies', cfg);
 export const deleteCompany = (id: string) => call<{ ok: true }>('DELETE', `/api/admin/companies/${encodeURIComponent(id)}`);
 export const industry = (id: string) => call<IndustryCfg>('GET', `/api/admin/industries/${encodeURIComponent(id)}`);

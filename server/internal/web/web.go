@@ -177,6 +177,7 @@ func (s *Server) Handler() http.Handler {
 	s.storeRoutes(mux)
 	s.valueRoutes(mux)
 	s.anomalyRoutes(mux)
+	s.pbsRoutes(mux)
 	s.advisorRoutes(mux)
 	s.agentRoutes(mux)
 	s.healthRoutes(mux)

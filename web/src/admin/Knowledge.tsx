@@ -17,7 +17,7 @@ import { OntologyCard, OntologyView } from './Ontology';
 import { Library } from './Library';
 
 const REL: Record<string, [string, string]> = {
-  has_plant: ['有工厂', '属于公司'], has_line: ['有产线', '在工厂'], makes: ['生产', '由这条线生产'],
+  has_plant: ['有工厂', '属于公司'], has_area: ['有车间', '属于工厂'], has_line: ['有产线', '属于'], makes: ['生产', '由这条线生产'],
   has_station: ['有工位', '在产线'], is_a: ['是', '这种设备的工位'], feeds: ['下游', '上游'], supplies: ['供应', '供应商'], sold_to: ['卖给', '买它'],
   for_customer: ['客户', '工单'], of_product: ['产品', '工单'], runs_on: ['产线', '工单'],
   checked_on: ['工位', '点检'], seen_on: ['工位', '读数异常'], calibrates: ['工位', '校准'], targets: ['工位', 'AI 指令'], breached_on: ['工位', '约束告警'],

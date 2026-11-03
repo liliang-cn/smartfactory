@@ -7,7 +7,9 @@
 //   * Ids: line L{n}; machine {code}-{n}{seq:02}; belt CV-{n}; buffers BF-{n} / OF-{n};
 //     AGVs AGV-{nn}A / AGV-{nn}B; store WH, finished goods FG, trucks TRK-IN / TRK-OUT.
 //   * Belt width and part spacing follow the product size; tall products ride a low belt.
-import type { CompanyCfg, IndustryCfg, LineCfgT, MachineCfg, MeasureCfg, PartCfg, PlantCfgT, ProductCfg, StepCfg } from '@/config/schema';
+//   * Areas (车间) are bands of lines along z, in the order listed, with a partition aisle between
+//     two; lines keep their numbers (and so their machines' ids) whichever area they stand in.
+import { plantAreas, type CompanyCfg, type IndustryCfg, type LineCfgT, type MachineCfg, type MeasureCfg, type PartCfg, type PlantCfgT, type ProductCfg, type StepCfg } from '@/config/schema';
 import { wordsOf, type Words } from './terms';
 
 export interface Dims { l: number; h: number; d: number }
@@ -83,10 +85,15 @@ export interface LineLayout {
   infeed: { id: string; name: string; cap: number; x: number; z: number };
   outfeed: { id: string; name: string; cap: number; x: number; z: number };
   lane: number;
+  /** the code of the area (车间) it stands in */
+  area: string;
   order: OrderInfo;
   /** the places (tables, pitches) of its first station with slots, in slot order */
   places: PlaceLayout[];
 }
+
+/** An area of the plant: the band of the hall its lines stand in. */
+export interface AreaLayout { code: string; name: string; note: string; lines: string[]; x0: number; x1: number; z0: number; z1: number }
 
 export interface PlaceLayout { id: string; area: string; seats: number; label: string; overnight: boolean; station: string; slot: number; x: number; z: number; w: number; d: number }
 
@@ -111,6 +118,8 @@ export interface PlantLayout {
   freight: { carrier: string; share: number; late: number; truck: number }[];
   inventory: InventoryLayout[];
   lines: LineLayout[];
+  /** the plant's areas (车间), one for a plant that lists none */
+  areas: AreaLayout[];
   box: { x0: number; x1: number; z0: number; z1: number };
   warehouse: Zone;
   fg: Zone;
@@ -236,18 +245,20 @@ function productInfo(industry: IndustryCfg, key: string, needsPacked: boolean): 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const r1 = (v: number) => Math.round(v * 100) / 100;
 
-interface ExpandedLine { cfg: LineCfgT; name: string; steps: StepCfg[] }
+interface ExpandedLine { cfg: LineCfgT; name: string; steps: StepCfg[]; area: number }
 
 function expandLines(plant: PlantCfgT, industry: IndustryCfg): ExpandedLine[] {
   const out: ExpandedLine[] = [];
-  for (const cfg of plant.lines) {
+  const areas = plantAreas(plant);
+  for (const [ci, cfg] of plant.lines.entries()) {
+    const area = Math.max(0, areas.findIndex((a) => a.lines.includes(ci)));
     const steps = cfg.steps ?? industry.routes[cfg.route!];
     if (!steps) throw new Error(`行业包 ${industry.id} 里没有工艺路线 ${cfg.route}`);
     for (let i = 1; i <= cfg.repeat; i++) {
       const n = out.length + 1;
       const name = cfg.name.includes('{n}') ? cfg.name.replace('{n}', String(cfg.repeat > 1 ? i : n))
         : cfg.repeat > 1 ? `${cfg.name} ${i}` : cfg.name;
-      out.push({ cfg, name, steps });
+      out.push({ cfg, name, steps, area });
     }
   }
   return out;
@@ -268,8 +279,14 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
   let zCursor = 0;
   const words = wordsOf(industry);
   const lg = industry.logistics;
+  const areaCfg = plantAreas(plant);
+  // the z band each area takes, filled in as its lines are placed
+  const bands = areaCfg.map(() => ({ z0: 0, z1: 0 }));
+  const AREA_GAP = 2.4;
+  const EMPTY_AREA = 6;
 
-  expandLines(plant, industry).forEach(({ cfg, name, steps }, li) => {
+  const expanded = expandLines(plant, industry);
+  const place = ({ cfg, name, steps, area }: ExpandedLine, li: number) => {
     const n = li + 1;
     const resolved = steps.map((s) => {
       const st = typeof s === 'string' ? { machine: s } : s;
@@ -380,6 +397,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       infeed: { id: `BF-${n}`, name: `${name}${words.infeed}`, cap: 40, x: x0 + 0.6, z: z + beltW / 2 + 1.1 },
       outfeed: { id: `OF-${n}`, name: `${name}${words.outfeed}`, cap: max.l > 1.5 ? 6 : 18, x: x1 + 1.6, z },
       lane: z + beltW / 2 + 3.2,
+      area: areaCfg[area].code,
       places: places.map((p) => ({ ...p, z: r1(z + p.z) })),
       order: {
         no: cfg.order?.no ?? `${industry.terms.order?.prefix ?? 'MO'}-261005-${plantIndex + 1}${pad2(n)}`,
@@ -389,7 +407,17 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
         kitted: `05:${pad2(48 + (n % 10))}`,
       },
     });
+  };
+  // area by area along z, a partition aisle between two; the lines keep their numbers
+  areaCfg.forEach((_, ai) => {
+    if (ai > 0) zCursor += AREA_GAP;
+    bands[ai].z0 = zCursor;
+    let any = false;
+    expanded.forEach((e, li) => { if (e.area === ai) { place(e, li); any = true; } });
+    if (!any) zCursor += EMPTY_AREA;
+    bands[ai].z1 = zCursor;
   });
+  lines.sort((a, b) => a.no - b.no);
 
   // Hall bounds, then centre everything on the origin.
   const maxX1 = Math.max(...lines.map((l) => l.outfeed.x + 1.5));
@@ -407,6 +435,17 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
     for (const p of l.places) { p.x = X(p.x); p.z = Z(p.z); }
   }
   const box = { x0: X(raw.x0), x1: X(raw.x1), z0: Z(raw.z0), z1: Z(raw.z1) };
+  // one area: the whole hall; more: the band of each, from the store's dock to finished goods' one
+  const areas: AreaLayout[] = areaCfg.map((a, i) => ({
+    code: a.code, name: a.name, note: a.note, lines: lines.filter((l) => l.area === a.code).map((l) => l.id),
+    ...(areaCfg.length === 1
+      ? { x0: box.x0, x1: box.x1, z0: box.z0, z1: box.z1 }
+      : {
+        x0: X(2 + WH_W + 3.5), x1: X(fgX0 - 3),
+        z0: i === 0 ? box.z0 : Z(bands[i].z0 - AREA_GAP / 2),
+        z1: i === areaCfg.length - 1 ? box.z1 : Z(bands[i].z1 + AREA_GAP / 2),
+      }),
+  }));
   const warehouse: Zone = { id: 'WH', name: plant.warehouse, x0: X(2), x1: X(2 + WH_W), z0: box.z0 + 2.5, z1: box.z1 - 2.5, cap: 1600 * lines.length };
   const fg: Zone = { id: 'FG', name: plant.finishedGoods, x0: X(fgX0), x1: X(fgX0 + 8.5), z0: box.z0 + 2.5, z1: box.z1 - 2.5, cap: 0 };
   const whDock = X(2 + WH_W + 2);
@@ -483,6 +522,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
       return { key, label: it.label, unit: it.unit, kind: it.kind, cap, low: it.low, refill: it.refill ?? Math.ceil(cap / 2), lead: it.lead, price: it.price };
     }),
     lines,
+    areas,
     box,
     warehouse,
     fg,

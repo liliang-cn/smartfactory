@@ -27,6 +27,7 @@ import { ChecksPanel } from './Checks';
 import { StoresPanel } from './Stores';
 import { DiesPanel } from './Dies';
 import { RnDPanel } from './RnD';
+import { StructurePanel } from './Structure';
 import { GuardPanel } from './Guard';
 import { HealthPanel } from './Health';
 import { ValuePanel } from './Value';
@@ -51,7 +52,7 @@ const fmtDay = (iso: string) => {
 function PlantPanel({ plant, info }: { plant: PlantLayout; info?: api.Company['plants'][number] }) {
   return (
     <Panel
-      title={<span className="flex items-center gap-2.5"><span className="grid h-7 min-w-8 place-items-center rounded-lg bg-primary px-1 text-[12px] font-extrabold text-primary-foreground">{plant.badge}</span>{plant.name}<small className="text-[12.5px] font-semibold text-muted-foreground">{plant.hall}{plant.site === 'outdoor' ? '，户外' : ''}</small></span>}
+      title={<span className="flex items-center gap-2.5"><span className="grid h-7 min-w-8 place-items-center rounded-lg bg-primary px-1 text-[12px] font-extrabold text-primary-foreground">{plant.badge}</span>{plant.name}<small className="text-[12.5px] font-semibold text-muted-foreground">{plant.areas.length > 1 ? plant.areas.map((a) => a.name).join('、') : plant.hall}{plant.site === 'outdoor' ? '，户外' : ''}</small></span>}
       aside={<span className="text-[12.5px] text-muted-foreground tabular-nums">{plant.lines.length} 条线，{info?.machines ?? plant.lines.reduce((n, l) => n + l.stations.length, 0)} 台设备</span>}
     >
       <div className="overflow-x-auto rounded-xl bg-[color-mix(in_oklab,var(--primary)_4%,var(--card))] p-3">
@@ -61,13 +62,14 @@ function PlantPanel({ plant, info }: { plant: PlantLayout; info?: api.Company['p
       <Table className="mt-4">
         <TableHeader>
           <TableRow className="text-[12px]">
-            <TableHead>产线</TableHead><TableHead>产品</TableHead><TableHead className="max-md:hidden">工序</TableHead><TableHead className="text-right">节拍</TableHead>
+            <TableHead>产线</TableHead>{plant.areas.length > 1 && <TableHead>车间</TableHead>}<TableHead>产品</TableHead><TableHead className="max-md:hidden">工序</TableHead><TableHead className="text-right">节拍</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {plant.lines.map((l) => (
             <TableRow key={l.id} className="text-[13px]">
               <TableCell className="font-bold">{l.name}{l.note && <span className="ml-1.5 font-normal text-muted-foreground">{l.note}</span>}</TableCell>
+              {plant.areas.length > 1 && <TableCell>{plant.areas.find((a) => a.code === l.area)?.name}</TableCell>}
               <TableCell>{l.product.name}</TableCell>
               <TableCell className="max-w-[420px] truncate text-muted-foreground max-md:hidden" title={l.stations.map((s) => s.name).join(' → ')}>{l.stations.map((s) => s.name).join(' → ')}</TableCell>
               <TableCell className="text-right tabular-nums">{Math.max(...l.stations.map((s) => s.cycle))} 秒</TableCell>
@@ -248,6 +250,7 @@ export default function Customer({ id, home = false }: { id: string; home?: bool
           ))}
         </TabsList>
         <TabsContent value="scene" className="grid gap-5">
+          <StructurePanel company={c.id} />
           {error && <Panel><p className="text-[13px] text-destructive">配置读不出来：{error}</p></Panel>}
           {data?.plants.map((p) => <PlantPanel key={p.id} plant={p} info={c.plants.find((x) => x.id === p.id)} />)}
         </TabsContent>
