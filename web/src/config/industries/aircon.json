@@ -7,6 +7,7 @@
   "products": {
     "idu": {
       "name": "KFR-35GW 挂机内机",
+      "partNo": "NF-IDU-35GW",
       "stages": {
         "chassis": {
           "parts": [
@@ -152,6 +153,7 @@
     },
     "odu": {
       "name": "KFR-35W 空调外机",
+      "partNo": "NF-ODU-35W",
       "stages": {
         "base": {
           "parts": [
@@ -801,6 +803,50 @@
       1.0,
       0.95,
       0.7
+    ]
+  },
+  "stores": {
+    "categories": [
+      {
+        "key": "raw",
+        "label": "原材料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "buy",
+        "label": "外购件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "std",
+        "label": "标准件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "aux",
+        "label": "辅料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      }
     ]
   }
 }

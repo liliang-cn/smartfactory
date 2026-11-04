@@ -598,6 +598,22 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 			},
 		})
 	}
+	if store != nil {
+		o := ws.Operations()
+		mcptools.AddBOM(ms, mcptools.BOMTools{
+			Query: func(w auth.Who, company, part, rev string, qty float64) (any, error) {
+				return o.QueryBOM(w, company, part, rev, qty)
+			},
+			WhereUsed: func(w auth.Who, company, q string) (any, error) {
+				us, err := o.WhereUsed(w, company, q)
+				return map[string]any{"query": q, "count": len(us), "uses": us}, err
+			},
+			Kitting: func(w auth.Who, company, order string) (any, error) { return o.OrderKit(w, company, order) },
+			ECOs: func(w auth.Who, company, part string, limit int) (any, error) {
+				return o.ChangeRecords(w, company, part, limit)
+			},
+		})
+	}
 	if kb != nil {
 		mcptools.AddKnowledge(ms, ws.Operations().KnowledgeTools())
 	}

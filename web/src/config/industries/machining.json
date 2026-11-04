@@ -7,6 +7,7 @@
   "products": {
     "cover": {
       "name": "电机端盖",
+      "partNo": "JG-DG-112",
       "stages": {
         "blank": {
           "parts": [
@@ -55,6 +56,7 @@
     },
     "bracket": {
       "name": "支架焊合件",
+      "partNo": "JG-ZJ-320",
       "stages": {
         "blank": {
           "parts": [
@@ -402,6 +404,50 @@
       1.0,
       0.95,
       0.7
+    ]
+  },
+  "stores": {
+    "categories": [
+      {
+        "key": "raw",
+        "label": "原材料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "buy",
+        "label": "外购件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "std",
+        "label": "标准件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "aux",
+        "label": "辅料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      }
     ]
   }
 }

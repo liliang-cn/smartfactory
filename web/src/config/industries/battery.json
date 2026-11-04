@@ -7,6 +7,7 @@
   "products": {
     "cell": {
       "name": "280Ah 方形磷酸铁锂电芯",
+      "partNo": "RN-LFP280",
       "stages": {
         "stack": {
           "parts": [
@@ -304,6 +305,7 @@
     },
     "module": {
       "name": "电池模组",
+      "partNo": "RN-MOD-16S",
       "stages": {
         "frame": {
           "parts": [
@@ -1169,6 +1171,50 @@
       1.0,
       0.95,
       0.7
+    ]
+  },
+  "stores": {
+    "categories": [
+      {
+        "key": "raw",
+        "label": "原材料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "buy",
+        "label": "外购件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "std",
+        "label": "标准件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "aux",
+        "label": "辅料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      }
     ]
   }
 }

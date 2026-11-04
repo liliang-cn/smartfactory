@@ -5126,5 +5126,39 @@
         "say": "{name} 没有指定存放位置"
       }
     ]
+  },
+  "stores": {
+    "categories": [
+      {
+        "key": "raw",
+        "label": "食材",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "pack",
+        "label": "包材",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "aux",
+        "label": "调料辅料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      }
+    ]
   }
 }

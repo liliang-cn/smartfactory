@@ -7,6 +7,7 @@
   "products": {
     "bread": {
       "name": "吐司面包",
+      "partNo": "HT-TS-450",
       "stages": {
         "tin": {
           "parts": [
@@ -251,6 +252,7 @@
     },
     "juice": {
       "name": "500 ml 橙汁饮料",
+      "partNo": "HT-CZ-500",
       "stages": {
         "preform": {
           "parts": [
@@ -890,6 +892,13 @@
       "labeler",
       "inspector",
       "case-packer"
+    ]
+  },
+  "stores": {
+    "categories": [
+      { "key": "raw", "label": "食材", "kind": "other", "unit": "kg", "fields": ["规格", "用在"] },
+      { "key": "pack", "label": "包材", "kind": "part", "unit": "件", "fields": ["规格", "用在"] },
+      { "key": "aux", "label": "辅料", "kind": "other", "unit": "kg", "fields": ["规格", "用在"] }
     ]
   },
   "ontology": {

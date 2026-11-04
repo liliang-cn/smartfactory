@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// SeedBOM gives the demo company the BOMs of the part numbers its lines make, once its stores
+// SeedBOM gives the demo company (the other demo companies, seed_bom_packs.go) the BOMs of the part numbers its lines make, once its stores
 // are seeded: each finished part over its forging, the forging over the bar it is cut from, by the
 // cut weight its config gives, and the shot, die lubricant and rust oil it takes; a crankshaft
 // also takes its timing gear (forged here from 40Cr bar: a sub-assembly with a BOM of its own),
@@ -16,7 +16,10 @@ import (
 // 2.0T crankshaft has a revision before the one in effect, so it has a change record; the new
 // part in trial forging has a draft.
 func (s *Service) SeedBOM(company string) error {
-	if company != Demo || s.Products == nil {
+	if company != Demo {
+		return s.seedPack(company)
+	}
+	if s.Products == nil {
 		return nil
 	}
 	mark := company + "/bom"

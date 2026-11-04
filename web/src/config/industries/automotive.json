@@ -7,6 +7,7 @@
   "products": {
     "suv": {
       "name": "SUV 整车",
+      "partNo": "YL-X7-20T",
       "stages": {
         "underbody": {
           "parts": [
@@ -1079,6 +1080,50 @@
       1.0,
       0.95,
       0.7
+    ]
+  },
+  "stores": {
+    "categories": [
+      {
+        "key": "raw",
+        "label": "原材料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "buy",
+        "label": "外购件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "std",
+        "label": "标准件",
+        "kind": "part",
+        "unit": "件",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      },
+      {
+        "key": "aux",
+        "label": "辅料",
+        "kind": "other",
+        "unit": "kg",
+        "fields": [
+          "规格",
+          "用在"
+        ]
+      }
     ]
   }
 }
