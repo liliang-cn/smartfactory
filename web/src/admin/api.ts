@@ -144,7 +144,7 @@ export const pbs = (c: string) => call<PBSNode>('GET', `/api/pbs/${encodeURIComp
 export const createCompany = (cfg: CompanyCfg | unknown) => call<CompanyCreated>('POST', '/api/admin/companies', cfg);
 
 /** One part of a built company, picked to be changed: a plant, an area (by code), a line (L3) or a machine (by tag). */
-export interface ScopeNode { kind: 'plant' | 'area' | 'line' | 'machine'; plant: string; area?: string; line?: string; asset?: string }
+export interface ScopeNode { kind: 'plant' | 'area' | 'line' | 'machine'; plant: string; area?: string; line?: string; asset?: string; single?: boolean }
 export interface ScopeStation { id: string; key: string; name: string; label: string; code: string; cycle: number; warn: number; trip: number }
 export interface ScopeLine { id: string; no: number; name: string; cfg: number; rep: number; area: string; speed: number; stations: ScopeStation[] }
 export interface ScopePlant { id: string; name: string; industry: string; hall: string; areas: { code: string; name: string; note: string; index: number }[]; lines: ScopeLine[] }
@@ -156,11 +156,11 @@ export interface ScopeModel {
   machines: Record<string, Record<string, MachineKind>>;
   plants: ScopePlant[];
 }
-export interface Scope { node: ScopeNode; title: string; path: string; plant: number; line: number; step: number; areaIndex: number; areaLines?: number[]; shared?: string }
+export interface Scope { node: ScopeNode; title: string; path: string; plant: number; line: number; step: number; areaIndex: number; areaLines?: number[]; shared?: string; split?: string }
 export interface ScopeView { scope: Scope; model: ScopeModel; base: string; versions: number; last?: string }
 export interface TagChange { plant: string; from: string; to?: string; name: string; line: string; attached?: string[] }
 export interface ScopeResult {
-  title: string; shared?: string; base: string; saved: boolean; config: Record<string, unknown>;
+  title: string; shared?: string; split?: string; base: string; saved: boolean; config: Record<string, unknown>;
   preview: { changes: string[]; tags: TagChange[]; added: string[] };
 }
 export interface ScopeChange { op: 'set' | 'insert' | 'remove'; path: string; value?: unknown }

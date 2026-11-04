@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { BellIcon, GaugeIcon, OctagonAlertIcon, PackageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { campusLayout, type Campus, type CampusSlot } from '@/core/campus';
-import { homeView } from '@/core/layout';
+import { homeView, plantTitle } from '@/core/layout';
 import { runtime, useTick, useUI, type PlantRuntime } from '@/state/store';
 import type { Asset } from '@/sim/types';
 import { applyTint, buildModel, initTint, type ModelHandle } from '@/three/factory';
@@ -246,7 +246,7 @@ const PlantCard = memo(function PlantCard({ plant, hovered, onHover, els }: { pl
     >
       <span className="flex items-center gap-2 whitespace-nowrap">
         <span className="grid h-6 min-w-7 place-items-center rounded-md bg-primary px-1 text-[11px] font-extrabold text-primary-foreground max-md:h-5 max-md:rounded-full max-md:px-1.5 max-md:text-[10px]">{L.badge}</span>
-        <b className="text-[14px] font-extrabold max-md:hidden">{L.name} {L.hall}</b>
+        <b className="text-[14px] font-extrabold max-md:hidden">{plantTitle(L)}</b>
       </span>
       <span className="grid grid-cols-4 gap-3 max-md:flex max-md:gap-2">
         <Stat label={shortLabel(f.head)} icon={<GaugeIcon />} value={f.head.text} />

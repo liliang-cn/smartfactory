@@ -94,6 +94,11 @@ export interface LineLayout {
   changeover?: number;
 }
 
+/** A plant's name for a title: with its hall's name when it is one hall, alone when it has several areas (车间). */
+export function plantTitle(L: { name: string; hall: string; areas: unknown[] }): string {
+  return L.areas.length > 1 ? L.name : `${L.name} ${L.hall}`;
+}
+
 /** An area of the plant: the band of the hall its lines stand in. */
 export interface AreaLayout { code: string; name: string; note: string; lines: string[]; x0: number; x1: number; z0: number; z1: number }
 

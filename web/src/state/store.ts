@@ -41,6 +41,8 @@ export type CamOp = 'in' | 'out' | 'left' | 'right' | 'home' | 'focus';
 interface UIState {
   plantId: string;
   selected: string | null;
+  /** the area (车间, by its code) picked by its board in the twin */
+  area: string | null;
   hovered: string | null;
   tip: { id: string; x: number; y: number } | null;
   follow: boolean;
@@ -55,6 +57,7 @@ interface UIState {
 
   setPlant(id: string): void;
   select(id: string | null, focus?: boolean): void;
+  selectArea(code: string | null): void;
   hover(id: string | null, x?: number, y?: number): void;
   setTimeScale(s: number): void;
   setMode(m: ViewMode): void;
@@ -71,6 +74,7 @@ interface UIState {
 export const useUI = create<UIState>()((set, get) => ({
   plantId: '',
   selected: null,
+  area: null,
   hovered: null,
   tip: null,
   follow: false,
@@ -90,7 +94,7 @@ export const useUI = create<UIState>()((set, get) => ({
     document.body.style.cursor = '';
     const tab = get().fleetTab;
     set({
-      plantId: id, selected: null, hovered: null, tip: null, follow: false, sheetOpen: false,
+      plantId: id, selected: null, area: null, hovered: null, tip: null, follow: false, sheetOpen: false,
       ...(p ? { trackerLine: p.layout.lines[0].id } : {}),
       ...(all ? { fleetTab: 'plants' } : tab === 'plants' ? { fleetTab: 'machines' } : {}),
     });
@@ -107,11 +111,16 @@ export const useUI = create<UIState>()((set, get) => ({
     const a = id ? sim.assets.get(id)! : null;
     set({
       selected: id,
+      area: null,
       follow: a && (a.agv || a.truck) ? get().follow : false,
       sheetOpen: false,
       ...(a?.line ? { trackerLine: a.line.id } : {}),
     });
     if (id && focus) get().camera('focus', id);
+  },
+  selectArea(code) {
+    if (code && get().plantId === ALL) return;
+    set({ area: code, ...(code ? { selected: null, follow: false, sheetOpen: false } : {}) });
   },
   hover(id, x = 0, y = 0) {
     set({ hovered: id, tip: id ? { id, x, y } : null });

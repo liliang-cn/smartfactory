@@ -28,10 +28,10 @@ func (s *Server) scopeRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, v)
 	}
-	// ?kind=line&plant=p1&line=L2 (area=<code>, asset=<tag>)
+	// ?kind=line&plant=p1&line=L2 (area=<code>, asset=<tag>, single=true: just this copy of a repeated line)
 	mux.HandleFunc("GET /api/admin/companies/{id}/scope", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		n := scoped.Node{Kind: q.Get("kind"), Plant: q.Get("plant"), Area: q.Get("area"), Line: q.Get("line"), Asset: q.Get("asset")}
+		n := scoped.Node{Kind: q.Get("kind"), Plant: q.Get("plant"), Area: q.Get("area"), Line: q.Get("line"), Asset: q.Get("asset"), Single: q.Get("single") == "true"}
 		v, err := o.Scope(s.caller(r), r.PathValue("id"), n)
 		answer(w, v, err)
 	})

@@ -411,7 +411,7 @@ export function GroupFleet() {
               <Badge text={p.layout.badge} />
               <span className="grid min-w-0 leading-tight">
                 <b className="truncate font-extrabold">{p.layout.name}</b>
-                <small className="truncate text-[11px] text-muted-foreground">{p.layout.hall}</small>
+                <small className="truncate text-[11px] text-muted-foreground">{p.layout.areas.length > 1 ? p.layout.areas.map((a) => a.name).join("、") : p.layout.hall}</small>
               </span>
             </span>
             {([[shortLabel(f.head), f.head.text, !!f.head.bad], [`${p.layout.unit}/时`, rate(f.tp), false], ['报警', `${f.alarms}`, f.alarms > 0], ['故障', `${f.faults}`, f.faults > 0]] as const).map(([label, v, bad]) => (

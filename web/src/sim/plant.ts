@@ -653,7 +653,7 @@ export class PlantSim {
     const vs = this.variants(line);
     const prev = line.job ?? line.last;
     let v = vs.findIndex((x) => x.partNo === o.partNo);
-    if (v < 0) v = prev?.variant ?? 0;
+    if (v < 0) v = Math.min(prev?.variant ?? 0, vs.length - 1);
     const L = line.layout;
     const pr = L.product;
     const neck = Math.max(...line.stations.map((a) => a.cycle));
@@ -2429,7 +2429,7 @@ export class PlantSim {
     this.lines.forEach((l, i) => {
       const x = saved.lines?.[i];
       if (x) {
-        Object.assign(l, { lot: x.lot, job: x.job, last: x.last, pmWeek: x.pmWeek, planEff: x.planEff, shiftMark: x.shiftMark, noJobUntil: x.noJobUntil });
+        Object.assign(l, { lot: x.lot, job: this.ownOrder(l, x.job), last: this.ownOrder(l, x.last), pmWeek: x.pmWeek, planEff: x.planEff, shiftMark: x.shiftMark, noJobUntil: x.noJobUntil });
         l.pauses = (x.pauses ?? []).map(([a, b]) => [a, b ?? Infinity]);
       }
       // what the units carried: their lot, flaw, the time they need here, the group and its place
@@ -2461,6 +2461,17 @@ export class PlantSim {
     // carry on in the present: the plant's wall clock is now
     this.epoch = Date.now() - this.elapsed * 1000;
     return true;
+  }
+
+  /**
+   * An order from a saved state as this line can carry on with it: its part number found again in
+   * the line's own list (the place it had there may have moved), or none when the line no longer
+   * makes that part (the company was changed under it: another product).
+   */
+  private ownOrder(line: Line, job: Job | undefined): Job | undefined {
+    if (!job) return undefined;
+    const k = this.variants(line).findIndex((v) => v.partNo === job.partNo);
+    return k < 0 ? undefined : { ...job, variant: k };
   }
 
   /** Adopts the server's state; local motion continues from here until the next frame. */

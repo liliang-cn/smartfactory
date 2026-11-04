@@ -47,8 +47,10 @@ type ScopeRequest struct {
 
 // ScopeResult is what a change does (and, saved, did).
 type ScopeResult struct {
-	Title   string         `json:"title"`
-	Shared  string         `json:"shared,omitempty"`
+	Title  string `json:"title"`
+	Shared string `json:"shared,omitempty"`
+	// Split says that this copy of a repeated line is made a line of its own, the others left as they are
+	Split   string         `json:"split,omitempty"`
 	Preview scoped.Preview `json:"preview"`
 	// Config is the company's config with the change, as it would be kept.
 	Config map[string]any `json:"config"`
@@ -87,9 +89,35 @@ func (o *Ops) scopeBase(who auth.Who, company string) (*scoped.Model, string, er
 	return m, stamp(cfg), nil
 }
 
+// splitBase is base with the copy picked made a line entry of its own, when the node asks for
+// just that copy of a repeated line; the words say what was done ("" when nothing was).
+func (o *Ops) splitBase(base *scoped.Model, n scoped.Node) (*scoped.Model, string, error) {
+	if !n.Single {
+		return base, "", nil
+	}
+	cfg, msg, ok := scoped.Split(base, n)
+	if !ok {
+		return base, "", nil
+	}
+	raw, _ := json.Marshal(scoped.Compact(base, cfg))
+	res := o.Engine.ScopeModel(raw)
+	if !res.OK {
+		return nil, "", rejected(res)
+	}
+	m, err := scoped.Parse(res.Detail)
+	if err != nil {
+		return nil, "", err
+	}
+	return m, msg, nil
+}
+
 // Scope is the part of a company picked, for its editor.
 func (o *Ops) Scope(who auth.Who, company string, n scoped.Node) (*ScopeView, error) {
 	m, base, err := o.scopeBase(who, company)
+	if err != nil {
+		return nil, err
+	}
+	m, split, err := o.splitBase(m, n)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +125,7 @@ func (o *Ops) Scope(who auth.Who, company string, n scoped.Node) (*ScopeView, er
 	if err != nil {
 		return nil, fail(404, "%s", err)
 	}
+	s.Split = split
 	v := &ScopeView{Scope: s, Model: m, Base: base}
 	vs := o.Engine.Versions(company)
 	v.Versions = len(vs)
@@ -134,7 +163,7 @@ func (o *Ops) proposeScoped(company string, base *scoped.Model, s *scoped.Scope,
 	}
 	pv := scoped.Describe(base, prop)
 	o.attachments(company, pv.Tags)
-	return &ScopeResult{Title: s.Title, Shared: s.Shared, Preview: pv, Config: keep}, prop, nil
+	return &ScopeResult{Title: s.Title, Shared: s.Shared, Split: s.Split, Preview: pv, Config: keep}, prop, nil
 }
 
 // attachments says what is filed under each tag that changes or goes: devices that report for
@@ -171,10 +200,15 @@ func (o *Ops) scopeOf(who auth.Who, company string, req ScopeRequest) (*scoped.M
 	if req.Base != "" && req.Base != stamp {
 		return nil, nil, "", fail(409, "公司的配置在你改的这段时间变了（别人保存过或撤销过），重新打开这里再改")
 	}
+	base, split, err := o.splitBase(base, req.Node)
+	if err != nil {
+		return nil, nil, "", err
+	}
 	s, err := scoped.Resolve(base, req.Node)
 	if err != nil {
 		return nil, nil, "", fail(404, "%s", err)
 	}
+	s.Split = split
 	return base, s, stamp, nil
 }
 
@@ -208,7 +242,11 @@ func (o *Ops) ScopeApply(who auth.Who, via, company string, req ScopeRequest) (*
 	}
 	raw, _ := json.Marshal(r.Config)
 	res := o.Engine.CreateCompany(raw)
-	o.Audit.Record(who, via, company, "company.edit", s.Title, strings.Join(r.Preview.Changes, "；"), errOf(res))
+	changes := strings.Join(r.Preview.Changes, "；")
+	if r.Split != "" {
+		changes = r.Split + changes
+	}
+	o.Audit.Record(who, via, company, "company.edit", s.Title, changes, errOf(res))
 	if !res.OK {
 		return nil, rejected(res)
 	}
@@ -274,10 +312,15 @@ func (o *Ops) ScopeAI(ctx context.Context, who auth.Who, company string, n scope
 	if err != nil {
 		return err
 	}
+	base, split, err := o.splitBase(base, n)
+	if err != nil {
+		return err
+	}
 	s, err := scoped.Resolve(base, n)
 	if err != nil {
 		return fail(404, "%s", err)
 	}
+	s.Split = split
 	cfg, _ := json.Marshal(base.Config)
 	machines, _ := json.Marshal(base.Machines)
 	check := func(changes []scoped.Change) (any, error) {

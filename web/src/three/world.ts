@@ -1,7 +1,7 @@
 // The static world around a plant layout: hall slab and painted floor plan, walls with dock
 // doors, roads, trees and neighbouring blocks. Everything is derived from the layout bounds.
 import * as THREE from 'three';
-import type { PlantLayout } from '@/core/layout';
+import { plantTitle, type PlantLayout } from '@/core/layout';
 import type { Campus } from '@/core/campus';
 import { M, P, blk, bodyMat, canvasTex, cyl, mesh } from './kit';
 import { SRInstances, hasSR, srBox } from './simready';
@@ -203,6 +203,10 @@ function buildAreas(g: THREE.Object3D, L: PlantLayout) {
     });
     const face = mesh(g, new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }), x, 2.0, z + 0.03, false);
     face.castShadow = false;
+    // clicking the board picks the area (see World in scene/Scene.tsx); the hit plane is bigger than the board for thumbs
+    face.userData.areaCode = a.code;
+    const hit = mesh(g, new THREE.PlaneGeometry(W + 1.6, H + 1.4), new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }), x, 2.0, z + 0.05, false);
+    hit.userData.areaCode = a.code;
     blk(g, boardMat, W + 0.12, H + 0.12, 0.05, x, 2.0 - H / 2 - 0.06, z, 0.02);
     for (const sx of [-1, 1]) blk(g, M.blue, 0.08, 1.5, 0.08, x + sx * (W / 2 - 0.3), 0, z - 0.04, 0.02);
   });
@@ -460,7 +464,7 @@ export function buildCampus(c: Campus): THREE.Group {
       if (sideRoads.some((r) => Math.abs(x - r) < 6) || signs.some(([a, b]) => x > a && x < b)) continue;
       spots.push([x + j(), row.front + 9 + j()]);
     }
-    for (const s of inRow) sign(g, `${s.layout.name}  ${s.layout.hall}`, s.ox + (s.layout.box.x0 + s.layout.box.x1) / 2, row.front + 9);
+    for (const s of inRow) sign(g, plantTitle(s.layout), s.ox + (s.layout.box.x0 + s.layout.box.x1) / 2, row.front + 9);
   }
   trees(g, spots);
   buildNeighbourhood(g, { x0: bounds.x0 + 16, x1: bounds.x1 - 16, z0: bounds.z0 + 14, z1: bounds.z1 });

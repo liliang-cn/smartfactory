@@ -17,6 +17,8 @@ type Node struct {
 	Area  string `json:"area,omitempty"`
 	Line  string `json:"line,omitempty"`
 	Asset string `json:"asset,omitempty"`
+	// Single: change only this copy of a repeated line (it is split out first, see Split)
+	Single bool `json:"single,omitempty"`
 }
 
 // Scope is a node resolved in a model: where in the config its subtree is.
@@ -36,6 +38,9 @@ type Scope struct {
 	AreaLines []int `json:"areaLines,omitempty"`
 	// Shared: the line entry builds several lines (repeat), which a change to it changes together
 	Shared string `json:"shared,omitempty"`
+	// Split: only this copy of a repeated line is changed — it was made a line entry of its own
+	// first (so Line is that entry); says so in words
+	Split string `json:"split,omitempty"`
 	// Lines is how many line entries the plant has
 	Lines int `json:"-"`
 }

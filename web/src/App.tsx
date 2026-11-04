@@ -6,6 +6,7 @@ import { CampusScene } from '@/scene/CampusScene';
 import { Scene } from '@/scene/Scene';
 import { runtime, useCampus, usePlant, useTick, useUI } from '@/state/store';
 import { Inspector } from '@/ui/Inspector';
+import { AreaCard } from '@/ui/AreaCard';
 import { Labels } from '@/ui/Labels';
 import { GroupKpis, HoverTip, Kpis, MapControls, ViewSwitch } from '@/ui/Overlay';
 import { Fleet, GroupFleet, Tracker } from '@/ui/Panels';
@@ -72,7 +73,7 @@ function useShortcuts() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, [role="dialog"]')) return;
       const s = useUI.getState();
-      if (e.key === 'Escape') s.select(null);
+      if (e.key === 'Escape') { s.select(null); s.selectArea(null); }
       else if (e.key === ' ') { e.preventDefault(); s.setTimeScale(s.timeScale === 0 ? 1 : 0); }
       else if (e.key === 'f' || e.key === 'F') { if (s.selected) s.camera('focus', s.selected); }
       else if (e.key === 'h' || e.key === 'H') s.camera('home');
@@ -117,6 +118,7 @@ export default function App() {
         {!campus && <Tracker />}
         {campus ? <GroupFleet /> : <Fleet />}
         {!biz && <Inspector />}
+        {!biz && <AreaCard />}
         {!biz && <HoverTip />}
         <BusinessView />
         <AgentsView />

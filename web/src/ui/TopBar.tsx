@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { plantTitle } from '@/core/layout';
 import { ActivityIcon, BarChart3Icon, BellIcon, BotIcon, BoxIcon, ChevronDownIcon, KeyRoundIcon, LayoutGridIcon, LogOutIcon, PauseIcon, RadioTowerIcon, ScrollTextIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -73,7 +74,7 @@ function SiteSwitcher() {
           <Button variant="outline" className="h-11 min-w-0 shrink gap-2.5 rounded-xl pl-1.5 pr-3 max-md:h-[38px] max-md:pr-1.5" aria-label={`切换${cw.plant}`}>
             {campus ? <AllBadge /> : <SiteBadge text={L.badge} />}
             <span className="grid min-w-0 text-left leading-tight max-lg:hidden">
-              <b className="truncate text-[13.5px]">{campus ? `全部${cw.plant}` : `${L.name} ${L.hall}`}</b>
+              <b className="truncate text-[13.5px]">{campus ? `全部${cw.plant}` : plantTitle(L)}</b>
               <small className="truncate text-[11.5px] font-normal text-muted-foreground max-xl:hidden">{campus ? `${rt.plants.length} 个${cw.plant} · ${lines} ${cw.lines}` : L.sub}</small>
             </span>
             <ChevronDownIcon className="text-muted-foreground max-md:hidden" />
@@ -103,7 +104,7 @@ function SiteSwitcher() {
               <DropdownMenuItem key={p.layout.id} onSelect={() => useUI.getState().setPlant(p.layout.id)} className={cn('gap-2.5 rounded-xl p-2', p === plant && !campus && 'bg-accent')}>
                 <SiteBadge text={p.layout.badge} />
                 <span className="grid min-w-0 flex-1 leading-tight">
-                  <b className="truncate text-[13.5px]">{p.layout.name} {p.layout.hall}</b>
+                  <b className="truncate text-[13.5px]">{plantTitle(p.layout)}</b>
                   <small className="truncate text-xs text-muted-foreground">{p.layout.sub}</small>
                 </span>
                 <span className="grid justify-items-end text-[11px] leading-tight tabular-nums">

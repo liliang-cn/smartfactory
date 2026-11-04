@@ -418,6 +418,7 @@ function PreviewCard({ r, busy, onSave, onDiscard }: { r: api.ScopeResult; busy:
         </div>
       )}
       {r.preview.added.length > 0 && <p className="mt-3 text-[12.5px] text-muted-foreground">新的位号：<span className="font-mono">{r.preview.added.join('、')}</span></p>}
+      {r.split && <p className="mt-3 rounded-xl border border-primary/30 bg-brand-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-primary"><b>保存后：</b>{r.split}</p>}
       {r.shared && <p className="mt-3 text-[12.5px] text-muted-foreground">{r.shared}</p>}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" className="h-10 rounded-xl font-bold" onClick={onDiscard} disabled={busy}>不要了</Button>
@@ -452,7 +453,10 @@ export function UndoButton({ company, versions, onDone, className }: { company: 
 
 export default function ScopeEditor({ company }: { company: string }) {
   const path = usePath();
-  const node = useMemo(() => nodeOf(query(path)), [path]);
+  const base = useMemo(() => nodeOf(query(path)), [path]);
+  // a repeated line is changed one copy at a time unless asked to change all together
+  const [together, setTogether] = useState(false);
+  const node = useMemo(() => ({ ...base, single: !together && (base.kind === 'line' || base.kind === 'machine') ? true : undefined }), [base, together]);
   const { ov, reload } = useConsole();
   const c = ov.companies.find((x) => x.id === company);
   const [view, setView] = useState<api.ScopeView | null>(null);
@@ -500,7 +504,7 @@ export default function ScopeEditor({ company }: { company: string }) {
       toast.success(`${view.scope.title}已经改好，孪生里已经换上`);
       // the machine picked may have a new tag now
       const moved = node.asset && r.preview.tags.find((t) => t.from === node.asset && t.to);
-      if (moved) go(api.scopeHref(company, { ...node, asset: moved.to }), true);
+      if (moved) go(api.scopeHref(company, { ...base, asset: moved.to }), true);
       else setN((x) => x + 1);
     } catch (e) { fail(e); } finally { setBusy(false); }
   };
@@ -527,7 +531,15 @@ export default function ScopeEditor({ company }: { company: string }) {
         <UndoButton company={company} versions={view.versions} onDone={async () => { await reload(); setN((x) => x + 1); }} />
       </PageHead>
       <div className="grid gap-5">
-        {scope.shared && <p className="rounded-xl bg-brand-soft px-4 py-2.5 text-[13px] text-primary">{scope.shared}</p>}
+        {(scope.shared || scope.split) && (
+          <div className="grid gap-2.5 rounded-xl bg-brand-soft px-4 py-3 text-[13px] text-primary">
+            <p>{scope.split ?? scope.shared}</p>
+            <ToggleGroup type="single" value={together ? 'all' : 'one'} onValueChange={(v) => v && setTogether(v === 'all')} variant="outline" className="w-full max-w-md bg-card" aria-label="改这一条还是一起改">
+              <ToggleGroupItem value="one" className="h-9 flex-1 font-bold">只改这一条</ToggleGroupItem>
+              <ToggleGroupItem value="all" className="h-9 flex-1 font-bold">几条一起改</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        )}
         <Panel>
           <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as 'form' | 'ai')} variant="outline" className="mb-4 w-full max-w-md" aria-label="怎么改">
             <ToggleGroupItem value="form" className="h-9 flex-1 font-bold">用表单改</ToggleGroupItem>

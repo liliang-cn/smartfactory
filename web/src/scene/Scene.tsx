@@ -1,6 +1,6 @@
 // The 3D view: renderer setup, lights, static world, every asset, belt products, camera.
 import { useMemo, useRef } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -50,9 +50,31 @@ export function Environment() {
   return null;
 }
 
+/** The nearest thing up the tree that is an area board: its area's code. */
+function areaCodeOf(o: THREE.Object3D | null): string | undefined {
+  for (; o; o = o.parent) if (o.userData.areaCode) return o.userData.areaCode as string;
+}
+
 function World({ plant }: { plant: PlantRuntime }) {
-  const world = useMemo(() => buildWorld(plant.layout), [plant]);
-  return <primitive object={world} />;
+  const world = useMemo(() => {
+    const w = buildWorld(plant.layout);
+    // only the area boards take clicks; the rest of the hall is not hit-tested
+    w.traverse((o) => { if (!o.userData.areaCode) o.raycast = () => {}; });
+    return w;
+  }, [plant]);
+  const onClick = (e: ThreeEvent<MouseEvent>) => {
+    const code = areaCodeOf(e.object);
+    if (!code || e.delta > 6) return;
+    e.stopPropagation();
+    useUI.getState().selectArea(code);
+  };
+  const onOver = (e: ThreeEvent<PointerEvent>) => {
+    if (!areaCodeOf(e.object) || e.pointerType === 'touch') return;
+    e.stopPropagation();
+    document.body.style.cursor = 'pointer';
+  };
+  const onOut = () => { document.body.style.cursor = ''; };
+  return <primitive object={world} onClick={onClick} onPointerOver={onOver} onPointerOut={onOut} />;
 }
 
 export function Scene({ plant }: { plant: PlantRuntime }) {
