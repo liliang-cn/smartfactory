@@ -545,6 +545,10 @@ curl -X POST https://factory.example.com/api/report/qianyu/sessions \
 | `check_results` | 最近填的记录，每项的值、是否超差或异常、谁记的、什么时候记的 | 成员 |
 | `simulate_plan` | 假设分析：复制当前状态，分别按原样和按改动后往前推演，对比结果 | 成员 |
 | `value_report` | 一段时间里这套系统带来了什么（`days`，或 `from`、`to`），同 `GET /api/value/{company}` | 成员 |
+| `bom_query` | 零件的 BOM：各版本（状态、图纸版、生效日、谁批准），和生效版（或 `rev` 指定的）逐层展开，给 `qty` 就按这个数量对库房算缺多少；不给 `part` 列全部零件号；同 `GET /api/bom/{company}`、`/explode` | 成员 |
+| `bom_where_used` | 反查：哪些零件的生效 BOM 用到这样物料（`query`：编码、名称、牌号或规格），同 `GET /api/bom/{company}/where` | 成员 |
+| `bom_kitting` | 在做和排队的工单齐不齐套：按排产顺序先到先得分配库存，每张工单缺什么、一共缺多少；`order` 只看一张，同 `GET /api/bom/{company}/kitting` | 成员 |
+| `bom_ecos` | 工程变更记录（改了什么、为什么、谁批准），`part` 只看一个零件，新的在前 | 成员 |
 | `knowledge_search` | 搜知识库（文档、工艺、工单），同 `GET /api/knowledge/{company}/search`，可另给 `names`、`keywords`；每段带 `cite`，长段截断 | 成员 |
 | `knowledge_entity` | 图里一样东西两个方向的关系和提到它的段落（截短，`passagesTotal` 是总数）；不止一样或没有同名时给 `candidates` | 成员 |
 | `knowledge_graph` | 只给公司：各类数量和入库情况；`around`：一样东西周围 `hops`（最多 3）跳的子图；`kinds`：只要这几类。最多 200 个节点、400 条关系，超出的数在 `nodesLeftOut`、`edgesLeftOut` | 成员 |

@@ -252,14 +252,28 @@ function PlantEditor({ plant, index, kinds, onChange, onRemove, canRemove }: {
 
 /** 描述工厂: the scene architect writes the config from a few sentences; each version that passes
  * the engine's check lands in the form below. */
-function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; onDraft(d: Draft): void; onIndustry(raw: Record<string, unknown>): void; edit: boolean }) {
+/** What the architect panel keeps: lives in the page, not the panel, because the panel is drawn
+ * in another place once a draft exists (and again in the JSON view), and the description, the
+ * steps and the answer must outlive that. */
+function useArchitect() {
   const [brief, setBrief] = useState('');
   const [steps, setSteps] = useState<Step[]>([]);
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState<string>();
   const [ctrl, setCtrl] = useState<AbortController | null>(null);
   const [drafts, setDrafts] = useState(0);
-  const run = async () => {
+  // the form as it was before the first draft: "redraft" starts again from it
+  const [origin, setOrigin] = useState<{ base?: Draft } | null>(null);
+  return { brief, setBrief, steps, setSteps, answer, setAnswer, error, setError, ctrl, setCtrl, drafts, setDrafts, origin, setOrigin };
+}
+
+/** 描述工厂: the scene architect writes the config from a few sentences; each version that passes
+ * the engine's check lands in the form below. The description stays, to be refined and run again. */
+function Architect({ ai, draft, onDraft, onIndustry, edit }: { ai: ReturnType<typeof useArchitect>; draft: Draft | null; onDraft(d: Draft): void; onIndustry(raw: Record<string, unknown>): void; edit: boolean }) {
+  const { brief, setBrief, steps, setSteps, answer, setAnswer, error, setError, ctrl, setCtrl, drafts, setDrafts, origin, setOrigin } = ai;
+  // again: the description is run against the form as it was before the AI first wrote to it;
+  // otherwise against the form as it is now (the AI's draft and whatever was typed into it since)
+  const run = async (again = false) => {
     const text = brief.trim();
     if (!text || ctrl) return;
     const c = new AbortController();
@@ -270,7 +284,9 @@ function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; 
     setDrafts(0);
     try {
       // a form already filled in is changed, not started over
-      const base = draft && (edit || draft.name.trim()) ? clean(draft) : undefined;
+      const now = draft && (edit || draft.name.trim()) ? clean(draft) : undefined;
+      const base = again && origin ? origin.base : now;
+      if (!origin) setOrigin({ base: now });
       await api.compose(text, base, c.signal, (ev) => {
         switch (ev.kind) {
           case 'tool_call': setSteps((s) => [...s, { tool: ev.tool, args: ev.args, done: false }]); break;
@@ -307,14 +323,26 @@ function Architect({ draft, onDraft, onIndustry, edit }: { draft: Draft | null; 
           <span className="text-[12.5px] text-muted-foreground max-sm:basis-full">AI 写好放进下面的表单，你确认后再{edit ? '保存' : '建'}</span>
         </div>
         <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3} disabled={busy}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run(); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run(!!origin); } }}
           placeholder={edit ? '再加一个工厂做法兰，两条线；把连杆线去掉' : '江苏星河锻造，两个厂：常州厂做发动机曲轴，四条线；无锡厂做风电法兰和轴承环，各两条'}
-          className="min-h-[84px] resize-none rounded-xl text-[14px] leading-relaxed" aria-label="描述" />
-        <div className="flex items-center gap-2">
+          className="min-h-[84px] resize-y rounded-xl text-[14px] leading-relaxed" aria-label="描述" />
+        {origin && !busy && (
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            这段话还在，可以改了再来。「重新生成」按这段话从{edit ? '改之前的场景' : '头'}再写一版，会盖掉 AI 写的和你在表单里改的；「接着改」只在现在的表单上照这段话再改一次。
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-[12px] text-muted-foreground max-sm:hidden">⌘ Enter 发送</span>
           {busy
             ? <Button variant="outline" className="ml-auto h-9 rounded-xl font-bold" onClick={() => ctrl?.abort()}><CircleStopIcon />停下</Button>
-            : <Button className="ml-auto h-9 rounded-xl font-bold" disabled={!brief.trim()} onClick={run}><SparklesIcon />{edit ? '让 AI 修改' : '让 AI 生成'}</Button>}
+            : origin
+              ? (
+                <>
+                  <Button variant="outline" className="ml-auto h-9 rounded-xl font-bold" disabled={!brief.trim()} onClick={() => run(false)}>接着改表单</Button>
+                  <Button className="h-9 rounded-xl font-bold" disabled={!brief.trim()} onClick={() => run(true)}><SparklesIcon />重新生成</Button>
+                </>
+              )
+              : <Button className="ml-auto h-9 rounded-xl font-bold" disabled={!brief.trim()} onClick={() => run(false)}><SparklesIcon />{edit ? '让 AI 修改' : '让 AI 生成'}</Button>}
         </div>
       </div>
       {(steps.length > 0 || busy || answer || error) && (
@@ -409,6 +437,7 @@ export default function Builder({ edit }: { edit?: string }) {
   // came to describe the factory to the AI: no template is put in the form until one is picked
   const [aiFirst] = useState(() => !edit && q.get('ai') === '1');
   const [draft, setDraft] = useState<Draft | null>(null);
+  const ai = useArchitect();
   // the template the draft was copied from: its name is swapped for this company's when built
   const [brand, setBrand] = useState<{ name: string; short: string } | null>(null);
   const [mode, setMode] = useState<'form' | 'json'>('form');
@@ -599,7 +628,7 @@ export default function Builder({ edit }: { edit?: string }) {
       <p className="text-[13px] leading-relaxed text-muted-foreground">在服务器的 <code className="rounded bg-surface px-1 font-mono">/etc/smartfactory/env</code> 里填上 LLM_BASE_URL、LLM_API_KEY、LLM_MODEL（文件里有 Claude 和其他模型的写法），再运行 <code className="rounded bg-surface px-1 font-mono">sudo systemctl restart smartfactory</code>。不配也行：下面选一个模板，改成你的工厂。</p>
     </section>
   ) : (
-    <Architect draft={draft} edit={!!edit} onDraft={(d) => {
+    <Architect ai={ai} draft={draft} edit={!!edit} onDraft={(d) => {
       const next = { ...d } as Draft;
       delete (next as { $schema?: string }).$schema;
       if (edit) next.id = edit;
