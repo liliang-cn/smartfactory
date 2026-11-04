@@ -567,6 +567,30 @@ func TestLateSteelStarvesLines(t *testing.T) {
 	}
 }
 
+// A delivery that is big (hours of the lines' use) is unloaded whole: the store a truck fills is
+// what keeps the lines running until the next one, day after day, not a few minutes of it.
+func TestDeliveriesKeepLinesSupplied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("days of plant time")
+	}
+	e := offline(t)
+	steadyForging(t, e, "supplied", func(pack map[string]any) {
+		pack["logistics"].(map[string]any)["inbound"] = map[string]any{"vehicle": "truck", "every": 6}
+		pr := pack["products"].(map[string]any)["conrod"].(map[string]any)
+		pr["suppliers"] = []any{map[string]any{"name": "准时钢厂", "share": 1, "late": 0, "lead": 10, "price": 4500}}
+	})
+	at(t, e, "supplied", tuesday.Add(6*time.Hour))
+	run(t, e, "supplied", 6*time.Hour, 2)
+	before := snapOf(t, e, "supplied")["p"].Lines[0].Good
+	run(t, e, "supplied", 48*time.Hour, 2)
+	s := snapOf(t, e, "supplied")["p"]
+	t.Logf("%d made in 48 h, %.0f an hour in the first 6 h", s.Lines[0].Good-before, float64(before)/6)
+	// a line that runs the whole of two days makes about as many an hour as it did in the first six
+	if made, first := s.Lines[0].Good-before, float64(before)/6; float64(made) < 48*first*0.8 {
+		t.Errorf("%d made in 48 h, %.0f an hour in the first 6 h: the deliveries do not keep it supplied", made, first)
+	}
+}
+
 // Scrap follows the die: a worn forging die leaves more flaws and drifts the forged size off.
 func TestScrapFollowsToolWear(t *testing.T) {
 	if testing.Short() {

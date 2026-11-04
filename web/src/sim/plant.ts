@@ -481,17 +481,30 @@ export class PlantSim {
     const s = pickShare(sups) ?? { name: '', late: 0.1, share: 1 };
     const late = Math.random() < (s.late ?? 0.1);
     const due = after + every * 3600_000;
-    // what the lines use over the interval at the pace they really run (their orders' efficiency)
-    const use = this.lines.reduce((n, l) => n + ((every * 3600) / Math.max(...l.stations.map((a) => a.cycle))) * (l.planEff ?? 0.75), 0);
     const [d0, d1] = this.layout.logistics.inbound.delay ?? [1.5, 6];
-    this.inbound = { due, at: due + (late ? rand(d0, d1) * 3600_000 : rand(-10, 10) * 60_000), load: Math.round(use * 1.02), supplier: s.name, late };
+    this.inbound = { due, at: due + (late ? rand(d0, d1) * 3600_000 : rand(-10, 10) * 60_000), load: this.deliveryLoad(every), supplier: s.name, late };
+  }
+
+  /** What the lines use over the interval at the pace they run. */
+  private deliveryLoad(every: number) {
+    const use = this.lines.reduce((n, l) => n + ((every * 3600) / Math.max(...l.stations.map((a) => a.cycle))) * this.supplyEff(l), 0);
+    return Math.round(use * 1.02);
   }
 
   /** Material this plant keeps to cover a late delivery: two hours of use on top of a delivery's worth. */
   private stockTarget() {
     const lg = this.layout.logistics.inbound;
-    const use = this.lines.reduce((n, l) => n + (3600 / Math.max(...l.stations.map((a) => a.cycle))) * (l.planEff ?? 0.75), 0);
+    const use = this.lines.reduce((n, l) => n + (3600 / Math.max(...l.stations.map((a) => a.cycle))) * this.supplyEff(l), 0);
     return Math.round(use * ((lg.every ?? 0) + 2));
+  }
+
+  /**
+   * The pace a delivery is sized for. A line's order efficiency is what it really achieved, so a
+   * line short of material would size the next delivery for its starved pace, and run shorter still:
+   * the store is bought for at least a healthy line's pace, and a full store just takes less.
+   */
+  private supplyEff(l: Line) {
+    return Math.max(l.planEff ?? 0.75, 0.85);
   }
 
   private advanceClock(dt: number) {
@@ -1456,7 +1469,8 @@ export class PlantSim {
           this.truckDone(t, '装车完成，出发配送');
         }
       } else if (t.kind === 'in') {
-        const n = Math.min(t.load, Math.max(0, this.wh.cap - this.wh.stock), Math.ceil((400 / 22) * dt));
+        // a truck is emptied in about 20 s however much it brought (a 400-piece one in 22)
+        const n = Math.min(t.load, Math.max(0, this.wh.cap - this.wh.stock), Math.ceil(Math.max(400 / 22, (this.inbound?.load ?? 0) / 20) * dt));
         this.wh.stock += n;
         t.load -= n;
         a.task = `卸货入库，剩余 ${t.load} 件`;
@@ -2448,7 +2462,12 @@ export class PlantSim {
     const d = saved.depot;
     if (d && this.depot) Object.assign(this.depot, { batches: d.batches, samples: d.samples, otif: d.otif, wasted: d.wasted, wastedDay: d.wastedDay, next: d.next });
     if (saved.incoming) this.incoming = saved.incoming;
-    if (saved.inbound) this.inbound = saved.inbound;
+    if (saved.inbound) {
+      this.inbound = saved.inbound;
+      // a delivery sized when the lines were starved (saved by an earlier version) brings what they need
+      const every = this.layout.logistics.inbound.every;
+      if (every) this.inbound.load = Math.max(this.inbound.load, this.deliveryLoad(every));
+    }
     const r = saved.rhythm;
     if (r) {
       Object.assign(this, { shift: r.shift, handoverUntil: r.handoverUntil, pause: r.pause, pauseUntil: r.pauseUntil, cold: r.cold, costToday: r.costToday, today: r.today });
