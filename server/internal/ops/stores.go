@@ -115,6 +115,51 @@ func (o *Ops) TraceHeat(who auth.Who, company, q string) (*stores.Trace, error) 
 	return v, storesError(err)
 }
 
+// Purchases are the purchase lines of a company's stores: what is on order and when it is expected.
+func (o *Ops) Purchases(who auth.Who, company, status string) ([]stores.Purchase, error) {
+	if err := o.stores(who, company, auth.Member); err != nil {
+		return nil, err
+	}
+	v, err := o.Stores.Purchases(company, status)
+	return v, storesError(err)
+}
+
+func (o *Ops) SavePurchase(who auth.Who, via, company string, p stores.Purchase) (*stores.Purchase, error) {
+	if err := o.stores(who, company, auth.Operator); err != nil {
+		return nil, err
+	}
+	v, err := o.Stores.SavePurchase(company, who.Name, p)
+	o.Audit.Record(who, via, company, "stores.purchase", p.Ref, p.Item, err)
+	return v, storesError(err)
+}
+
+func (o *Ops) CancelPurchase(who auth.Who, via, company, id string) (*stores.Purchase, error) {
+	if err := o.stores(who, company, auth.Operator); err != nil {
+		return nil, err
+	}
+	v, err := o.Stores.CancelPurchase(company, id)
+	o.Audit.Record(who, via, company, "stores.purchase.cancel", id, "", err)
+	return v, storesError(err)
+}
+
+// ReceivedPurchase is a purchase line after goods came in against it.
+type ReceivedPurchase struct {
+	Move     *stores.Move     `json:"move"`
+	Purchase *stores.Purchase `json:"purchase"`
+}
+
+func (o *Ops) ReceivePurchase(who auth.Who, via, company, id string, in stores.MoveInput) (*ReceivedPurchase, error) {
+	if err := o.stores(who, company, auth.Operator); err != nil {
+		return nil, err
+	}
+	m, p, err := o.Stores.ReceivePurchase(company, who.Name, id, in)
+	o.Audit.Record(who, via, company, "stores.purchase.receive", id, "", err)
+	if err != nil {
+		return nil, storesError(err)
+	}
+	return &ReceivedPurchase{Move: m, Purchase: p}, nil
+}
+
 // DiesOverview is a company's dies and the machines that take them.
 type DiesOverview struct {
 	Dies     []stores.Die      `json:"dies"`

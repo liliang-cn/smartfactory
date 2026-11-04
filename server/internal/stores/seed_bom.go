@@ -235,3 +235,49 @@ func kgOf(v float64) float64 {
 	p := math.Pow(10, 2-math.Floor(math.Log10(v)))
 	return math.Round(v*p) / p
 }
+
+// SeedPurchases gives the demo company the deliveries it is waiting for: the connecting rod bushes
+// and bolts that its stock of is too little for a big order are on order, and the shot is coming.
+func (s *Service) SeedPurchases(company string) error {
+	if company != Demo {
+		return nil
+	}
+	mark := company + "/po"
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM seeded WHERE company = ?`, mark).Scan(&n)
+	if n > 0 {
+		return nil
+	}
+	s.db.QueryRow(`SELECT COUNT(*) FROM seeded WHERE company = ?`, company+"/bom").Scan(&n)
+	if n == 0 {
+		return nil // the items the orders are for come first
+	}
+	if _, err := s.db.Exec(`INSERT INTO seeded (company) VALUES (?)`, mark); err != nil {
+		return err
+	}
+	items, err := s.Items(company, "")
+	if err != nil {
+		return err
+	}
+	at := time.Now()
+	lines := []struct {
+		code, supplier, ref string
+		qty, hours          float64
+	}{
+		{"BZ-BOLT-M9", "宁波紧固件厂", "CG-26-0412", 30000, 20},
+		{"WG-BUSH-22", "常州精工衬套", "CG-26-0415", 12000, 40},
+		{"WG-BUSH-22", "常州精工衬套", "CG-26-0431", 12000, 120},
+		{"FL-S330", "洛阳磨料", "CG-26-0420", 2000, 72},
+	}
+	for _, l := range lines {
+		it := itemFor(items, Need{Code: l.code})
+		if it == nil {
+			continue
+		}
+		if _, err := s.SavePurchase(company, "采购 周敏", Purchase{Item: it.ID, Ref: l.ref, Qty: l.qty, Supplier: l.supplier,
+			Expected: at.Add(time.Duration(l.hours * float64(time.Hour)))}); err != nil {
+			return err
+		}
+	}
+	return nil
+}

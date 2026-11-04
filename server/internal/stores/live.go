@@ -43,6 +43,9 @@ func (s *Service) Sync() {
 		if err := s.SeedBOM(c); err != nil {
 			s.Log.Warn("stores: seed BOM", "company", c, "err", err)
 		}
+		if err := s.SeedPurchases(c); err != nil {
+			s.Log.Warn("stores: seed purchases", "company", c, "err", err)
+		}
 		mats := s.Twin.Materials(c)
 		if mats == nil {
 			continue

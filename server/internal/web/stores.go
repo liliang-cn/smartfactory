@@ -60,6 +60,30 @@ func (s *Server) storeRoutes(mux *http.ServeMux) {
 		v, err := o.StoreMoves(s.caller(r), r.PathValue("company"), q.Get("item"), q.Get("heat"), n)
 		answer(w, v, err)
 	})
+	// ?status=open: the purchase lines (what is on order and when it is expected)
+	mux.HandleFunc("GET /api/stores/{company}/purchases", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.Purchases(s.caller(r), r.PathValue("company"), r.URL.Query().Get("status"))
+		answer(w, v, err)
+	})
+	mux.HandleFunc("POST /api/stores/{company}/purchases", func(w http.ResponseWriter, r *http.Request) {
+		var p stores.Purchase
+		if read(w, r, &p) {
+			v, err := o.SavePurchase(s.caller(r), via(r), r.PathValue("company"), p)
+			answer(w, v, err)
+		}
+	})
+	// {"qty": what came (the rest by default), "heat", "mill", "cert" for bar}
+	mux.HandleFunc("POST /api/stores/{company}/purchases/{id}/receive", func(w http.ResponseWriter, r *http.Request) {
+		var in stores.MoveInput
+		if r.ContentLength == 0 || read(w, r, &in) {
+			v, err := o.ReceivePurchase(s.caller(r), via(r), r.PathValue("company"), r.PathValue("id"), in)
+			answer(w, v, err)
+		}
+	})
+	mux.HandleFunc("DELETE /api/stores/{company}/purchases/{id}", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.CancelPurchase(s.caller(r), via(r), r.PathValue("company"), r.PathValue("id"))
+		answer(w, v, err)
+	})
 	// ?q= a heat number or an order number
 	mux.HandleFunc("GET /api/stores/{company}/trace", func(w http.ResponseWriter, r *http.Request) {
 		v, err := o.TraceHeat(s.caller(r), r.PathValue("company"), r.URL.Query().Get("q"))

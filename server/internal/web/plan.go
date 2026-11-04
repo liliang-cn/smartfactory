@@ -86,6 +86,10 @@ func (s *Server) planRoutes(mux *http.ServeMux) {
 		v, err := o.PlanHistory(s.caller(r), r.PathValue("company"))
 		answer(w, v, err)
 	})
+	mux.HandleFunc("GET /api/plan/{company}/history/{id}", func(w http.ResponseWriter, r *http.Request) {
+		v, err := o.PlanVersion(s.caller(r), r.PathValue("company"), r.PathValue("id"))
+		answer(w, v, err)
+	})
 	// {"plan": "draft" | "published", "days": 0.5–7}
 	mux.HandleFunc("POST /api/plan/{company}/whatif", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {

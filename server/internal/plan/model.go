@@ -34,6 +34,13 @@ const (
 	AsIs = "plan"
 )
 
+// Where an order's expected material arrival comes from.
+const (
+	Manual   = "manual"
+	Purchase = "purchase"
+	None     = "none"
+)
+
 // Line is a line as the scheduler sees it.
 type Line struct {
 	// Key is "plant/line".
@@ -96,10 +103,21 @@ type Order struct {
 	Short string `json:"short,omitempty"`
 	// Hold: short of material with nothing known of when it comes, and held back.
 	Hold bool `json:"hold,omitempty"`
+	// Arrive is where Release comes from (nil: the order lacks nothing).
+	Arrive *Arrive `json:"arrive,omitempty"`
 	// Lock keeps it on a line from a start: the scheduler does not move it.
 	Lock *Lock `json:"lock,omitempty"`
 	// Family are the names of the product it is a part of (dies are booked to a part or its product).
 	Family []string `json:"-"`
+}
+
+// Arrive says when the material an order lacks is expected and on whose word: a person's
+// (manual, which overrides everything), the purchase lines the stores keep (purchase), or nobody's
+// (none: Text says why it cannot be told).
+type Arrive struct {
+	At   time.Time `json:"at,omitzero"`
+	From string    `json:"from"`
+	Text string    `json:"text,omitempty"`
 }
 
 // Lock pins an order to a line from a start (the start of its changeover, if it has one).
@@ -159,9 +177,11 @@ type Planned struct {
 	LateMin float64 `json:"lateMin"`
 	Late    bool    `json:"late"`
 	// Why it is late; Flags what to watch (缺料, 模具).
-	Why   []Why    `json:"why,omitempty"`
-	Flags []Why    `json:"flags,omitempty"`
-	Dies  []string `json:"dies,omitempty"`
+	Why   []Why `json:"why,omitempty"`
+	Flags []Why `json:"flags,omitempty"`
+	// Arrive: when its missing material is expected, and where that comes from.
+	Arrive *Arrive  `json:"arrive,omitempty"`
+	Dies   []string `json:"dies,omitempty"`
 	// Running: the line runs it now; Locked: kept where it is; Held: short of material, not planned.
 	Running bool `json:"running,omitempty"`
 	Locked  bool `json:"locked,omitempty"`

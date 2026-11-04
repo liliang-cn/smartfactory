@@ -131,6 +131,15 @@ func (o *Ops) PlanHistory(who auth.Who, company string) ([]plan.Plan, error) {
 	return o.Plans.History(company)
 }
 
+// PlanVersion is a past plan with its orders, compared with the one in force.
+func (o *Ops) PlanVersion(who auth.Who, company, id string) (*plan.Version, error) {
+	if err := o.plans(who, company, auth.Member); err != nil {
+		return nil, err
+	}
+	v, err := o.Plans.Version(company, id)
+	return v, planError(err)
+}
+
 // PlanWhatIf starts checking the draft or the plan in force on the simulation.
 func (o *Ops) PlanWhatIf(who auth.Who, company, which string, days float64) (plan.WhatIf, error) {
 	if err := o.plans(who, company, auth.Member); err != nil {

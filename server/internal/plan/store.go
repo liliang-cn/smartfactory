@@ -110,6 +110,30 @@ func (s *Store) get(company, status string) (*Plan, error) {
 	return &p, nil
 }
 
+// byID is a plan of the company by its id (nil when there is none).
+func (s *Store) byID(company, id string) (*Plan, error) {
+	var p Plan
+	var created, published int64
+	var body string
+	err := s.db.QueryRow(`SELECT id, status, goal, created, by, published, note, body FROM plans WHERE company=? AND id=?`, company, id).
+		Scan(&p.ID, &p.Status, &p.Goal, &created, &p.By, &published, &p.Note, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.Created = time.UnixMilli(created)
+	if published > 0 {
+		t := time.UnixMilli(published)
+		p.Published = &t
+	}
+	if err := json.Unmarshal([]byte(body), &p.Result); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // saveDraft replaces the company's draft.
 func (s *Store) saveDraft(company string, p *Plan) error {
 	body, err := json.Marshal(p.Result)

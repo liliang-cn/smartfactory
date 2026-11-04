@@ -5,8 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  CalendarClockIcon, CircleAlertIcon, FlaskConicalIcon, HammerIcon, LoaderCircleIcon, LockIcon, LockOpenIcon, MoveIcon, PackageXIcon, PlusIcon,
-  SendIcon, Trash2Icon, WandSparklesIcon, ZapIcon,
+  CalendarClockIcon, ChevronRightIcon, CircleAlertIcon, FlaskConicalIcon, HammerIcon, HistoryIcon, LoaderCircleIcon, LockIcon, LockOpenIcon, MoveIcon, PackageXIcon, PlusIcon,
+  SendIcon, TruckIcon, Trash2Icon, WandSparklesIcon, ZapIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -19,10 +19,11 @@ import { Panel } from './Panel';
 
 type Goal = 'due' | 'balance' | 'setup';
 interface Why { kind: 'capacity' | 'material' | 'die' | 'due' | 'setup' | 'down'; text: string }
+interface Arrive { at?: string; from: 'manual' | 'purchase' | 'none'; text?: string }
 interface Planned {
   no: string; part: string; name?: string; customer?: string; qty: number; due?: string; line: string; lineName: string; seq: number;
   setupStart: string; start: string; end: string; setupMin: number; lateMin: number; late: boolean;
-  why?: Why[]; flags?: Why[]; dies?: string[]; running?: boolean; locked?: boolean; held?: boolean; lines?: string[];
+  why?: Why[]; flags?: Why[]; arrive?: Arrive; dies?: string[]; running?: boolean; locked?: boolean; held?: boolean; lines?: string[];
 }
 interface LineKPI {
   key: string; name: string; plantName: string; orders: number; util: number; busyUntil?: string; setups: number; setupHours: number;
@@ -38,9 +39,11 @@ interface Settings { goal: Goal; material: 'hold' | 'plan'; arrive: Record<strin
 interface CheckRow { no: string; line: string; planStart: string; planEnd: string; runStart?: string; runEnd?: string; devHours?: number; due?: string; good?: number; qty?: number; open?: boolean }
 interface WhatIf {
   status: 'running' | 'done' | 'failed'; plan: string; planId: string; days: number; started: string; took?: number; error?: string;
-  result?: { hours: number; orders: CheckRow[]; finished: number; due: number; meanDev: number; maxDev: number; planOnTime: number; runOnTime: number; withDue: number; verdict: string };
+  result?: { hours: number; orders: CheckRow[]; finished: number; due: number; meanDev: number; maxDev: number; bias?: number; planOnTime: number; runOnTime: number; withDue: number; verdict: string };
 }
 interface Overview { draft: Plan | null; published: Plan | null; current: Result; diff: Diff | null; suggest: string[]; settings: Settings; goals: { id: Goal; label: string; note: string }[]; whatIf?: WhatIf; edit: boolean }
+interface Purchase { id: string; ref?: string; item: string; itemName?: string; unit?: string; qty: number; got: number; expected: string; supplier?: string; status: string; who?: string }
+interface Version { plan: Plan; now: boolean; diff?: Diff; gone: string[]; fresh: string[]; current?: Result }
 interface Push { no: string; customer?: string; part: string; line: string; was: string; now: string; delayMin: number; due?: string; late: boolean; wasLate: boolean }
 interface Impact { order: Planned; onTime: boolean; earliest?: string; pushed: Push[]; newlyLate: number; before: KPI; after: KPI; against: string; note: string }
 
@@ -148,7 +151,7 @@ export function PlanPanel({ c }: { c: Company }) {
       {!empty && <OrderList r={shown} edit={ov.edit} onPick={setPick} onLock={lock} onMove={setMoving} />}
 
       {!empty && (shown.held.length > 0 || ov.edit) && (
-        <Material r={shown} settings={ov.settings} edit={ov.edit} busy={!!busy} onSave={saveSettings} />
+        <Material c={c.id} r={shown} settings={ov.settings} edit={ov.edit} busy={!!busy} onSave={saveSettings} onChanged={load} />
       )}
 
       {(!empty || ov.settings.stops.length > 0) && <LinesPanel r={shown} settings={ov.settings} edit={ov.edit} onSave={saveSettings} />}
@@ -157,6 +160,8 @@ export function PlanPanel({ c }: { c: Company }) {
         {!empty && <WhatIfPanel c={c.id} ov={ov} onDone={load} />}
         <RushPanel c={c.id} />
       </div>
+
+      <HistoryPanel c={c.id} ov={ov} />
 
       {pick && <OrderDialog o={pick} r={shown} edit={ov.edit} onClose={() => setPick(null)} onLock={(on) => { lock(pick, on); setPick(null); }} onMove={() => { setMoving(pick); setPick(null); }} />}
       {moving && <MoveDialog o={moving} r={shown} onClose={() => setMoving(null)} onMove={(line, at) => { move(moving.no, line, at); setMoving(null); }} />}
@@ -512,7 +517,7 @@ function PublishDialog({ c, ov, onClose, onDone }: { c: string; ov: Overview; on
 }
 
 /** Orders short of material: held back or planned as they are, and when their material comes. */
-function Material({ r, settings, edit, busy, onSave }: { r: Result; settings: Settings; edit: boolean; busy: boolean; onSave(st: Partial<Settings>): void }) {
+function Material({ c, r, settings, edit, busy, onSave, onChanged }: { c: string; r: Result; settings: Settings; edit: boolean; busy: boolean; onSave(st: Partial<Settings>): void; onChanged(): void }) {
   const short = [...r.held, ...r.orders.filter((o) => (o.flags ?? []).some((f) => f.kind === 'material'))];
   const [arrive, setArrive] = useState<Record<string, string>>({});
   useEffect(() => { setArrive(Object.fromEntries(Object.entries(settings.arrive).map(([k, v]) => [k, localInput(v)]))); }, [settings.arrive]);
@@ -536,26 +541,110 @@ function Material({ r, settings, edit, busy, onSave }: { r: Result; settings: Se
         <div className="grid gap-2">
           <p className="text-[12.5px] text-muted-foreground">
             {settings.material === 'hold' ? '缺料又不知道什么时候到的工单先不排，也不让产线做。' : '缺料的工单照排，但料不到开不了工。'}
-            知道什么时候到料就填上，计划会从那时起排。
+            到料时间自动按下面的在途采购算；采购单没有的，或者你比采购单更清楚，就手填，手填的优先。
           </p>
-          {short.map((o) => (
-            <div key={o.no} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-xl bg-surface px-3 py-2 max-sm:grid-cols-1">
-              <div className="min-w-0 text-[12.5px]">
-                <b>{o.no}</b> <span className="text-muted-foreground">{o.part} × {o.qty}</span>
-                {o.held && <span className="ml-1.5 rounded bg-warning-soft px-1.5 text-[11.5px] font-bold text-warning">先不排</span>}
-                <span className="block text-warning">{(o.flags ?? []).find((f) => f.kind === 'material')?.text ?? o.why?.[0]?.text}</span>
+          {short.map((o) => {
+            const a = o.arrive;
+            const manual = settings.arrive[o.no];
+            return (
+              <div key={o.no} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-xl bg-surface px-3 py-2 max-sm:grid-cols-1">
+                <div className="min-w-0 break-words text-[12.5px]">
+                  <b>{o.no}</b> <span className="text-muted-foreground">{o.part} × {o.qty}</span>
+                  {o.held && <span className="ml-1.5 rounded bg-warning-soft px-1.5 text-[11.5px] font-bold text-warning">先不排</span>}
+                  {a?.from === 'purchase' && <span className="ml-1.5 rounded bg-success-soft px-1.5 text-[11.5px] font-bold text-success">按采购单自动算</span>}
+                  {a?.from === 'manual' && <span className="ml-1.5 rounded bg-brand-soft px-1.5 text-[11.5px] font-bold">手填</span>}
+                  <span className="block text-warning">{(o.flags ?? []).find((f) => f.kind === 'material')?.text ?? o.why?.[0]?.text}</span>
+                  {a?.from === 'none' && a.text && <span className="block text-muted-foreground">没法自动算：{a.text}</span>}
+                </div>
+                {edit && (
+                  <label className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">{a?.from === 'purchase' && !manual ? '手填（盖过采购单）' : '预计到料'}
+                    <Input type="datetime-local" className="h-8 w-[190px] rounded-lg text-[12.5px] max-sm:w-full" value={arrive[o.no] ?? ''} onChange={(e) => setArrive({ ...arrive, [o.no]: e.target.value })} />
+                  </label>
+                )}
               </div>
-              {edit && (
-                <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground">预计到料
-                  <Input type="datetime-local" className="h-8 w-[190px] rounded-lg text-[12.5px]" value={arrive[o.no] ?? ''} onChange={(e) => setArrive({ ...arrive, [o.no]: e.target.value })} />
-                </label>
-              )}
-            </div>
-          ))}
-          {edit && <div><Button variant="outline" className="h-8 rounded-lg font-bold" disabled={busy} onClick={save}><CalendarClockIcon />保存到料时间</Button></div>}
+            );
+          })}
+          {edit && <div><Button variant="outline" className="h-8 rounded-lg font-bold" disabled={busy} onClick={save}><CalendarClockIcon />保存手填的到料时间</Button></div>}
         </div>
       )}
+      <Purchases c={c} edit={edit} onChanged={onChanged} />
     </Panel>
+  );
+}
+
+/** What is on order from suppliers: it is where the plan gets material arrival times from. */
+function Purchases({ c, edit, onChanged }: { c: string; edit: boolean; onChanged(): void }) {
+  const [list, setList] = useState<Purchase[]>([]);
+  const [items, setItems] = useState<{ id: string; code: string; name: string; unit: string }[]>([]);
+  const [add, setAdd] = useState<{ item: string; qty: string; expected: string; supplier: string; ref: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const reload = useCallback(() => call<Purchase[]>('GET', `/api/stores/${encodeURIComponent(c)}/purchases?status=open`).then(setList, () => {}), [c]);
+  useEffect(() => { reload(); }, [reload]);
+  const done = () => { reload(); onChanged(); };
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true);
+    try { await fn(); toast.success(ok); done(); } catch (e) { toast.error(errText(e)); } finally { setBusy(false); }
+  };
+  const openAdd = async () => {
+    try {
+      const st = await call<{ items: typeof items }>('GET', `/api/stores/${encodeURIComponent(c)}`);
+      setItems(st.items);
+      setAdd({ item: '', qty: '', expected: localInput(new Date(Date.now() + 3 * 86_400_000).toISOString()), supplier: '', ref: '' });
+    } catch (e) { toast.error(errText(e)); }
+  };
+  const base = `/api/stores/${encodeURIComponent(c)}/purchases`;
+  return (
+    <div className="mt-4 grid gap-2 border-t border-border/60 pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <b className="flex items-center gap-1.5 text-[13px]"><TruckIcon className="size-4" />在途采购</b>
+        <span className="text-[12px] text-muted-foreground">已经向供应商订了、还没到的料</span>
+        {edit && <Button variant="outline" className="ml-auto h-8 rounded-lg font-bold" onClick={openAdd}><PlusIcon />录采购单</Button>}
+      </div>
+      {list.length === 0 && <p className="text-[12.5px] text-muted-foreground">没有在途的采购。录一张，缺这个料的工单就能自动算出到料时间。</p>}
+      {list.map((p) => {
+        const late = Date.parse(p.expected) < Date.now();
+        return (
+          <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-surface px-3 py-2 text-[12.5px]">
+            <span className="min-w-0 break-words"><b>{p.itemName}</b> <span className="tabular-nums">{p.qty - p.got} {p.unit}</span>{p.got > 0 && <span className="text-muted-foreground">（已收 {p.got}）</span>}
+              <small className="block text-muted-foreground">{[p.ref, p.supplier].filter(Boolean).join(' · ') || p.id}</small></span>
+            <span className={cn('ml-auto tabular-nums', late && 'font-bold text-destructive')}>{late ? '说好 ' : '预计 '}{when(p.expected)}{late ? ' 到，还没收到' : ' 到'}</span>
+            {edit && (
+              <span className="flex gap-1">
+                <Button size="sm" variant="outline" className="h-7 rounded-lg" disabled={busy} onClick={() => run(() => call('POST', `${base}/${p.id}/receive`, {}), '已收货入库')}>收货</Button>
+                <Button size="icon-sm" variant="ghost" className="rounded-lg text-muted-foreground" aria-label="取消这张采购单" disabled={busy} onClick={() => run(() => call('DELETE', `${base}/${p.id}`), '采购单取消了')}><Trash2Icon /></Button>
+              </span>
+            )}
+          </div>
+        );
+      })}
+      {add && (
+        <Dialog open onOpenChange={(v) => !v && setAdd(null)}>
+          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[440px]">
+            <DialogHeader><DialogTitle>录采购单</DialogTitle><DialogDescription>订了什么、订了多少、预计哪天到。到了在库房收货，这张单就关了。</DialogDescription></DialogHeader>
+            <div className="grid gap-3 text-[12.5px] font-bold">
+              <label className="grid gap-1.5">订的什么
+                <Select value={add.item} onValueChange={(v) => setAdd({ ...add, item: v })}>
+                  <SelectTrigger className="h-10 w-full rounded-lg"><SelectValue placeholder="选库房里的物料" /></SelectTrigger>
+                  <SelectContent>{items.map((it) => <SelectItem key={it.id} value={it.id}>{it.code === it.name ? it.name : `${it.code} ${it.name}`}（{it.unit}）</SelectItem>)}</SelectContent>
+                </Select>
+              </label>
+              <label className="grid gap-1.5">数量<Input className="h-10 rounded-lg" type="number" inputMode="decimal" value={add.qty} onChange={(e) => setAdd({ ...add, qty: e.target.value })} /></label>
+              <label className="grid gap-1.5">预计到货<Input className="h-10 rounded-lg" type="datetime-local" value={add.expected} onChange={(e) => setAdd({ ...add, expected: e.target.value })} /></label>
+              <label className="grid gap-1.5">供应商（可不填）<Input className="h-10 rounded-lg" value={add.supplier} onChange={(e) => setAdd({ ...add, supplier: e.target.value })} /></label>
+              <label className="grid gap-1.5">采购单号（可不填）<Input className="h-10 rounded-lg" value={add.ref} onChange={(e) => setAdd({ ...add, ref: e.target.value })} /></label>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" className="rounded-lg" onClick={() => setAdd(null)}>取消</Button>
+              <Button className="rounded-lg font-bold" disabled={busy || !add.item || !(Number(add.qty) > 0) || !add.expected}
+                onClick={() => run(async () => {
+                  await call('POST', base, { item: add.item, qty: Number(add.qty), expected: new Date(add.expected).toISOString(), supplier: add.supplier, ref: add.ref });
+                  setAdd(null);
+                }, '采购单录好了')}>录上</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
 
@@ -716,5 +805,127 @@ function RushPanel({ c }: { c: string }) {
         </div>
       )}
     </Panel>
+  );
+}
+
+/** The plans that were in force: when, by whom, how they stood; one opened beside the plan now. */
+function HistoryPanel({ c, ov }: { c: string; ov: Overview }) {
+  const [rows, setRows] = useState<Plan[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => { call<Plan[]>('GET', path(c, '/history')).then(setRows, () => setRows([])); }, [c, ov.published?.id]);
+  return (
+    <Panel title={<span className="flex items-center gap-2"><HistoryIcon className="size-4" />计划历史</span>} aside={<span className="text-[12px] text-muted-foreground max-sm:hidden">发布过的计划，最近 20 份</span>}>
+      {rows === null && <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" />读历史……</p>}
+      {rows && rows.length === 0 && <p className="text-[12.5px] text-muted-foreground">还没发布过计划。发布以后，每一份都留在这里，可以回头看当时怎么排的、和现在差多少。</p>}
+      {rows && rows.length > 0 && (
+        <ul className="grid gap-2">
+          {rows.map((p) => {
+            const k = p.result.kpi;
+            const now = p.id === ov.published?.id;
+            return (
+              <li key={p.id}>
+                <button type="button" className="grid w-full min-w-0 gap-1 rounded-xl bg-surface px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring" onClick={() => setOpen(p.id)}>
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+                    <b className="tabular-nums">{when(p.published ?? p.created)}</b>
+                    <span>{p.by}</span>
+                    <span className={cn('rounded-md px-1.5 text-[11.5px] font-bold', now ? 'bg-success-soft text-success' : 'bg-muted text-muted-foreground')}>{now ? '发布中' : '已被替换'}</span>
+                    <span className="text-muted-foreground">{GOAL[p.goal]}</span>
+                    <ChevronRightIcon className="ml-auto size-4 text-muted-foreground" />
+                  </span>
+                  <span className="flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] tabular-nums text-muted-foreground">
+                    <span>按期 <b className={k.late ? 'text-foreground' : 'text-success'}>{k.onTime}/{k.planned}</b>（{k.onTimePct}%）</span>
+                    <span>误期 <b className={k.late ? 'text-destructive' : 'text-foreground'}>{k.late} 张 {k.lateHours} 小时</b></span>
+                    <span>换型 <b className="text-foreground">{k.setups} 次 {k.setupHours} 小时</b></span>
+                  </span>
+                  {p.note && <span className="break-words text-[12px] text-muted-foreground">{p.note}</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {open && <VersionDialog c={c} id={open} onClose={() => setOpen(null)} />}
+    </Panel>
+  );
+}
+
+/** One past plan: its figures beside the plan now, what differs, and its orders by line. */
+function VersionDialog({ c, id, onClose }: { c: string; id: string; onClose(): void }) {
+  const [v, setV] = useState<Version | null>(null);
+  const [err, setErr] = useState<string>();
+  useEffect(() => { call<Version>('GET', path(c, `/history/${encodeURIComponent(id)}`)).then(setV, (e) => setErr(errText(e))); }, [c, id]);
+  const p = v?.plan;
+  const byLine = useMemo(() => {
+    const m = new Map<string, { name: string; orders: Planned[] }>();
+    for (const o of p?.result.orders ?? []) {
+      const g = m.get(o.line) ?? { name: o.lineName, orders: [] };
+      g.orders.push(o);
+      m.set(o.line, g);
+    }
+    return [...m.values()];
+  }, [p]);
+  const stat = (k: KPI) => [
+    ['按期', `${k.onTime}/${k.planned}（${k.onTimePct}%）`],
+    ['误期', `${k.late} 张，共 ${k.lateHours} 小时`],
+    ['换型', `${k.setups} 次，共 ${k.setupHours} 小时`],
+    ['全部做完', k.end ? when(k.end) : '—'],
+  ];
+  const changes = v?.diff ? [...v.diff.line.map((x) => ({ ...x, kind: '换线' })), ...v.diff.order.map((x) => ({ ...x, kind: '换先后' }))] : [];
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle>{p ? `${when(p.published ?? p.created)} 发布的计划` : '计划'}</DialogTitle>
+          <DialogDescription>{p ? `${p.by}，${GOAL[p.goal]}${p.note ? `，${p.note}` : ''}` : ' '}</DialogDescription>
+        </DialogHeader>
+        {err && <p className="text-[13px] text-destructive">读不出来：{err}</p>}
+        {!v && !err && <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground"><LoaderCircleIcon className="size-4 animate-spin" />读……</p>}
+        {v && p && (
+          <div className="grid min-w-0 gap-3">
+            {v.now
+              ? <p className="rounded-xl bg-success-soft px-3 py-2 text-[12.5px] font-bold text-success">这就是现在产线在按的计划。</p>
+              : v.diff && <p className="rounded-xl bg-surface px-3 py-2 text-[12.5px]">{v.diff.text}{v.gone.length > 0 ? `；当时的 ${v.gone.length} 张已经做完或撤了` : ''}{v.fresh.length > 0 ? `；现在多了 ${v.fresh.length} 张新单` : ''}。</p>}
+            <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
+              {([['当时排的', p.result.kpi, 'bg-surface'], ...(v.current && !v.now ? [['现在的计划（按现在的情况重算）', v.current.kpi, 'bg-brand-soft']] : [])] as [string, KPI, string][]).map(([label, k, tone]) => (
+                <div key={label} className={cn('grid content-start gap-1 rounded-xl px-3 py-2.5 text-[12.5px]', tone)}>
+                  <b className="text-[12px] text-muted-foreground">{label}</b>
+                  {stat(k).map(([a, b]) => <span key={a} className="flex flex-wrap justify-between gap-x-2"><span className="text-muted-foreground">{a}</span><b className="tabular-nums">{b}</b></span>)}
+                </div>
+              ))}
+            </div>
+            {changes.length > 0 && (
+              <div className="grid gap-1">
+                <b className="text-[12.5px]">和现在不一样的</b>
+                <ul className="grid max-h-[28dvh] gap-1 overflow-y-auto text-[12.5px]">
+                  {changes.map((x) => (
+                    <li key={x.no + x.kind} className="flex flex-wrap gap-x-2 rounded-lg px-2 py-1 odd:bg-surface">
+                      <b>{x.no}</b><span className="text-muted-foreground">{x.part}</span>
+                      <span className="ml-auto text-right tabular-nums">{x.kind === '换线' ? `当时在${x.toName}，现在在${x.fromName}` : `${x.toName}：当时第 ${x.toSeq} 个，现在第 ${x.fromSeq} 个`}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="grid gap-1.5">
+              <b className="text-[12.5px]">当时每条线的安排（{p.result.orders.length} 张{p.result.held.length ? `，另有 ${p.result.held.length} 张缺料没排` : ''}）</b>
+              {byLine.map((g) => (
+                <details key={g.name} className="rounded-xl bg-surface px-3 py-2 text-[12.5px]">
+                  <summary className="cursor-pointer font-bold">{g.name}<span className="ml-2 font-normal text-muted-foreground">{g.orders.length} 张</span></summary>
+                  <ul className="mt-1.5 grid gap-1">
+                    {g.orders.map((o) => (
+                      <li key={o.no} className="flex flex-wrap gap-x-2">
+                        <b>{o.no}</b><span className="text-muted-foreground">{o.part} × {o.qty}</span>
+                        <span className={cn('ml-auto tabular-nums', o.late && 'font-bold text-destructive')}>{when(o.start)} – {when(o.end)}{o.late ? `，晚 ${hrs(o.lateMin)}` : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
+            </div>
+          </div>
+        )}
+        <DialogFooter><Button variant="outline" className="rounded-lg" onClick={onClose}>关上</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

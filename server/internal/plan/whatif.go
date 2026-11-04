@@ -273,6 +273,9 @@ func compareRun(r *Result, run *engine.PlanRunResult, runStart time.Time) *Check
 	default:
 		c.Verdict = fmt.Sprintf("计划和仿真差得多：平均差 %.1f 小时，最多 %.1f 小时，节拍或效率可能要校准", c.MeanDev, c.MaxDev)
 	}
+	if c.Finished > 0 && math.Abs(c.Bias) >= 1 {
+		c.Verdict += fmt.Sprintf("；整体比计划%s %.1f 小时", map[bool]string{true: "晚", false: "早"}[c.Bias > 0], math.Abs(c.Bias))
+	}
 	return c
 }
 

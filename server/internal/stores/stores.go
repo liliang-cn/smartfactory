@@ -183,6 +183,7 @@ func Open(dir string, twin Twin, log *slog.Logger) (*Service, error) {
 		CREATE TABLE IF NOT EXISTS ecos (company TEXT NOT NULL, id TEXT NOT NULL, part TEXT NOT NULL, at INTEGER NOT NULL, json TEXT NOT NULL,
 			PRIMARY KEY (company, id));
 		CREATE INDEX IF NOT EXISTS ecos_part ON ecos (company, part, at);
+		CREATE TABLE IF NOT EXISTS purchases (company TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, PRIMARY KEY (company, id));
 		CREATE TABLE IF NOT EXISTS seeded (company TEXT PRIMARY KEY)`); err != nil {
 		db.Close()
 		return nil, err
@@ -511,6 +512,9 @@ func (s *Service) Record(company, who string, in MoveInput) (*Move, *Item, error
 	}
 	m.ID, _ = res.LastInsertId()
 	m.ItemName = it.Label()
+	if in.Kind == In {
+		s.settle(company, it.ID, in.Ref, m.Qty)
+	}
 	after, err := s.Item(company, it.ID)
 	if err == nil && after.Low && !it.Low && s.Event != nil {
 		s.Event(company, "stores.low", after.Code, fmt.Sprintf("%s 库存 %s %s，到了安全库存 %s 以下", after.Name, num(after.Stock), after.Unit, num(after.Safety)))

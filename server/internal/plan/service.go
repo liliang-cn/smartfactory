@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -190,6 +191,7 @@ func (s *Service) input(company string, st Settings, goal Goal) (*Input, error) 
 	}
 	// what each order lacks, the orders in due-date order taking the stock in turn
 	short := map[string]string{}
+	auto := map[string]stores.Arrival{}
 	if s.Stores != nil {
 		var ds []stores.Demand
 		qs := slices.Clone(list)
@@ -200,6 +202,9 @@ func (s *Service) input(company string, st Settings, goal Goal) (*Input, error) 
 			ds = append(ds, stores.Demand{No: o.No, Part: o.PartNo, Product: o.Product, Qty: math.Max(0, float64(o.Qty-o.Good))})
 		}
 		if k, err := s.Stores.Kit(company, ds); err == nil {
+			if a, err := s.Stores.Arrivals(company, k, in.Now); err == nil {
+				auto = a
+			}
 			for _, x := range k.Orders {
 				if x.Short == 0 {
 					continue
@@ -273,10 +278,17 @@ func (s *Service) input(company string, st Settings, goal Goal) (*Input, error) 
 		}
 		if why := short[o.No]; why != "" {
 			x.Short = why
-			if at, ok := st.Arrive[o.No]; ok && !at.IsZero() {
-				x.Release = at
-			} else if st.Material == Hold {
-				x.Hold = true
+			a := auto[o.No]
+			switch at, ok := st.Arrive[o.No]; {
+			case ok && !at.IsZero():
+				x.Release, x.Arrive = at, &Arrive{At: at, From: Manual, Text: "手填"}
+			case !a.At.IsZero():
+				x.Release, x.Arrive = a.At, &Arrive{At: a.At, From: Purchase, Text: a.Source}
+			default:
+				x.Arrive = &Arrive{From: None, Text: a.Note}
+				if st.Material == Hold {
+					x.Hold = true
+				}
 			}
 		}
 		if lk, ok := st.Locks[o.No]; ok {
@@ -767,9 +779,11 @@ func (s *Service) Publish(company, by string) (*PublishResult, error) {
 	return &PublishResult{Plan: draft, Diff: diff, Changed: n}, nil
 }
 
-// Plans are the company's plans in force and retired, newest first (without their orders).
+// History is the company's plans that were in force, the one in force and the retired, newest
+// first: who made each, when, how it came about and its figures (without its orders; Version has
+// them).
 func (s *Service) History(company string) ([]Plan, error) {
-	rows, err := s.Store.db.Query(`SELECT id, status, goal, created, by, published, note, body FROM plans WHERE company=? AND status<>? ORDER BY created DESC LIMIT 20`, company, Draft)
+	rows, err := s.Store.db.Query(`SELECT id, status, goal, created, by, published, note, body FROM plans WHERE company=? AND status<>? ORDER BY published DESC, created DESC LIMIT 20`, company, Draft)
 	if err != nil {
 		return nil, err
 	}
@@ -787,9 +801,88 @@ func (s *Service) History(company string) ([]Plan, error) {
 			t := time.UnixMilli(published)
 			p.Published = &t
 		}
+		var r Result
+		if json.Unmarshal([]byte(body), &r) == nil {
+			// the figures, not the orders
+			p.Result = &Result{Goal: r.Goal, Now: r.Now, KPI: r.KPI, Orders: []Planned{}, Held: []Planned{}, Lines: []LineKPI{}}
+		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// Version is a plan that was in force, with its orders, set beside the plan as it stands now.
+type Version struct {
+	Plan *Plan `json:"plan"`
+	// Now says it is the plan in force.
+	Now bool `json:"now"`
+	// Diff is how it differs from the plan in force laid out again as things stand (nil when it is that plan).
+	Diff *Diff `json:"diff,omitempty"`
+	// Gone are its orders the plant has finished or the ERP took back since; Fresh the orders in
+	// the plan now that it did not have.
+	Gone  []string `json:"gone"`
+	Fresh []string `json:"fresh"`
+	// Current is the plan in force as things stand, for the figures.
+	Current *Result `json:"current,omitempty"`
+}
+
+// Version reads one past plan and compares it with the one in force (or, when none is, the queue).
+func (s *Service) Version(company, id string) (*Version, error) {
+	p, err := s.Store.byID(company, id)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil || p.Status == Draft {
+		return nil, refuse("没有这份计划")
+	}
+	pub, err := s.Store.get(company, Published)
+	if err != nil {
+		return nil, err
+	}
+	v := &Version{Plan: p, Gone: []string{}, Fresh: []string{}, Now: pub != nil && pub.ID == p.ID}
+	st, err := s.Store.settings(company)
+	if err != nil {
+		return nil, err
+	}
+	in, err := s.input(company, st, st.Goal)
+	if err != nil {
+		return nil, err
+	}
+	seq, against, err := s.base(company, pub)
+	if err != nil {
+		return nil, err
+	}
+	cur := Evaluate(in, seq)
+	v.Current = cur
+	if v.Now {
+		return v, nil
+	}
+	d := compare(cur, p.Result, against)
+	d.Text = strings.Replace(d.Text, d.BaseLabel, "现在的计划", 1)
+	d.BaseLabel = "现在的计划"
+	v.Diff = d
+	have := map[string]bool{}
+	for _, o := range cur.Orders {
+		have[o.No] = true
+	}
+	for _, o := range cur.Held {
+		have[o.No] = true
+	}
+	then := map[string]bool{}
+	for _, o := range append(slices.Clone(p.Result.Orders), p.Result.Held...) {
+		then[o.No] = true
+		if !have[o.No] {
+			v.Gone = append(v.Gone, o.No)
+		}
+	}
+	for no := range have {
+		if !then[no] {
+			v.Fresh = append(v.Fresh, no)
+		}
+	}
+	slices.Sort(v.Gone)
+	slices.Sort(v.Fresh)
+	return v, nil
 }
 
 // ErrNoOrders is said when there is nothing to plan.

@@ -680,11 +680,19 @@ func (p *problem) result(seq [][]int, e *eval) *Result {
 		for _, j := range p.elig[i] {
 			x.Lines = append(x.Lines, p.lines[j].Key)
 		}
+		x.Arrive = o.Arrive
 		if o.Short != "" {
 			text := "缺料：" + o.Short
-			if !o.Release.IsZero() && o.Release.After(p.in.Now) {
-				text += "，预计 " + clock(o.Release.Unix()) + " 到料"
-			} else if !o.Hold {
+			switch {
+			case !o.Release.IsZero() && o.Release.After(p.in.Now):
+				from := "预计"
+				if a := o.Arrive; a != nil && a.From == Purchase {
+					from = "按" + a.Text + "，预计"
+				} else if a != nil && a.From == Manual {
+					from = "手填预计"
+				}
+				text += "，" + from + " " + clock(o.Release.Unix()) + " 到料"
+			case !o.Hold:
 				text += "（照排，料不到开不了工）"
 			}
 			x.Flags = append(x.Flags, Why{"material", text})
@@ -743,7 +751,11 @@ func (p *problem) result(seq [][]int, e *eval) *Result {
 	for _, i := range p.held {
 		x := planned(i)
 		x.Held = true
-		x.Why = []Why{{"material", "缺料，又不知道什么时候到料：先不排。填上预计到料时间，或者改成「缺料也照排」"}}
+		text := "缺料，又不知道什么时候到料：先不排。录一张采购单，或者填上预计到料时间，或者改成「缺料也照排」"
+		if a := p.ords[i].Arrive; a != nil && a.Text != "" {
+			text = "缺料，" + a.Text + "：先不排。录一张采购单，或者填上预计到料时间，或者改成「缺料也照排」"
+		}
+		x.Why = []Why{{"material", text}}
 		r.Held = append(r.Held, x)
 	}
 	for _, i := range p.none {
