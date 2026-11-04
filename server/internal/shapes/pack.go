@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 )
 
 // The frame a shape is drawn in comes from its industry pack, worked out the way the twin lays
@@ -13,8 +14,11 @@ import (
 type pack struct {
 	Flow     string `json:"flow"`
 	Products map[string]struct {
-		Name   string `json:"name"`
-		Stages map[string]struct {
+		Name     string      `json:"name"`
+		Weight   float64     `json:"weight"`
+		Material string      `json:"material"`
+		Size     *[3]float64 `json:"size"`
+		Stages   map[string]struct {
 			Parts []Part `json:"parts"`
 		} `json:"stages"`
 	} `json:"products"`
@@ -23,6 +27,7 @@ type pack struct {
 		Look  struct {
 			Archetype string      `json:"archetype"`
 			Size      *[3]float64 `json:"size"`
+			Parts     []Part      `json:"parts"`
 		} `json:"look"`
 	} `json:"machines"`
 }
@@ -48,7 +53,9 @@ func readPack(raw json.RawMessage) (*pack, error) {
 }
 
 // MachineSpec is the frame for machine key of the pack: its envelope and the belt through it.
-func MachineSpec(raw json.RawMessage, key string) (Spec, string, error) {
+// With add, the drawing is added to the machine's look as it is (its body and parts stay), and the
+// spec carries the parts already there.
+func MachineSpec(raw json.RawMessage, key string, add bool) (Spec, string, error) {
 	p, err := readPack(raw)
 	if err != nil {
 		return Spec{}, "", err
@@ -88,12 +95,17 @@ func MachineSpec(raw json.RawMessage, key string) (Spec, string, error) {
 		env[i] = math.Round(env[i]*100) / 100
 	}
 	clear := math.Round(math.Max(0.4, mh+0.15)*100) / 100
-	return Spec{Target: Machine, Envelope: env, BeltY: beltY, BeltW: beltW, Clear: clear}, m.Label, nil
+	spec := Spec{Target: Machine, Envelope: env, BeltY: beltY, BeltW: beltW, Clear: clear}
+	if add {
+		spec.Append, spec.Body, spec.Existing = true, m.Look.Archetype, m.Look.Parts
+	}
+	return spec, m.Label, nil
 }
 
 // ProductSpec is the frame for a stage of product key, and the stage's current size as a hint
-// [l, d, h].
-func ProductSpec(raw json.RawMessage, key, stage string) (Spec, string, [3]float64, error) {
+// [l, d, h]. With add, the drawing is added to the stage's parts. The spec carries the product's
+// real size when the pack gives it (size) or its weight lets one be worked out.
+func ProductSpec(raw json.RawMessage, key, stage string, add bool) (Spec, string, [3]float64, error) {
 	p, err := readPack(raw)
 	if err != nil {
 		return Spec{}, "", [3]float64{}, err
@@ -107,5 +119,31 @@ func ProductSpec(raw json.RawMessage, key, stage string) (Spec, string, [3]float
 		return Spec{}, "", [3]float64{}, fmt.Errorf("产品 %s 没有工序状态 %s", pr.Name, stage)
 	}
 	l, h, d := Dims(st.Parts)
-	return Spec{Target: Product, Envelope: ProductMax}, pr.Name, [3]float64{l, d, h}, nil
+	spec := Spec{Target: Product, Envelope: ProductMax, Name: pr.Name}
+	spec.Real, spec.RealFrom = RealSize(pr.Size, pr.Weight, pr.Material)
+	if add {
+		spec.Append, spec.Existing = true, st.Parts
+	}
+	return spec, pr.Name, [3]float64{l, d, h}, nil
 }
+
+// RealSize is how big one unit of a product really is, [l, d, h] in metres: what the pack says
+// (size), or else worked out from its weight as a compact bounding box of the material (steel when
+// the material reads like an alloy), 4 : 1.5 : 1 long. The second result says where it came from
+// (RealGiven, RealEstimated); it is zero, with an empty source, when there is nothing to go on.
+func RealSize(size *[3]float64, weight float64, material string) ([3]float64, string) {
+	if size != nil && size[0] > 0 && size[1] > 0 && size[2] > 0 {
+		return *size, RealGiven
+	}
+	if !(weight > 0) {
+		return [3]float64{}, ""
+	}
+	rho := 1200.0
+	if alloy.MatchString(material) {
+		rho = 7850
+	}
+	s := math.Cbrt(weight / rho / 0.3 / 6) // a box of 4s × 1.5s × s, 30 % filled
+	return [3]float64{round(4*s, 1e3), round(1.5*s, 1e3), round(s, 1e3)}, RealEstimated
+}
+
+var alloy = regexp.MustCompile(`Cr|Mn|Mo|Ni|钢|^Q\d|^C\d`)

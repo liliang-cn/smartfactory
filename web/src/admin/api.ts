@@ -1,6 +1,7 @@
 // The console's calls to /api/admin. Shapes are the protocol's (src/protocol/sfp.ts).
 import type { z } from 'zod';
 import type * as P from '@/protocol/sfp';
+import type { ShapeOverlay } from '@/config/overlay';
 import type { CompanyCfg, IndustryCfg } from '@/config/schema';
 
 export type Overview = z.infer<typeof P.AdminOverview>;
@@ -204,6 +205,14 @@ export const compose = (brief: string, base: unknown, signal: AbortSignal, on: (
 export const drawShape = (req: ShapeRequest, signal: AbortSignal, on: (ev: ShapeEvent) => void) => stream('/api/admin/shape', req, signal, on);
 /** Keep a drawing in an industry pack: a machine kind's look or a product stage. */
 export const saveShape = (industry: string, s: SaveShape) => call<unknown>('POST', `/api/admin/industries/${encodeURIComponent(industry)}/shape`, s);
+
+/** What was drawn into a built-in industry pack on this installation (null when nothing). */
+export const shapeOverlay = (industry: string) => call<ShapeOverlay | null>('GET', `/api/config/shapes/${encodeURIComponent(industry)}`);
+/** Bring back the look a built-in pack ships with: one machine, one product stage, a whole product (no stage), or everything (no target). */
+export const resetShape = (industry: string, what: { target?: 'machine' | 'product'; key?: string; stage?: string } = {}) => {
+  const q = new URLSearchParams(Object.entries(what).filter(([, v]) => v) as [string, string][]);
+  return call<unknown>('DELETE', `/api/admin/industries/${encodeURIComponent(industry)}/shape?${q}`);
+};
 
 /** The console agent: one turn of a conversation; changes come back as actions to confirm. */
 export const agent = (conversation: string | null, text: string, signal: AbortSignal, on: (ev: ConsoleEvent) => void) =>

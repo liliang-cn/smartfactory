@@ -741,6 +741,8 @@ export const ShapeRequest = z.object({
   stage: str.optional(),
   /** how it looks, in words: 带顶冠的开式冲床，左边有飞轮 */
   brief: str,
+  /** add the drawn parts to the look (or stage) as it is, instead of replacing all of it */
+  append: z.boolean().optional(),
 });
 /** One checked program: n of max, passed or not, what the checks found by kind (overlap, envelope, belt, floor, count, size, empty), or the program's own error. */
 export const ShapeAttempt = z.object({
@@ -755,7 +757,7 @@ export const ShapeDrawing = z.object({
     answer: str.optional(), report: str.optional(),
   }),
   /** the frame it was drawn in: the envelope [L, D, H], and the belt through a machine */
-  spec: z.object({ target: z.enum(['machine', 'product']), envelope: z.tuple([num, num, num]), beltY: num, beltW: num, clear: num }),
+  spec: z.object({ target: z.enum(['machine', 'product']), envelope: z.tuple([num, num, num]), beltY: num, beltW: num, clear: num, append: z.boolean().optional() }),
 });
 export const ShapeEvent = z.discriminatedUnion('kind', [
   /** a program is about to run */
@@ -765,10 +767,15 @@ export const ShapeEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('complete'), text: str.optional() }),
   z.object({ kind: z.literal('error'), text: str }),
 ]).meta({ description: 'One server-sent event of the shape drawer: `data: <ShapeEvent JSON>`' });
-/** Keep a drawing: into machine kind `key`'s look (archetype frame, `size`, `parts`) or product `key`'s stage `stage`. */
+/**
+ * Keep a drawing: into machine kind `key`'s look (archetype frame, `size`, `parts`) or product `key`'s stage `stage`.
+ * With `append` the parts come after the ones already there and the machine keeps its body. A built-in pack is not
+ * changed: the shape is kept on this installation and laid over it (DELETE the same path to bring the shipped look back).
+ */
 export const SaveShape = z.object({
   target: z.enum(['machine', 'product']), key: str, stage: str.optional(),
   parts: z.array(z.record(str, z.unknown())), size: z.tuple([num, num, num]).optional(),
+  append: z.boolean().optional(),
 });
 
 // ---------- templates (/api/admin/templates) ----------

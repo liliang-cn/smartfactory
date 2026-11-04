@@ -118,11 +118,12 @@ shape.box({w: 2.2, h: 0.6, d: 1.6}, {y: 0.3}, {name: 'bed'});
 for (const x of [-0.95, 0.95]) shape.box({w: 0.3, h: 3.2, d: 0.4}, {x, y: 0.6 + 1.6, z: -0.65}, {name: 'column'});
 shape.box({w: 2.4, h: 0.6, d: 1.4}, {y: 4.1, z: -0.2}, {name: 'crown', color: 'blue'});
 shape.box({w: 0.8, h: 0.5, d: 0.8}, {y: 1.9}, {name: 'ram', color: 'metal', anim: {type: 'stroke', axis: 'y', to: -0.4}});
+shape.box({w: 0.2, h: 1.65, d: 0.2}, {y: 2.975}, {name: 'rod', color: 'metal'});
 `)
 	if !res.OK() {
 		t.Fatalf("should pass:\n%s", res.Report())
 	}
-	if d.Size != press.Envelope || len(d.Parts) != 5 {
+	if d.Size != press.Envelope || len(d.Parts) != 6 {
 		t.Fatalf("size %v parts %d", d.Size, len(d.Parts))
 	}
 

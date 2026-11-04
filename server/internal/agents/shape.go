@@ -34,7 +34,9 @@ const shapePrompt = `你是 SmartFactory 的外形设计员。别人用中文说
 - 零件数有上限：一个工厂有几十台设备，每个零件都要画，用少量大块零件勾出轮廓就好，不要做螺丝这种细节。
 - 颜色优先用调色板里的名字（blue、blueDeep、white、metal、greyDark、yellow……），和工厂里其他设备一个风格。
 - 产品是一件工件在线上的样子：放在原点、底面贴着 y = 0，长度方向沿 x。
-- 各部分要连成一个整体：相邻零件贴合或稍微插进去一点，不要悬空、不要留缝。
+- 各部分要连成一个整体：相邻零件贴合或稍微插进去一点，不要悬空、不要留缝（检查会量零件之间的缝，超过几毫米到两厘米就报错）。
+- 产品按真实世界的大小画，不要为了好看放大；程序文档里写了它大约多大，检查会拒绝差得太远的。
+- 任务里会写明是“重画整个外形”还是“在原有外形上添加”：添加时只画新增的零件，原来的保持不动。
 - 最后的话写纯文字，称呼用“你”，不用“您”，一两句就够。`
 
 // ShapeAttempt is one checked program, for the console's progress lines.
@@ -145,6 +147,11 @@ func (r *Runner) DrawShape(ctx context.Context, who auth.Who, spec shapes.Spec, 
 	}
 	defer svc.Close()
 	goal := fmt.Sprintf("要画的%s：%s\n描述：%s", map[shapes.Target]string{shapes.Machine: "设备", shapes.Product: "产品"}[spec.Target], what, brief)
+	if spec.Append {
+		goal += "\n模式：在原有外形上添加。原来的外形原样保留（程序文档里有已有的零件），你只画描述里要添加的零件，接在原有的上面；不要把原来的重画一遍。"
+	} else {
+		goal += "\n模式：重画整个外形，原来的会被替换，所以要画出完整的一个。"
+	}
 	out, err := svc.RunCode(auth.With(ctx, who), goal, agentpkg.WithMaxTurns(ShapeAttempts+4))
 	if out == nil {
 		return nil, cmp.Or(err, ErrNoAnswer)

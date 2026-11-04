@@ -13,7 +13,11 @@ import type { ModelHandle } from '@/three/common';
 
 export interface PreviewSpec { target: 'machine' | 'product'; envelope: [number, number, number]; beltY: number; beltW: number; clear: number }
 
-export default function ShapePreview({ parts, spec, color, className }: { parts: unknown[]; spec: PreviewSpec; color?: string; className?: string }) {
+/**
+ * `parts` is everything drawn on the body: for a drawing that adds to a machine's look, pass that look
+ * (its body kind and colours stay) and the old parts together with the new ones.
+ */
+export default function ShapePreview({ parts, spec, color, look, className }: { parts: unknown[]; spec: PreviewSpec; color?: string; look?: LookCfg; className?: string }) {
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = host.current;
@@ -48,10 +52,11 @@ export default function ShapePreview({ parts, spec, color, className }: { parts:
     const root = new THREE.Group();
     scene.add(root);
     if (machine) {
-      // the twin's frame archetype (base plate, panel, lamp) under the parts, as on the plant floor
-      const look = { archetype: 'frame', size: spec.envelope, parts: cfg } as LookCfg;
-      model = ARCHETYPE_BUILDERS.frame({
-        look, size: spec.envelope, beltY: spec.beltY, beltW: spec.beltW, top: spec.beltY + spec.clear - 0.15, plen: 0.6,
+      // the twin's frame archetype (base plate, panel, lamp) under the parts, as on the plant floor;
+      // when adding to a machine, its own body
+      const body = { ...(look ?? { archetype: 'frame' }), size: spec.envelope, parts: cfg } as LookCfg;
+      model = ARCHETYPE_BUILDERS[body.archetype]({
+        look: body, size: spec.envelope, beltY: spec.beltY, beltW: spec.beltW, top: spec.beltY + spec.clear - 0.15, plen: 0.6,
         body: bodyMat(colorOf(color, P.white)), accent: bodyMat(colorOf(undefined, TRIM)), rejects: false, hot: false,
       });
       root.add(model.root);
@@ -116,6 +121,6 @@ export default function ShapePreview({ parts, spec, color, className }: { parts:
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
-  }, [parts, spec, color]);
+  }, [parts, spec, color, look]);
   return <div ref={host} className={className} aria-label="外形预览" />;
 }

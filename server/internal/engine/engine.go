@@ -57,6 +57,8 @@ type Engine struct {
 	single bool
 	// earlier configs of the companies, without a Dir (guarded by mu)
 	memVersions map[string][]Version
+	// shapes drawn into built-in packs, without a Dir (guarded by mu)
+	shapes map[string]json.RawMessage
 
 	// values from equipment waiting for the loop, which applies all of them at once
 	inMu    sync.Mutex
@@ -124,7 +126,7 @@ func New(log *slog.Logger) (*Engine, error) {
 	}
 	obj := sf.ToObject(vm)
 	e := &Engine{vm: vm, fn: map[string]goja.Callable{}, calls: make(chan func(), 256), log: log, watchers: map[chan []byte]*watch{}, Done: make(chan struct{}), inReady: make(chan struct{}, 1)}
-	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "addCompany", "checkIndustry", "checkCompany", "scopeModel", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams", "stations", "alert", "readings", "setClock"} {
+	for _, name := range []string{"init", "step", "frame", "plantFrame", "timeScale", "snapshot", "command", "assetState", "ingest", "hist", "setTimeScale", "list", "save", "restore", "machines", "fleet", "playEquipment", "telemetry", "addIndustry", "setShapeOverlay", "isBuiltinIndustry", "addCompany", "checkIndustry", "checkCompany", "scopeModel", "companyConfig", "processModel", "keep", "builtinTemplates", "builtinTemplate", "checkTemplate", "removeCompany", "industryList", "industry", "schema", "historyOn", "history", "historyDims", "advance", "whatIf", "routeOrder", "syncOrders", "stopOrders", "fastForward", "calibrate", "residuals", "machineParams", "stations", "alert", "readings", "setClock"} {
 		f, ok := goja.AssertFunction(obj.Get(name))
 		if !ok {
 			return nil, fmt.Errorf("engine: SF.%s is not a function", name)
@@ -696,6 +698,70 @@ func (e *Engine) CreateIndustry(raw []byte) ConfigResult {
 	return r
 }
 
+// IsBuiltinIndustry says whether an industry pack ships with the app (it cannot be replaced, only
+// drawn on: see SetShapeOverlay).
+func (e *Engine) IsBuiltinIndustry(id string) bool { return e.str("isBuiltinIndustry", id) == "true" }
+
+// ShapeOverlay is what was drawn into a built-in pack on this installation ({id, machines,
+// products}), or nil. The pack as shipped is untouched; the overlay is laid on top of it.
+func (e *Engine) ShapeOverlay(id string) json.RawMessage {
+	if e.Dir == "" {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return e.shapes[id]
+	}
+	b, err := os.ReadFile(filepath.Join(e.configDir("shapes"), filepath.Base(id)+".json"))
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// SetShapeOverlay lays an overlay ({id, machines: {key: {look}}, products: {key: {stages: {stage:
+// {parts}}}}}) on a built-in pack: the pack with it has to validate, then the companies using the
+// pack are rebuilt and the overlay is kept. An overlay with nothing in it takes the shapes off again.
+func (e *Engine) SetShapeOverlay(raw []byte) ConfigResult {
+	id := configID(raw)
+	if r, bad := badID(id); bad {
+		return r
+	}
+	r := e.verdict(e.str("setShapeOverlay", string(raw)))
+	if !r.OK {
+		return r
+	}
+	var o struct {
+		Machines map[string]json.RawMessage `json:"machines"`
+		Products map[string]json.RawMessage `json:"products"`
+	}
+	json.Unmarshal(raw, &o)
+	empty := len(o.Machines) == 0 && len(o.Products) == 0
+	switch {
+	case e.Dir == "":
+		e.mu.Lock()
+		if e.shapes == nil {
+			e.shapes = map[string]json.RawMessage{}
+		}
+		if empty {
+			delete(e.shapes, id)
+		} else {
+			e.shapes[id] = raw
+		}
+		e.mu.Unlock()
+	case empty:
+		os.Remove(filepath.Join(e.configDir("shapes"), id+".json"))
+	default:
+		if err := e.persistConfig("shapes", id, raw); err != nil {
+			e.log.Error("keep shapes", "err", err)
+		}
+	}
+	var d struct{ Rebuilt []string }
+	json.Unmarshal(r.Detail, &d)
+	for _, c := range d.Rebuilt {
+		e.changed(c, false)
+	}
+	return r
+}
+
 // CreateCompany validates, lays out and starts simulating a company, and keeps its config.
 func (e *Engine) CreateCompany(raw []byte) ConfigResult {
 	if r, bad := badID(configID(raw)); bad {
@@ -865,7 +931,7 @@ func (e *Engine) LoadConfigs() {
 	if e.Dir == "" {
 		return
 	}
-	for _, kind := range []string{"industries", "companies"} {
+	for _, kind := range []string{"industries", "shapes", "companies"} {
 		files, _ := filepath.Glob(filepath.Join(e.configDir(kind), "*.json"))
 		for _, f := range files {
 			raw, err := os.ReadFile(f)
@@ -873,6 +939,9 @@ func (e *Engine) LoadConfigs() {
 				continue
 			}
 			fn := "addIndustry"
+			if kind == "shapes" {
+				fn = "setShapeOverlay"
+			}
 			if kind == "companies" {
 				fn = "addCompany"
 				if !e.allowed(configID(raw)) {

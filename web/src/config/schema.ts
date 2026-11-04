@@ -92,6 +92,8 @@ export const Product = z.object({
   material: z.string().optional(),
   /** kg per finished unit */
   weight: z.number().positive().optional(),
+  /** what one finished unit really measures, [length, depth, height] in metres: the AI that draws its shape holds to it */
+  size: Vec3.optional(),
   /** kg of material that goes in per unit (billet, ingot); weight / input is the material yield */
   input: z.number().positive().optional(),
   customer: z.string().optional(),

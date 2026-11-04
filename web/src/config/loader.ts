@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { layoutPlant, type PlantLayout } from '@/core/layout';
 import { companyOntologyIssues } from './ontology';
+import { applyShapeOverlay, type ShapeOverlay } from './overlay';
 import { Company, Industry, type CompanyCfg, type IndustryCfg } from './schema';
 
 /** A system's token the tab was opened with (an older ?token= link); people sign in with a cookie. */
@@ -33,11 +34,28 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, file: string): T {
 
 export const companyIds = Object.keys(companyFiles).map(fileId);
 
+/** What was drawn into a built-in pack on this installation (the server keeps it), if anything. */
+async function shapeOverlay(id: string): Promise<ShapeOverlay | null> {
+  try {
+    const r = await fetch(`/api/config/shapes/${encodeURIComponent(id)}`, { headers: tokenHeader() });
+    return r.ok ? ((await r.json()) as ShapeOverlay | null) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadIndustry(id: string): Promise<IndustryCfg> {
   const path = `./industries/${id}.json`;
   const load = industryFiles[path];
   if (!load) throw new ConfigError(path, [`找不到行业包 ${id}（应放在 src/config/industries/${id}.json）`]);
-  return parse(Industry, (await load()).default, path);
+  const raw = (await load()).default;
+  const mine = await shapeOverlay(id);
+  if (mine) {
+    // a bad overlay must not take the pack down: fall back to the pack as shipped
+    const r = Industry.safeParse(applyShapeOverlay(raw, mine));
+    if (r.success) return r.data;
+  }
+  return parse(Industry, raw, path);
 }
 
 export interface CompanyBundle {

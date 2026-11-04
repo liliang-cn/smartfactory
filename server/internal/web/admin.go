@@ -171,11 +171,18 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 			Stage  string        `json:"stage"`
 			Parts  []shapes.Part `json:"parts"`
 			Size   *[3]float64   `json:"size"`
+			Append bool          `json:"append"`
 		}
 		if !read(w, r, &in) {
 			return
 		}
-		v, err := o.SaveShape(s.caller(r), via(r), r.PathValue("id"), in.Target, in.Key, in.Stage, in.Parts, in.Size)
+		v, err := o.SaveShape(s.caller(r), via(r), r.PathValue("id"), in.Target, in.Key, in.Stage, in.Parts, in.Size, in.Append)
+		answer(w, v, err)
+	})
+	// bring back the shape a built-in pack ships with (one machine, one product stage, or all of them)
+	mux.HandleFunc("DELETE /api/admin/industries/{id}/shape", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		v, err := o.ResetShape(s.caller(r), via(r), r.PathValue("id"), q.Get("target"), q.Get("key"), q.Get("stage"))
 		answer(w, v, err)
 	})
 

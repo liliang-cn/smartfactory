@@ -4,12 +4,13 @@
 import { stepLines, THINKING } from './steps';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckIcon, CircleAlertIcon, CopyIcon, FootprintsIcon, LoaderCircleIcon, PencilIcon, ShapesIcon, SparklesIcon, UploadIcon, WaypointsIcon } from 'lucide-react';
+import { CheckIcon, CircleAlertIcon, CopyIcon, FootprintsIcon, LoaderCircleIcon, PencilIcon, RotateCcwIcon, ShapesIcon, SparklesIcon, UploadIcon, WaypointsIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import type { ShapeOverlay } from '@/config/overlay';
 import type { IndustryCfg } from '@/config/schema';
 import { stageOrder } from '@/core/layout';
 import * as api from './api';
@@ -173,21 +174,44 @@ function Writer({ open, onOpenChange, base }: { open: boolean; onOpenChange(o: b
 const stepKey = (s: IndustryCfg['routes'][string][number]) => (typeof s === 'string' ? s : s.machine);
 
 function Detail({ id }: { id: string }) {
-  const { ov } = useConsole();
+  const { ov, reload } = useConsole();
   const [cfg, setCfg] = useState<IndustryCfg | null>(null);
+  const [drawn, setDrawn] = useState<ShapeOverlay | null>(null);
   const [error, setError] = useState<string>();
   const [editing, setEditing] = useState<'json' | 'copy' | 'ai' | null>(null);
   const [drawing, setDrawing] = useState<ShapeTarget | null>(null);
   useEffect(() => { setCfg(null); api.industry(id).then(setCfg, (e: Error) => setError(e.message)); }, [id, ov]);
   const summary = ov.industries.find((i) => i.id === id);
+  // shapes drawn into a built-in pack are kept beside it: say which, and let them be taken off
+  useEffect(() => { setDrawn(null); if (summary?.builtin) api.shapeOverlay(id).then(setDrawn, () => setDrawn(null)); }, [id, ov, summary?.builtin]);
+  const restore = async (target?: 'machine' | 'product', key?: string) => {
+    try {
+      await api.resetShape(id, { target, key });
+      await reload();
+      toast.success(target ? '已恢复内置外形' : `${summary?.name ?? id} 的外形都已恢复成内置的`);
+    } catch (e) { toast.error((e as Error).message); }
+  };
   const users = ov.companies.filter((c) => c.industry === id);
   if (error) return <PageHead title="找不到这个行业包" sub={error} back={{ to: '/admin/industries', label: '行业包' }} />;
-  // the AI draws a shape into a pack this installation keeps (a built-in one is copied first)
-  const canDraw = !!ov.assistants && ov.me.everywhere && !summary?.builtin;
-  const drawButton = (target: ShapeTarget['target'], key: string) => canDraw && (
-    <Button variant="ghost" size="sm" className="-ml-2 mt-0.5 h-7 rounded-lg px-2 text-[12px] font-bold text-primary" onClick={() => setDrawing({ target, key })}>
-      <ShapesIcon className="size-3.5" />让 AI 画外形
-    </Button>
+  // the AI draws a shape into any pack; a built-in one stays as it ships, the drawing is kept on top of it
+  const canDraw = !!ov.assistants && ov.me.everywhere;
+  const changed = (target: ShapeTarget['target'], key: string) => !!(target === 'machine' ? drawn?.machines?.[key] : drawn?.products?.[key]);
+  const drawButton = (target: ShapeTarget['target'], key: string) => (canDraw || (ov.me.everywhere && changed(target, key))) && (
+    <span className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+      {canDraw && (
+        <Button variant="ghost" size="sm" className="-ml-2 mt-0.5 h-7 rounded-lg px-2 text-[12px] font-bold text-primary" onClick={() => setDrawing({ target, key })}>
+          <ShapesIcon className="size-3.5" />让 AI 画外形
+        </Button>
+      )}
+      {changed(target, key) && (
+        <>
+          <span className="rounded-md bg-brand-soft px-1.5 py-0.5 text-[11px] font-bold text-primary">已改外形</span>
+          <Button variant="ghost" size="sm" className="mt-0.5 h-7 rounded-lg px-2 text-[12px] font-bold text-muted-foreground" onClick={() => restore(target, key)}>
+            <RotateCcwIcon className="size-3.5" />恢复内置外形
+          </Button>
+        </>
+      )}
+    </span>
   );
   return (
     <>

@@ -25,8 +25,8 @@ const pressTry2 = `const back = -frame.D / 2 + 0.25;
 shape.box({w: 1.6, h: 0.6, d: 1.4}, {y: 0.3, z: -0.1}, {name: 'bed', color: 'blueDeep'});
 shape.box({w: 1.4, h: 3.0, d: 0.4}, {y: 0.6 + 1.5, z: back}, {name: 'frame', color: 'blue'});
 shape.box({w: 1.4, h: 0.6, d: 1.0}, {y: 3.9, z: -0.15}, {name: 'crown', color: 'blue'});
-shape.box({w: 0.6, h: 0.5, d: 0.6}, {y: frame.beltY + frame.clear + 0.4}, {name: 'ram', color: 'metal', anim: {type: 'stroke', axis: 'y', to: -0.3}});
-shape.cylinder({r: 0.4, h: 0.18}, {x: -0.95, y: 3.2, z: -0.45}, {name: 'flywheel', rotation: {z: 90}, color: 'greyDark', anim: {type: 'spin', axis: 'y', speed: 5}});`
+shape.box({w: 0.6, h: 1.9, d: 0.6}, {y: 2.65}, {name: 'ram', color: 'metal', anim: {type: 'stroke', axis: 'y', to: -0.3}});
+shape.cylinder({r: 0.4, h: 0.18}, {x: -0.78, y: 3.2, z: -0.45}, {name: 'flywheel', rotation: {z: 90}, color: 'greyDark', anim: {type: 'spin', axis: 'y', speed: 5}});`
 
 // shapeLLM plays a model that draws a press wrong, reads the report, and fixes it.
 type shapeLLM struct {
@@ -124,7 +124,7 @@ func TestDrawShapeFixesOnSecondAttempt(t *testing.T) {
 		t.Fatalf("attempt 2 %+v", a2)
 	}
 	fly := d.Parts[4]
-	if fly.Shape != "cylinder" || fly.Rotate != [3]float64{0, 0, 90} || fly.At != [3]float64{-0.95, 2.8, -0.45} {
+	if fly.Shape != "cylinder" || fly.Rotate != [3]float64{0, 0, 90} || fly.At != [3]float64{-0.78, 2.8, -0.45} {
 		t.Fatalf("flywheel %+v", fly)
 	}
 	if strings.Contains(d.Answer, "shape.") {

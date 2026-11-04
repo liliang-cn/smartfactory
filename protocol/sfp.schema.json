@@ -4147,6 +4147,9 @@
         },
         "brief": {
           "type": "string"
+        },
+        "append": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -4317,6 +4320,9 @@
             },
             "clear": {
               "type": "number"
+            },
+            "append": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -4472,6 +4478,9 @@
           "items": false,
           "minItems": 3,
           "maxItems": 3
+        },
+        "append": {
+          "type": "boolean"
         }
       },
       "required": [

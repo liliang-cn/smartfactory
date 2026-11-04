@@ -164,6 +164,15 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, map[string]any{"company": company, "industries": industries})
 	})
+	// the shapes drawn into a built-in industry pack on this installation, laid over the pack by browsers (null when none)
+	mux.HandleFunc("GET /api/config/shapes/{id}", func(w http.ResponseWriter, r *http.Request) {
+		o := s.Engine.ShapeOverlay(r.PathValue("id"))
+		if o == nil {
+			o = json.RawMessage("null")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(o)
+	})
 	mux.HandleFunc("GET /api/devices/{company}/{plant}", s.deviceMap)
 	if s.MCP != nil {
 		mux.Handle("/mcp", s.requireToken(s.MCP))

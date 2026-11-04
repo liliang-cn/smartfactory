@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -66,6 +67,20 @@ type Spec struct {
 	BeltY, BeltW, Clear float64
 	// MaxParts defaults to MaxMachineParts or MaxProductParts.
 	MaxParts int
+	// Name is what a product is called (for the messages).
+	Name string
+	// Real is how big one unit of the product really is, [l, d, h] in metres, and RealFrom where
+	// that comes from (RealGiven: the pack says so; RealEstimated: worked out from its weight).
+	// A drawing whose longest side is far off it is refused. Zero when nothing is known.
+	Real     [3]float64
+	RealFrom string
+	// Append: the drawing is added to what is already there (Existing, the look's or the stage's
+	// parts; Body the machine's archetype, whose own geometry is not known here) instead of
+	// replacing it. Only the new parts are drawn and checked against the envelope; the old ones
+	// count towards the part limit and the size, and new parts may touch them.
+	Append   bool
+	Existing []Part
+	Body     string
 	// OnCheck, when set, is told the error categories of every checked attempt
 	// (overlap, envelope, belt, floor, count, size, empty), for progress lines.
 	OnCheck func(errors map[string]int)
@@ -80,6 +95,24 @@ func (s Spec) maxParts() int {
 	}
 	return MaxMachineParts
 }
+
+// Where a product's real size comes from.
+const (
+	RealGiven     = "given"
+	RealEstimated = "estimated"
+)
+
+// How far off its real longest side a product may be drawn (times, either way).
+const (
+	realGivenFactor     = 1.8
+	realEstimatedFactor = 2.2
+)
+
+// How close parts must be to count as joined, in metres.
+const (
+	joinMachine = 0.02
+	joinProduct = 0.008
+)
 
 // DefaultSize is a machine's [length, depth, height] when its look gives none (core/layout.ts).
 var DefaultSize = map[string][3]float64{
@@ -134,7 +167,99 @@ func Mode(spec Spec) *codemode.Mode {
 	return m
 }
 
-func docs(s Spec) string {
+func docs(s Spec) string { return baseDocs(s) + sizeDocs(s) + appendDocs(s) + joinDocs(s) }
+
+// sizeDocs tells a product's real size.
+func sizeDocs(s Spec) string {
+	if s.Target != Product {
+		return ""
+	}
+	name := s.Name
+	if name == "" {
+		name = "this product"
+	}
+	long := longest(s.Real)
+	switch s.RealFrom {
+	case RealGiven:
+		lo, hi := long/realGivenFactor, long*realGivenFactor
+		return fmt.Sprintf(`
+
+REAL SIZE. One %s really measures about %s x %s x %s m (length x depth x height, its longest side %s m). Draw it at that
+real size, not bigger: the report errors when the longest side of the drawing is outside %s to %s m.`,
+			name, fnum(s.Real[0]), fnum(s.Real[1]), fnum(s.Real[2]), fnum(long), fnum(lo), fnum(hi))
+	case RealEstimated:
+		lo, hi := long/realEstimatedFactor, long*realEstimatedFactor
+		return fmt.Sprintf(`
+
+REAL SIZE. From its weight, one %s is roughly %s m long on its longest side (a compact body about %s x %s x %s m). Draw it
+at a real-world size, not bigger: the report errors when the longest side of the drawing is outside %s to %s m.
+If you know better what it really measures, use that, within those limits.`,
+			name, fnum(long), fnum(s.Real[0]), fnum(s.Real[1]), fnum(s.Real[2]), fnum(lo), fnum(hi))
+	}
+	return `
+
+REAL SIZE. Nothing in the data says how big it is. Draw it at the size such a thing really has in the real world
+(a connecting rod is about 0.2 m, a crankshaft about 0.5 m, a bottle 0.2 m, a carton 0.4 m), not enlarged to fill the frame,
+and say in your final answer which size you took.`
+}
+
+// appendDocs tells what is already there when the drawing is added to it.
+func appendDocs(s Spec) string {
+	if !s.Append {
+		return ""
+	}
+	what := "machine"
+	if s.Target == Product {
+		what = "product stage"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, `
+
+ADD-ON MODE. This %s is NOT drawn from scratch: its present look stays exactly as it is, and the parts you build are ADDED to it.
+Build only the new parts (what the description asks to add), placed where they belong on the existing look. Do not redraw the
+existing look. Existing parts count towards the limit of %d parts (%d are there, so you have %d left) and towards the size.`,
+		what, s.maxParts(), len(s.Existing), max(0, s.maxParts()-len(s.Existing)))
+	if len(s.Existing) > 0 {
+		b.WriteString("\nThe existing extra parts (shape size at-bottom-centre rotate colour), in metres and degrees:\n")
+		for i, p := range s.Existing {
+			if i == 30 {
+				fmt.Fprintf(&b, "  ... %d more\n", len(s.Existing)-30)
+				break
+			}
+			fmt.Fprintf(&b, "  %s %v at %s rotate %s %s\n", p.Shape, p.Size, fv(p.At), fv(p.Rotate), p.Color)
+		}
+	}
+	if s.Target == Machine {
+		body := "a plain base"
+		if s.Body != "" && s.Body != "frame" {
+			body = fmt.Sprintf("a built-in body of the kind %q that fills the envelope's footprint (its geometry is not shown to you)", s.Body)
+		}
+		fmt.Fprintf(&b, `
+Under all of it the machine has %s. Attach the new parts to the body or to the existing parts, on the outside of it, and keep them inside the envelope and clear of the belt corridor.`, body)
+	}
+	return b.String()
+}
+
+// joinDocs asks for parts that are joined up.
+func joinDocs(s Spec) string {
+	tol := joinMachine
+	if s.Target == Product {
+		tol = joinProduct
+	}
+	note := " A part resting on the floor counts as joined to the floor."
+	if s.Target == Product {
+		note = " The product is one piece: it has no floor, so every part must touch the others."
+	}
+	return fmt.Sprintf(`
+
+JOINED PARTS. Parts must form one connected whole: the bounding box of every part has to touch, or slightly overlap, the box of
+another part (a gap of more than %s m is an error). Never leave a gap between neighbours, such as the journals and webs of
+a shaft or a column and the crown above it: make them meet, or overlap by a few millimetres, or bridge the gap with a part.%s`, fnum(tol), note)
+}
+
+func longest(v [3]float64) float64 { return math.Max(v[0], math.Max(v[1], v[2])) }
+
+func baseDocs(s Spec) string {
 	common := `Units are metres, y is up, the floor is y = 0. A part's position is its CENTRE, so a box of
 height h standing on the floor has y = h/2. Rotations are degrees, XYZ order. Positions and rotations
 are {x, y, z} (missing parts are 0) or [x, y, z].
@@ -166,6 +291,10 @@ At most %d parts: every unit on every line draws them all, so a few well-chosen 
 The report errors on parts that are buried inside another part (they are never seen).`,
 			fnum(s.Envelope[0]), fnum(s.Envelope[1]), fnum(s.Envelope[2]), fnum(s.Envelope[0]), fnum(s.Envelope[1]), fnum(s.Envelope[2]), s.maxParts())
 	}
+	fill := " Use most of the envelope so the machine reads at its real size."
+	if s.Append {
+		fill = ""
+	}
 	return common + fmt.Sprintf(`
 This is a MACHINE. Its origin is the centre of its footprint on the floor. It must fit its envelope:
 x in [-L/2, L/2], z in [-D/2, D/2], y in [0, H], with frame = {L: %s, D: %s, H: %s, beltY: %s, beltW: %s, clear: %s}.
@@ -175,9 +304,9 @@ y = beltY - 0.05 and y = beltY + clear (the products ride there). Tools, rams an
 beds and bases go below it or beside it. The operator aisle is towards +z: put motors, flywheels and
 cabinets at the back (-z) or the ends. A base plate, a control panel and a signal lamp are added for you.
 At most %d parts: a plant has dozens of machines and every part is drawn on each, so build the
-outline from a few big parts. Use most of the envelope so the machine reads at its real size.
+outline from a few big parts.%s
 The report errors on parts that are buried inside another part (they are never seen).`,
-		fnum(s.Envelope[0]), fnum(s.Envelope[1]), fnum(s.Envelope[2]), fnum(s.BeltY), fnum(s.BeltW), fnum(s.Clear), s.maxParts())
+		fnum(s.Envelope[0]), fnum(s.Envelope[1]), fnum(s.Envelope[2]), fnum(s.BeltY), fnum(s.BeltW), fnum(s.Clear), s.maxParts(), fill)
 }
 
 func example(t Target) string {
@@ -281,6 +410,18 @@ type Placed struct {
 	Path     string
 	Line     int
 	Min, Max [3]float64
+	// Old: a part that was already there (add-on mode), not drawn by this program.
+	Old bool
+}
+
+// placeExisting is the parts already there, as the checks see them.
+func placeExisting(parts []Part) []Placed {
+	out := make([]Placed, 0, len(parts))
+	for i, p := range parts {
+		min, max := PartBox(p)
+		out = append(out, Placed{Part: p, Path: fmt.Sprintf("existing %s #%d", p.Shape, i+1), Min: min, Max: max, Old: true})
+	}
+	return out
 }
 
 func (p Placed) volume() float64 {
@@ -426,7 +567,8 @@ func Convert(raw json.RawMessage, spec Spec) (*Drawn, error) {
 		d.Parts = append(d.Parts, q)
 	}
 	if spec.Target == Product {
-		d.Size = roundV([3]float64{max[0] - min[0], max[2] - min[2], max[1] - min[1]}, 1e3)
+		umin, umax := bounds(append(slices.Clone(placed), placeExisting(spec.Existing)...))
+		d.Size = roundV([3]float64{umax[0] - umin[0], umax[2] - umin[2], umax[1] - umin[1]}, 1e3)
 	} else {
 		d.Size = spec.Envelope
 	}
@@ -486,6 +628,7 @@ func Validate(raw json.RawMessage, spec Spec) codemode.Check {
 		return c
 	}
 	limit := spec.maxParts()
+	all := append(slices.Clone(ps), placeExisting(spec.Existing)...)
 	counts := map[string]int{}
 	for _, p := range ps {
 		counts[p.Part.Shape]++
@@ -499,14 +642,22 @@ func Validate(raw json.RawMessage, spec Spec) codemode.Check {
 	for _, k := range kinds {
 		list = append(list, fmt.Sprintf("%s %d", k, counts[k]))
 	}
-	min, max := bounds(ps)
+	min, max := bounds(all)
 	size := [3]float64{max[0] - min[0], max[1] - min[1], max[2] - min[2]}
+	partsNow := fmt.Sprintf("%d of at most %d (%s)", len(all), limit, strings.Join(list, ", "))
+	if spec.Append {
+		partsNow = fmt.Sprintf("%d new + %d existing = %d of at most %d (new: %s)", len(ps), len(all)-len(ps), len(all), limit, strings.Join(list, ", "))
+	}
 	c.Stats = append(c.Stats,
-		codemode.Stat{Key: "parts", Value: fmt.Sprintf("%d of at most %d (%s)", len(ps), limit, strings.Join(list, ", "))},
+		codemode.Stat{Key: "parts", Value: partsNow},
 		codemode.Stat{Key: "bounds", Value: fmt.Sprintf("min %s max %s, size %s m (x, y, z)", fv(min), fv(max), fv(size))},
 	)
-	if len(ps) > limit {
-		errorf("count", 0, "", "%d parts; the limit is %d. Merge small details into bigger parts or leave them out", len(ps), limit)
+	if len(all) > limit {
+		there := ""
+		if old := len(all) - len(ps); old > 0 {
+			there = fmt.Sprintf(" (%d of them already there)", old)
+		}
+		errorf("count", 0, "", "%d parts%s; the limit is %d. Merge small details into bigger parts or leave them out", len(all), there, limit)
 	}
 
 	below := 0
@@ -531,6 +682,7 @@ func Validate(raw json.RawMessage, spec Spec) codemode.Check {
 		if size[0] < 0.01 || size[1] < 0.005 || size[2] < 0.01 {
 			errorf("size", 0, "", "the unit is only %s m; check the units (metres)", fv(size))
 		}
+		realSize(spec, size, errorf, &c)
 		cx, cz := (min[0]+max[0])/2, (min[2]+max[2])/2
 		if math.Abs(cx) > 0.02+0.05*size[0] || math.Abs(cz) > 0.02+0.05*size[2] {
 			warnf(0, "", "the unit is centred at x %s, z %s; centre it on x = 0, z = 0", fnum(cx), fnum(cz))
@@ -575,19 +727,19 @@ func Validate(raw json.RawMessage, spec Spec) codemode.Check {
 				}
 			}
 		}
-		if size[0] < 0.5*L || size[1] < 0.5*H {
+		if !spec.Append && (size[0] < 0.5*L || size[1] < 0.5*H) {
 			warnf(0, "", "the machine uses only %s of its %s m envelope; make it fill more so it reads at its real size", fv(size), fv([3]float64{L, H, D}))
 		}
 	}
 
 	// Parts buried in another: never seen, still drawn.
 	buried := 0
-	for i := range ps {
-		for j := range ps {
-			if i == j {
+	for i := range all {
+		for j := range all {
+			if i == j || all[i].Old && all[j].Old {
 				continue
 			}
-			a, b := ps[i], ps[j] // a inside b?
+			a, b := all[i], all[j] // a inside b?
 			if a.volume() > b.volume() || see(b.Part) {
 				continue
 			}
@@ -607,6 +759,7 @@ func Validate(raw json.RawMessage, spec Spec) codemode.Check {
 	if buried > 6 {
 		errorf("overlap", 0, "", "%d buried parts in all", buried)
 	}
+	joined(spec, all, errorf, &c)
 	c.Stats = append(c.Stats, groupStats(ps))
 	return c
 }

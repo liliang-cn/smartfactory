@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { ConfigError, layoutCompany, loadAll, validateCompany, validateIndustry, type CompanyBundle } from '@/config/loader';
 import { companyOntology } from '@/config/ontology';
+import { applyShapeOverlay, type ShapeOverlay } from '@/config/overlay';
 import { Company as CompanySchema, Industry as IndustrySchema, type CompanyCfg, type IndustryCfg, type StepCfg } from '@/config/schema';
 import { History } from '@/sim/history';
 import { countSpan, isMachineSpec, linkPlants, liveFields, PlantSim, type SavedPlant } from '@/sim/plant';
@@ -26,6 +27,8 @@ const MAX_EVENTS = 200;
 /** Every industry pack known: bundled ones and those created at run time. */
 const industries = new Map<string, IndustryCfg>();
 const builtinIndustries = new Set<string>();
+/** The built-in packs as shipped (shapes drawn on top of them are laid on these). */
+const shippedIndustries = new Map<string, unknown>();
 const builtinCompanies = new Set<string>();
 
 function register(bundle: CompanyBundle) {
@@ -44,6 +47,7 @@ function init(): string {
       const ind = validateIndustry(raw, path);
       industries.set(ind.id, ind);
       builtinIndustries.add(ind.id);
+      shippedIndustries.set(ind.id, raw);
     } catch (e) {
       host.log((e as Error).message);
     }
@@ -140,6 +144,35 @@ function addIndustry(json: string): string {
       products: Object.keys(ind.products), machines: Object.keys(ind.machines), routes: Object.keys(ind.routes), rebuilt,
     };
   });
+}
+
+/**
+ * Draws shapes on top of a built-in pack (or takes them off again: an empty overlay is the pack as
+ * shipped). The pack with the overlay laid on it has to validate, or nothing changes. Companies
+ * that use the pack are rebuilt (their state starts over), like when a custom pack is replaced.
+ */
+function setShapeOverlay(json: string): string {
+  return result(() => {
+    const o = JSON.parse(json) as ShapeOverlay;
+    const shipped = shippedIndustries.get(o?.id ?? '');
+    if (!shipped) throw new ConfigError(`行业包 ${o?.id ?? ''}`, [`${o?.id ?? ''} 不是内置行业包；自己建的行业包直接改它的外形`]);
+    const ind = validateIndustry(applyShapeOverlay(shipped, o), `行业包 ${o.id}`);
+    industries.set(ind.id, ind);
+    const rebuilt: string[] = [];
+    for (const [id, c] of companies) {
+      const cfg = c.bundle.company;
+      if (!cfg.plants.some((p) => (p.industry ?? cfg.industry) === ind.id)) continue;
+      const bundle = { company: cfg, plants: layoutCompany(cfg, industries, `公司 ${id}`), directory: c.bundle.directory };
+      register(bundle);
+      if (builtinBundles.has(id)) builtinBundles.set(id, bundle);
+      rebuilt.push(id);
+    }
+    return { id: ind.id, rebuilt };
+  });
+}
+
+function isBuiltinIndustry(id: string): boolean {
+  return builtinIndustries.has(id);
 }
 
 function addCompany(json: string): string {
@@ -1127,7 +1160,7 @@ function list(): string {
 
 (globalThis as Record<string, unknown>).SF = {
   init, step, frame, plantFrame, timeScale, snapshot, command, assetState, ingest, hist, setTimeScale, list, save, restore, machines, fleet, playEquipment, telemetry,
-  addIndustry, addCompany, checkIndustry, checkCompany, scopeModel, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
+  addIndustry, setShapeOverlay, isBuiltinIndustry, addCompany, checkIndustry, checkCompany, scopeModel, companyConfig, processModel, keep, builtinTemplates, builtinTemplate, checkTemplate, removeCompany, industryList, industry, schema,
   historyOn, history, historyDims, advance, whatIf, setClock, routeOrder, syncOrders, stopOrders, fastForward, calibrate, residuals, machineParams, stations, alert, readings,
   tables, reportTable, tableSessions, materials, setHeats, mountTool, planModel, planRun,
 };
