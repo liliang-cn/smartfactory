@@ -134,8 +134,13 @@ type PlanRunResult struct {
 // PlanRun runs a plan ({"plant/line": orders in turn}) on this engine's copy of the company for
 // up to hours, in steps of dt seconds. Meant for an offline engine restored from the live state.
 func (e *Engine) PlanRun(company string, queue map[string][]ExtOrder, hours, dt float64) (*PlanRunResult, error) {
+	return e.PlanRunFresh(company, queue, hours, dt, false)
+}
+
+// PlanRunFresh is PlanRun; with fresh the lines let go of the ERP order they run now.
+func (e *Engine) PlanRunFresh(company string, queue map[string][]ExtOrder, hours, dt float64, fresh bool) (*PlanRunResult, error) {
 	b, _ := json.Marshal(queue)
-	return ParsePlanRun(e.str("planRun", company, string(b), hours, dt))
+	return ParsePlanRun(e.str("planRun", company, string(b), hours, dt, fresh))
 }
 
 // ParsePlanRun reads what planRun answered (here or in node).

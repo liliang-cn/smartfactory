@@ -58,6 +58,7 @@ func TestPlanPublish(t *testing.T) {
 	}
 	t.Cleanup(func() { pst.Close() })
 	plans := plan.New(pst, eng, prod, log)
+	plans.NoProbe = true
 
 	_, adk := auth.NewToken("厂长", auth.Admin, nil, "")
 	ptok, pk := auth.NewToken("计划员", auth.Operator, []string{"huaduan"}, "")

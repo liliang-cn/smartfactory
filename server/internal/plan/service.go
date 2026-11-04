@@ -30,13 +30,18 @@ type Service struct {
 	// HistoryOEE is a company's measured OEE of the last days from its history database, for
 	// lines the twin has no figures of yet (nil, or ok false, without one).
 	HistoryOEE func(company string) (float64, bool)
+	// NoProbe leaves out the measured line rates (tests that do not need them); ProbeDays is how
+	// many days of plant time a probe runs (default 3).
+	NoProbe   bool
+	ProbeDays float64
 
-	mu   sync.Mutex
-	runs map[string]*whatIfJob
+	mu     sync.Mutex
+	runs   map[string]*whatIfJob
+	probes map[string]*probeState
 }
 
 func New(st *Store, eng *engine.Engine, orders *erp.Service, log *slog.Logger) *Service {
-	return &Service{Store: st, Eng: eng, Orders: orders, Log: log, runs: map[string]*whatIfJob{}}
+	return &Service{Store: st, Eng: eng, Orders: orders, Log: log, runs: map[string]*whatIfJob{}, probes: map[string]*probeState{}}
 }
 
 // Problems are what the service refuses, and why.
@@ -80,13 +85,21 @@ func (s *Service) lines(company string, m *engine.PlanModel, running map[string]
 	if s.HistoryOEE != nil {
 		hist, histOK = s.HistoryOEE(company)
 	}
+	pr := s.probed(company, m)
 	var out []Line
 	for _, p := range m.Plants {
 		cal := calendarOf(p.Calendar)
 		for _, l := range p.Lines {
 			x := Line{Key: p.ID + "/" + l.ID, Plant: p.ID, PlantName: p.Name, ID: l.ID, Name: l.Name, No: l.No, Neck: l.Neck, Kinds: l.Tools,
 				Last: l.Last, Down: l.Down, Crew: l.Crew, Cal: cal, Product: l.ProductName, Family: []string{l.Product, l.ProductName}}
+			measured, probed := 0.0, false
+			if pr != nil {
+				measured, probed = pr.Eff[kind(p.ID, l)]
+			}
 			switch {
+			case probed:
+				x.Eff = measured
+				x.RateSource = fmt.Sprintf("孪生推演 %.0f 小时实测（故障、换模、夜班都算进去）效率 %.0f%%", pr.Hours, measured*100)
 			case l.Span >= 1800 && l.Perf >= 0.3:
 				x.Eff = math.Min(1, l.Perf*math.Max(l.Quality, 0.5))
 				x.RateSource = fmt.Sprintf("孪生近 %.0f 小时实绩：性能 %.0f%% × 合格率 %.0f%%", l.Span/3600, l.Perf*100, l.Quality*100)
@@ -570,6 +583,10 @@ func (s *Service) Replan(company string, goal Goal, by string) (*Plan, error) {
 		if err := s.Store.saveSettings(company, st); err != nil {
 			return nil, err
 		}
+	}
+	// a new twin has no measured rates yet: the first plan waits a little for the probe
+	if m := s.Eng.PlanModel(company); m != nil && s.probed(company, m) == nil {
+		s.WaitProbe(company, 90*time.Second)
 	}
 	in, err := s.input(company, st, st.Goal)
 	if err != nil {

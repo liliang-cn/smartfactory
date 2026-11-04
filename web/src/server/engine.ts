@@ -462,9 +462,10 @@ function planModel(c: string): string {
 /**
  * Runs a plan on an offline copy of the company (restored from the live state): each line takes
  * the plan's orders in turn ({"plant/line": orders}) and waits when it has none. Returns when each
- * order started and finished in the run (epoch ms), within `hours`.
+ * order started and finished in the run (epoch ms), within `hours`. `fresh`: the lines let go of
+ * the ERP order they run (a rate probe wants the line from its next order on, not its leftovers).
  */
-function planRun(c: string, json: string, hours: number, dt: number): string {
+function planRun(c: string, json: string, hours: number, dt: number, fresh = false): string {
   return result(() => {
     const co = get(c);
     if (!co) throw new Error(`没有公司 ${c}`);
@@ -489,6 +490,7 @@ function planRun(c: string, json: string, hours: number, dt: number): string {
         event: (e) => events.push({ kind: e.kind, no: e.no, plant: e.plant, line: e.line, at: p.wall(), good: e.good, scrap: e.scrap }),
       };
       // a running ERP order goes on in the copy: it counts as started when the run starts
+      if (fresh) for (const l of p.lines) if (ids.has(l.id) && l.job?.ext) { l.last = l.job; l.job = undefined; }
       for (const l of p.lines) if (l.job?.ext && ids.has(l.id)) events.push({ kind: 'running', no: l.job.no, plant: p.layout.id, line: l.id, at: p.wall(), good: l.job.good, scrap: l.job.scrap });
       // a line that made up its own order lets it go: the plan's come first
       for (const l of p.lines) if (ids.has(l.id) && l.job && !l.job.ext) { l.last = l.job; l.job = undefined; }

@@ -45,6 +45,8 @@ type Check struct {
 	Due      int     `json:"due"`
 	MeanDev  float64 `json:"meanDev"`
 	MaxDev   float64 `json:"maxDev"`
+	// Bias is the mean signed difference (run − plan): positive, the plant runs later than the plan says.
+	Bias float64 `json:"bias"`
 	// PlanOnTime and RunOnTime are on-time orders by the plan and by the run, among those with a due date the run finished.
 	PlanOnTime int    `json:"planOnTime"`
 	RunOnTime  int    `json:"runOnTime"`
@@ -176,18 +178,22 @@ func (s *Service) check(company, state string, r *Result, days float64) (*Check,
 	}
 	// as far as the plan goes and a bit, within the days asked
 	hours := math.Min(days*24, math.Max(4, last.Sub(r.Now).Hours()+8))
-	run, err := s.run(company, state, queue, hours)
+	run, err := s.run(company, state, queue, hours, false)
 	if err != nil {
 		return nil, err
 	}
 	return compareRun(r, run, time.UnixMilli(run.Start)), nil
 }
 
-func (s *Service) run(company, state string, queue map[string][]engine.ExtOrder, hours float64) (*engine.PlanRunResult, error) {
-	const dt = 2
+// run plays the queues on a copy of the plant. The step is the one the live twin takes (half a
+// second): with coarser steps every machine cycle rounds up (a 13 s cycle takes 14 s at 2 s steps)
+// and the copy runs 5–10 % slower than the plant does. Without node, the embedded engine is far
+// slower and takes whole seconds.
+func (s *Service) run(company, state string, queue map[string][]engine.ExtOrder, hours float64, fresh bool) (*engine.PlanRunResult, error) {
 	if node, err := exec.LookPath("node"); err == nil {
-		return runInNode(node, s.Eng, company, state, queue, hours, dt)
+		return runInNode(node, s.Eng, company, state, queue, hours, 0.5, fresh)
 	}
+	const dt = 1
 	off, err := engine.NewOffline(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	if err != nil {
 		return nil, err
@@ -198,7 +204,7 @@ func (s *Service) run(company, state string, queue map[string][]engine.ExtOrder,
 	if err := json.Unmarshal([]byte(off.RestoreJSON(company, state)), &rs); err != nil || len(rs.Restored) == 0 {
 		return nil, fmt.Errorf("复制不了工厂的状态（%v）", rs.Skipped)
 	}
-	return off.PlanRun(company, queue, hours, dt)
+	return off.PlanRunFresh(company, queue, hours, dt, fresh)
 }
 
 // compareRun sets each planned order's end beside its end in the run (relative to their own
@@ -220,7 +226,7 @@ func compareRun(r *Result, run *engine.PlanRunResult, runStart time.Time) *Check
 		left[l.No] = [2]int{l.Good, l.Qty}
 	}
 	runEnd := time.UnixMilli(run.End)
-	var sum float64
+	var sum, signed float64
 	for _, o := range r.Orders {
 		row := CheckRow{No: o.No, Line: o.LineName, PlanStart: o.Start.Add(shift), PlanEnd: o.End.Add(shift), Due: o.Due, RunStart: start[o.No], RunEnd: end[o.No]}
 		if o.Running {
@@ -231,6 +237,7 @@ func compareRun(r *Result, run *engine.PlanRunResult, runStart time.Time) *Check
 			row.DevHours = &d
 			c.Finished++
 			sum += math.Abs(d)
+			signed += d
 			c.MaxDev = math.Max(c.MaxDev, math.Abs(d))
 			if !o.Due.IsZero() {
 				c.WithDue++
@@ -252,6 +259,7 @@ func compareRun(r *Result, run *engine.PlanRunResult, runStart time.Time) *Check
 	slices.SortStableFunc(c.Orders, func(a, b CheckRow) int { return a.PlanEnd.Compare(b.PlanEnd) })
 	if c.Finished > 0 {
 		c.MeanDev = math.Round(sum/float64(c.Finished)*10) / 10
+		c.Bias = math.Round(signed/float64(c.Finished)*10) / 10
 	}
 	switch {
 	case c.Due == 0:
@@ -280,7 +288,7 @@ for (const ind of inp.industries) SF.addIndustry(JSON.stringify(ind));
 if (inp.companyConfig) SF.addCompany(JSON.stringify(inp.companyConfig));
 const r = JSON.parse(SF.restore(inp.company, inp.state));
 if (!r.restored.length) { process.stdout.write(JSON.stringify({ ok: false, errors: ['复制不了工厂的状态：' + r.skipped.join(', ')] })); process.exit(0); }
-process.stdout.write(SF.planRun(inp.company, JSON.stringify(inp.queue), inp.hours, inp.dt));
+process.stdout.write(SF.planRun(inp.company, JSON.stringify(inp.queue), inp.hours, inp.dt, !!inp.fresh));
 `
 
 var bundle struct {
@@ -289,7 +297,7 @@ var bundle struct {
 	err error
 }
 
-func runInNode(node string, eng *engine.Engine, company, state string, queue map[string][]engine.ExtOrder, hours, dt float64) (*engine.PlanRunResult, error) {
+func runInNode(node string, eng *engine.Engine, company, state string, queue map[string][]engine.ExtOrder, hours, dt float64, fresh bool) (*engine.PlanRunResult, error) {
 	bundle.Do(func() {
 		b, err := engine.Bundle()
 		if err == nil {
@@ -306,7 +314,7 @@ func runInNode(node string, eng *engine.Engine, company, state string, queue map
 	if bundle.err != nil {
 		return nil, bundle.err
 	}
-	input := map[string]any{"company": company, "state": state, "queue": queue, "hours": hours, "dt": dt, "industries": []json.RawMessage{}}
+	input := map[string]any{"company": company, "state": state, "queue": queue, "hours": hours, "dt": dt, "fresh": fresh, "industries": []json.RawMessage{}}
 	if c, inds, ok := eng.RuntimeCompany(company); ok {
 		list := []json.RawMessage{}
 		for _, v := range inds {
