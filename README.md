@@ -1,16 +1,61 @@
 # SmartFactory
 
-一家公司自己部署的智能工厂：后台、实时 3D 孪生、AI 助手。
+English | [中文](README_CN.md)
 
-![实时 3D 孪生](docs/screenshots/twin.png)
+A smart factory a company runs on its own server: an admin console, a live 3D twin and AI assistants in one program.
 
-| 生产工单（ERP） | 知识图谱 | 工作台助手 |
+![Live 3D twin](docs/screenshots/twin.png)
+
+| Production orders (ERP) | Knowledge graph | Console assistant |
 |---|---|---|
-| ![生产工单](docs/screenshots/orders.png) | ![知识图谱](docs/screenshots/knowledge.png) | ![工作台助手](docs/screenshots/agent.png) |
+| ![Production orders](docs/screenshots/orders.png) | ![Knowledge graph](docs/screenshots/knowledge.png) | ![Console assistant](docs/screenshots/agent.png) |
 
-## 安装
+## Features
 
-Linux（systemd），从 [Releases](https://github.com/liliang-cn/smartfactory/releases) 下载：
+### Build the factory
+- Start from a built-in template (forging, EV batteries, food and beverage, machining, air conditioners, automotive, central kitchen and restaurants, campsite), describe the plant to the AI in a sentence, or write the config yourself.
+- Plant breakdown: company › plant › area › line › machine, with floor plans drawn as you type. Edit one part with a form or by asking the AI.
+- Industry packs hold a kind of site's products, machines and routes. The AI can write a new pack and draw a machine's or product's 3D shape.
+- One company per server, or several.
+
+### Live 3D twin
+- Every line and machine runs in the browser, on a desktop or a phone, simulated or fed by real equipment, and everyone watching sees the same plant.
+- Click a machine for its readings, state and output.
+- Business view: the plant's figures, an advisor agent that looks for problems and proposes plans, and what-if runs of a plan on a copy of the plant.
+
+### Production
+- Orders: production orders from the ERP (pushed to the order API or pulled from it), the line each runs on, and progress.
+- Planning: a Gantt chart by line, why an order is late, re-planning for a goal, moving orders by hand, and what-if for a rush order.
+- Checks: patrol rounds, first-article checks and lab results filled in on a phone at the machine (from the code printed on it, offline too). Readings outside their limits are flagged on the spot, and overdue rounds are listed.
+- Commands: rules every command to a machine must pass, how far the AI may act alone, and AI commands waiting for an operator.
+
+### Materials and R&D
+- BOM: multi-level, in revisions, with a kit check for a quantity that flags shortages.
+- Stores: stock by heat or batch, receipts, issues, counts, safety stock, tracing, and purchase lines that give the plan its material arrival times.
+- Dies: each die's press, strokes against its design life, re-sinking and scrapping.
+- R&D: new part development, from drawing and die revisions through trial forgings and inspection to sign-off.
+
+### Data
+- Connect: an embedded MQTT broker with a token or certificate per device, Modbus, OPC UA and MQTT sources, an edge gateway (`smartfactory edge`), a device emulator (`smartfactory devices`), ERP connections, and an optional PostgreSQL history database.
+- Anomalies: learns each machine's normal readings and gives a hint when one stays off.
+- Calibration: fits each machine's simulation to what it measured.
+- Value: what the twin and its AI did for the company over a period.
+- Restaurants: table status from a camera box, the POS or a waiter's phone (`/waiter`).
+
+### AI
+Works with any OpenAI-compatible model. Without one, the assistants are off and everything else works, the knowledge base included.
+- Console assistant beside every page. It proposes changes as cards and carries them out only when confirmed.
+- Company assistants to talk to from the twin.
+- Knowledge base (CortexDB): the process as a graph, orders, machine events and your documents (PDF, Word, Excel, text), searchable in plain language with sources. Administrators can open it as a live 3D graph that lights up what the assistant reads.
+- Ontology: classes, relations, rules and constraints for each industry, with inference.
+
+### Administration
+- Accounts with sign-in (on by default) and roles: administrator, operator, inspector, member. Tokens for devices, the ERP and AI agents.
+- Audit log of who changed what, and server health (CPU, memory, disk, simulation cost, connections).
+
+## Install
+
+Linux (systemd), from [Releases](https://github.com/liliang-cn/smartfactory/releases):
 
 ```sh
 tar xzf smartfactory-*-linux-amd64.tar.gz
@@ -18,58 +63,58 @@ cd smartfactory-*-linux-amd64
 sudo ./smartfactory install
 ```
 
-打开 `http://<服务器>:4720/admin`，管理员令牌：`sudo cat /var/lib/smartfactory/initial-admin-token`。
+Open `http://<server>:4720/admin` and create the administrator account. Opened from another machine, the page asks for the installation code: `sudo cat /var/lib/smartfactory/initial-admin-token`.
 
 | | |
 |---|---|
-| 升级 | 新版本再执行 `sudo ./smartfactory install` |
-| 卸载 | `sudo smartfactory uninstall`，加 `-purge` 连数据一起删 |
-| 日志 | `journalctl -u smartfactory -f` |
+| Upgrade | Run `sudo ./smartfactory install` from the new version |
+| Uninstall | `sudo smartfactory uninstall`; add `-purge` to delete the data too |
+| Logs | `journalctl -u smartfactory -f` |
 
-macOS、Windows：`smartfactory -config smartfactory.json`，不带配置时数据在 `./data`。
+macOS and Windows: `smartfactory -config smartfactory.json`. Without a config, data goes to `./data`.
 
-## 配置
+## Configure
 
-| 位置 | |
+| Where | |
 |---|---|
-| `/etc/smartfactory/smartfactory.json` | `http` 监听地址，`mqtt.users` 设备账号，`sources` Modbus / OPC UA / MQTT 数据源 |
-| `/etc/smartfactory/env` | `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`（OpenAI 兼容接口），`HTTPS_PROXY`；可选 `CORTEXDB_EMBED_BASE_URL`、`CORTEXDB_EMBED_MODEL`、`CORTEXDB_EMBED_DIM`（向量模型，资料按意思检索） |
-| `/var/lib/smartfactory` | 全部数据，备份它 |
+| `/etc/smartfactory/smartfactory.json` | `http` listen address, `mqtt.users` device accounts, `sources` Modbus / OPC UA / MQTT |
+| `/etc/smartfactory/env` | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` (OpenAI-compatible), `HTTPS_PROXY`; optionally `CORTEXDB_EMBED_BASE_URL`, `CORTEXDB_EMBED_MODEL`, `CORTEXDB_EMBED_DIM` (an embedding model, so documents are found by meaning) |
+| `/var/lib/smartfactory` | All the data. Back this up. |
 
-改完 `sudo systemctl restart smartfactory`。
+After a change: `sudo systemctl restart smartfactory`.
 
-- 设备：MQTT 主题 `sf/{公司}/{工厂}/{设备}/{字段}`，见 [protocol/devices.md](protocol/devices.md)
-- ERP：后台「接入」，接口见 [protocol/README.md](protocol/README.md)
-- HTTPS：前面放反向代理，比如 Caddy `reverse_proxy 127.0.0.1:4720`
+- Devices: MQTT topic `sf/{company}/{plant}/{asset}/{field}`, see [protocol/devices.md](protocol/devices.md)
+- ERP: the console's Connect page; the API is in [protocol/README.md](protocol/README.md)
+- HTTPS: put a reverse proxy in front, e.g. Caddy `reverse_proxy 127.0.0.1:4720`
 
-## AI Agent
+## AI agents
 
-安装同上。在后台「账号」里给 agent 发一个令牌。
+Give the agent a token in the console's Accounts page.
 
-MCP：
+MCP:
 
 ```sh
-claude mcp add --transport http smartfactory http://<服务器>:4720/mcp --header "Authorization: Bearer <令牌>"
+claude mcp add --transport http smartfactory http://<server>:4720/mcp --header "Authorization: Bearer <token>"
 ```
 
-命令行（`-json` 输出 JSON）：
+Command line (`-json` for JSON output):
 
 ```sh
-export SF_SERVER=http://<服务器>:4720 SF_TOKEN=<令牌>
+export SF_SERVER=http://<server>:4720 SF_TOKEN=<token>
 smartfactory company -json
-smartfactory orders <公司> -json
-smartfactory orders <公司> send -f orders.json
-smartfactory kb <公司> search "问题" -json
+smartfactory orders <company> -json
+smartfactory orders <company> send -f orders.json
+smartfactory kb <company> search "question" -json
 ```
 
-## 构建
+## Build
 
-Node.js 22+、Go 1.27+：
+Node.js 22+ and Go 1.27+:
 
 ```sh
 (cd web && npm ci)
 scripts/build.sh      # server/bin/smartfactory
-scripts/release.sh    # 各平台发布包
+scripts/release.sh    # release packages for each platform
 ```
 
 ## License
