@@ -69,6 +69,10 @@ type Base struct {
 	bdirty map[string]bool
 	bkick  chan struct{}
 	ekick  chan struct{}
+
+	// each company's live view (view.go), once opened
+	vmu   sync.Mutex
+	views map[string]*view
 }
 
 type company struct {
@@ -89,6 +93,7 @@ func Open(dir string, eng *engine.Engine, log *slog.Logger) (*Base, error) {
 }
 
 func (b *Base) Close() {
+	b.closeViews()
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, c := range b.dbs {
@@ -164,6 +169,7 @@ func (b *Base) embedSig() string {
 
 // Drop forgets a deleted company's knowledge.
 func (b *Base) Drop(id string) {
+	b.closeView(id)
 	b.mu.Lock()
 	if c, ok := b.dbs[id]; ok {
 		c.db.Close()
@@ -1001,6 +1007,11 @@ func (b *Base) Search(ctx context.Context, company, query string, names, keyword
 	if len(out.Passages) > k {
 		out.Passages = out.Passages[:k]
 	}
+	read := slices.Clone(names)
+	for _, p := range out.Passages {
+		read = append(read, p.Entities...)
+	}
+	b.observe(company, "search_knowledge", query, read)
 	return out, nil
 }
 
@@ -1210,6 +1221,7 @@ func (b *Base) Lookup(ctx context.Context, company, name string) (*Entity, error
 		}
 		return strings.Compare(b.Name, a.Name)
 	})
+	b.observe(company, "lookup_entity", name, []string{name})
 	return e, nil
 }
 

@@ -13,7 +13,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/liliang-cn/agent-go/v3 v3.80.0
-	github.com/liliang-cn/cortexdb/v2 v2.145.0
+	github.com/liliang-cn/cortexdb/v2 v2.146.0
 	github.com/liliang-cn/semantic-go v0.2.2
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/modelcontextprotocol/go-sdk v1.8.0

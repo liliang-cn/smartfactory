@@ -320,6 +320,17 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 		v, err := o.OntologySPARQL(r.Context(), s.caller(r), r.PathValue("company"), in.Query)
 		answer(w, v, err)
 	})
+	// the knowledge base in CortexDB's live view: its page, and the API and stream it reads by
+	// relative path under it
+	mux.HandleFunc("/api/knowledge/{company}/live/", func(w http.ResponseWriter, r *http.Request) {
+		company := r.PathValue("company")
+		v, err := o.KnowledgeView(s.caller(r), company)
+		if err != nil {
+			writeOpError(w, err)
+			return
+		}
+		http.StripPrefix("/api/knowledge/"+company+"/live", v.Handler()).ServeHTTP(w, r)
+	})
 	mux.HandleFunc("POST /api/knowledge/{company}/rebuild", func(w http.ResponseWriter, r *http.Request) {
 		v, err := o.KnowledgeRebuild(r.Context(), s.caller(r), via(r), r.PathValue("company"))
 		answer(w, v, err)

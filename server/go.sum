@@ -181,6 +181,8 @@ github.com/liliang-cn/agentexec v0.6.0 h1:AdCAUb+8EeYNR5333V04/MN1G7RQLAQkbZdpTH
 github.com/liliang-cn/agentexec v0.6.0/go.mod h1:Lt1DVrf3IX0u/2B4YokbMOfQElXKN4bd1xgKNI4acIo=
 github.com/liliang-cn/cortexdb/v2 v2.145.0 h1:DEGGpWI4rZJqstUxzS9CfNJmd/vx/q5wb2kZWXnk7Zg=
 github.com/liliang-cn/cortexdb/v2 v2.145.0/go.mod h1:zOozVoQe8Yroyc1GZiNX1QV1SnuGJP3Qk1TqNNIzVL8=
+github.com/liliang-cn/cortexdb/v2 v2.146.0 h1:4a7h/25i+Po03kjZkGlkHfNHOj1SLwuQWZ67nqyDKz4=
+github.com/liliang-cn/cortexdb/v2 v2.146.0/go.mod h1:zOozVoQe8Yroyc1GZiNX1QV1SnuGJP3Qk1TqNNIzVL8=
 github.com/liliang-cn/mcp-swagger-server v1.3.0 h1:PFnm9mSbjVoFv4AelRzmHuxuuJXI8QRUYVeYmjkpsPw=
 github.com/liliang-cn/mcp-swagger-server v1.3.0/go.mod h1:xci2K+i6OU3pMeb/hQOialGiIUrMS38ZswQdOFoRraw=
 github.com/liliang-cn/pipeit v0.2.1 h1:RT1fYwAfzjeiwtXK4ZHhjWtW+wulS+D4pSN0hFhhaos=

@@ -3,7 +3,7 @@
 // and its ontology (Ontology.tsx), the kinds of things its industry declares, beside it.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowUpIcon, BookOpenTextIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon, ShapesIcon, WorkflowIcon } from 'lucide-react';
+import { ArrowUpIcon, BookOpenTextIcon, BoxIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon, ShapesIcon, WorkflowIcon } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -217,8 +217,9 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
   const [selected, setSelected] = useState<string | null>(null);
   const [find, setFind] = useState('');
   const [rebuilding, setRebuilding] = useState<'ask' | 'busy' | null>(null);
-  // the graph, or the ontology (with the class or thing picked in it)
-  const [view, setView] = useState<'graph' | 'ontology'>('graph');
+  // the graph, the ontology (with the class or thing picked in it), or the base in CortexDB's 3D
+  // live view, for administrators
+  const [view, setView] = useState<'graph' | 'ontology' | '3d'>('graph');
   const [term, setTerm] = useState<string | null>(null);
   const [onto, setOnto] = useState<api.OntologyGraph | null>(null);
   const [classes, setClasses] = useState(false);
@@ -266,16 +267,22 @@ export default function Knowledge({ company, admin }: { company: string; admin: 
           {st ? <>工艺 <b className="text-foreground tabular-nums">{st.process}</b> 段，{st.orders > 0 && <>工单 <b className="text-foreground tabular-nums">{st.orders}</b> 张，</>}{(st.boms ?? 0) > 0 && <>BOM <b className="text-foreground tabular-nums">{st.boms}</b> 份，</>}{st.events > 0 && <>设备记录 <b className="text-foreground tabular-nums">{st.events}</b> 条，</>}文档 <b className="text-foreground tabular-nums">{st.docs}</b> 段（资料库 {st.library} 篇{st.library > st.indexed ? `，${st.library - st.indexed} 篇还没入库` : ''}）</> : ' '}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as 'graph' | 'ontology')} className="rounded-xl bg-surface p-0.5" aria-label="看什么">
+          <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as 'graph' | 'ontology' | '3d')} className="rounded-xl bg-surface p-0.5" aria-label="看什么">
             <ToggleGroupItem value="graph" className="h-8 rounded-lg px-2.5 text-[12.5px] font-bold data-[state=on]:bg-card data-[state=on]:shadow-sm"><WorkflowIcon className="size-3.5" />图谱</ToggleGroupItem>
             <ToggleGroupItem value="ontology" className="h-8 rounded-lg px-2.5 text-[12.5px] font-bold data-[state=on]:bg-card data-[state=on]:shadow-sm"><ShapesIcon className="size-3.5" />本体</ToggleGroupItem>
+            {admin && <ToggleGroupItem value="3d" className="h-8 rounded-lg px-2.5 text-[12.5px] font-bold data-[state=on]:bg-card data-[state=on]:shadow-sm"><BoxIcon className="size-3.5" />3D</ToggleGroupItem>}
           </ToggleGroup>
           {admin && <Button variant="outline" size="sm" className="rounded-lg font-bold" disabled={rebuilding === 'busy'} onClick={() => setRebuilding('ask')}><RefreshCwIcon className={cn(rebuilding === 'busy' && 'animate-spin')} />重建</Button>}
         </div>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-        {view === 'ontology' ? (
+        {view === '3d' ? (
+          <section className="overflow-hidden rounded-[18px] bg-card shadow-float xl:col-span-2">
+            <iframe title="知识库 3D 图谱" src={`/api/knowledge/${encodeURIComponent(company)}/live/?theme=${document.documentElement.classList.contains('dark') ? 'dark' : 'light'}`}
+              className="block h-[720px] w-full max-sm:h-[560px]" />
+          </section>
+        ) : view === 'ontology' ? (
           <section className="rounded-[18px] bg-card p-5 shadow-float">
             <h2 className="mb-3 text-[15px] font-extrabold">本体</h2>
             <OntologyView company={company} admin={admin} picked={term} onPick={setTerm} />

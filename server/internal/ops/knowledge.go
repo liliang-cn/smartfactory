@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/liliang-cn/cortexdb/v2/pkg/liveview"
+
 	"smartfactory/internal/agents"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/knowledge"
@@ -165,6 +167,15 @@ func (o *Ops) KnowledgeDoc(ctx context.Context, who auth.Who, company, doc strin
 		out.Title = parts[0].Title
 	}
 	return out, nil
+}
+
+// KnowledgeView is the company's knowledge base in CortexDB's live view, for its administrators:
+// besides the graph it answers Cypher over the whole base and shows its change history.
+func (o *Ops) KnowledgeView(who auth.Who, company string) (*liveview.Server, error) {
+	if err := o.kb(who, company, auth.Admin); err != nil {
+		return nil, err
+	}
+	return o.KB.View(company)
 }
 
 func (o *Ops) KnowledgeGraph(ctx context.Context, who auth.Who, company string) (*knowledge.Graph, error) {
