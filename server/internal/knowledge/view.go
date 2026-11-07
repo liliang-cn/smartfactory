@@ -47,7 +47,10 @@ func (b *Base) View(id string) (*liveview.Server, error) {
 	}
 	src.Draft = nil
 	ctx, cancel := context.WithCancel(context.Background())
-	sv, err := liveview.New(ctx, src, liveview.DefaultInterval, true)
+	// the recall log, the library shelves and the ontology's saved versions are CortexDB's own
+	// bookkeeping, which this base does not keep
+	sv, err := liveview.New(ctx, src, liveview.DefaultInterval, true,
+		liveview.WithoutPages(liveview.PageRecalls, liveview.PageLibrary, liveview.PageVersions))
 	if err != nil {
 		cancel()
 		return nil, err

@@ -111,6 +111,13 @@ func TestKnowledgeView(t *testing.T) {
 		t.Fatalf("the ontology page has not the company's classes: %d %.300s", code, body)
 	}
 
+	// CortexDB's own bookkeeping is left out of it
+	for _, p := range []string{"recalls", "library", "api/recalls"} {
+		if code, _ := get(admin, "/api/knowledge/huaduan/live/"+p); code != 404 {
+			t.Errorf("the view still serves %s: %d", p, code)
+		}
+	}
+
 	for _, who := range []struct{ name, token string }{{"a member", member}, {"another company's administrator", outsider}, {"a visitor", ""}} {
 		if code, _ := get(who.token, "/api/knowledge/huaduan/live/api/graph"); code != 401 && code != 403 {
 			t.Errorf("%s read the view: %d", who.name, code)
