@@ -163,6 +163,16 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 			send(agents.Event{Kind: "error", Text: err.Error()})
 		}
 	})
+	// the catalogue of ready-made models a look can place
+	mux.HandleFunc("GET /api/admin/models", func(w http.ResponseWriter, r *http.Request) {
+		n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+		res, err := o.SearchModels(r.Context(), s.caller(r), r.URL.Query().Get("q"), n)
+		if err != nil {
+			writeOpError(w, err)
+			return
+		}
+		writeJSON(w, res)
+	})
 	// keep a drawing: into a machine kind's look or a product stage of the pack
 	mux.HandleFunc("POST /api/admin/industries/{id}/shape", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -367,7 +377,7 @@ func writeOpError(w http.ResponseWriter, err error) {
 func (s *Server) ops() *ops.Ops {
 	if s.Ops == nil {
 		s.Ops = &ops.Ops{Engine: s.Engine, Keys: s.Keys, Audit: s.Audit, Agents: s.Agents, KB: s.Knowledge, Hub: s.Hub, Advisors: s.Advisors, Version: s.Version,
-			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard, Devices: s.Devices, MQTT: s.MQTT, Checks: s.Checks, Consult: s.consult, History: s.History, Hints: s.Hints, Tables: s.Tables, Stores: s.Stores, Plans: s.Plans}
+			Saved: s.Saved, Production: s.Production, Calib: s.Calib, Commands: s.Guard, Devices: s.Devices, MQTT: s.MQTT, Checks: s.Checks, Consult: s.consult, History: s.History, Hints: s.Hints, Tables: s.Tables, Stores: s.Stores, Plans: s.Plans, Models: s.Models}
 	}
 	return s.Ops
 }

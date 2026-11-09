@@ -402,6 +402,347 @@
                                 "items": false,
                                 "minItems": 2,
                                 "maxItems": 2
+                              },
+                              "look": {
+                                "type": "object",
+                                "properties": {
+                                  "parts": {
+                                    "default": [],
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "shape": {
+                                          "type": "string",
+                                          "enum": [
+                                            "box",
+                                            "cylinder",
+                                            "sphere",
+                                            "cone",
+                                            "torus",
+                                            "capsule",
+                                            "model"
+                                          ]
+                                        },
+                                        "size": {
+                                          "minItems": 1,
+                                          "maxItems": 3,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0
+                                          }
+                                        },
+                                        "model": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9][a-z0-9-]{1,95}$"
+                                        },
+                                        "at": {
+                                          "default": [
+                                            0,
+                                            0,
+                                            0
+                                          ],
+                                          "type": "array",
+                                          "prefixItems": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ],
+                                          "items": false,
+                                          "minItems": 3,
+                                          "maxItems": 3
+                                        },
+                                        "rotate": {
+                                          "default": [
+                                            0,
+                                            0,
+                                            0
+                                          ],
+                                          "type": "array",
+                                          "prefixItems": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ],
+                                          "items": false,
+                                          "minItems": 3,
+                                          "maxItems": 3
+                                        },
+                                        "color": {
+                                          "default": "white",
+                                          "type": "string"
+                                        },
+                                        "metal": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "rough": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "glow": {
+                                          "type": "string"
+                                        },
+                                        "opacity": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "round": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        },
+                                        "anim": {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "spin",
+                                                "stroke",
+                                                "blink",
+                                                "heat"
+                                              ]
+                                            },
+                                            "axis": {
+                                              "default": "y",
+                                              "type": "string",
+                                              "enum": [
+                                                "x",
+                                                "y",
+                                                "z"
+                                              ]
+                                            },
+                                            "speed": {
+                                              "default": 6,
+                                              "type": "number"
+                                            },
+                                            "to": {
+                                              "default": -0.5,
+                                              "type": "number"
+                                            },
+                                            "window": {
+                                              "default": [
+                                                0.2,
+                                                0.8
+                                              ],
+                                              "type": "array",
+                                              "prefixItems": [
+                                                {
+                                                  "type": "number"
+                                                },
+                                                {
+                                                  "type": "number"
+                                                }
+                                              ],
+                                              "items": false,
+                                              "minItems": 2,
+                                              "maxItems": 2
+                                            },
+                                            "when": {
+                                              "default": "running",
+                                              "type": "string",
+                                              "enum": [
+                                                "running",
+                                                "always"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "shape",
+                                        "size"
+                                      ]
+                                    }
+                                  },
+                                  "busy": {
+                                    "default": [],
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "shape": {
+                                          "type": "string",
+                                          "enum": [
+                                            "box",
+                                            "cylinder",
+                                            "sphere",
+                                            "cone",
+                                            "torus",
+                                            "capsule",
+                                            "model"
+                                          ]
+                                        },
+                                        "size": {
+                                          "minItems": 1,
+                                          "maxItems": 3,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "number",
+                                            "exclusiveMinimum": 0
+                                          }
+                                        },
+                                        "model": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9][a-z0-9-]{1,95}$"
+                                        },
+                                        "at": {
+                                          "default": [
+                                            0,
+                                            0,
+                                            0
+                                          ],
+                                          "type": "array",
+                                          "prefixItems": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ],
+                                          "items": false,
+                                          "minItems": 3,
+                                          "maxItems": 3
+                                        },
+                                        "rotate": {
+                                          "default": [
+                                            0,
+                                            0,
+                                            0
+                                          ],
+                                          "type": "array",
+                                          "prefixItems": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ],
+                                          "items": false,
+                                          "minItems": 3,
+                                          "maxItems": 3
+                                        },
+                                        "color": {
+                                          "default": "white",
+                                          "type": "string"
+                                        },
+                                        "metal": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "rough": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "glow": {
+                                          "type": "string"
+                                        },
+                                        "opacity": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "round": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        },
+                                        "anim": {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "enum": [
+                                                "spin",
+                                                "stroke",
+                                                "blink",
+                                                "heat"
+                                              ]
+                                            },
+                                            "axis": {
+                                              "default": "y",
+                                              "type": "string",
+                                              "enum": [
+                                                "x",
+                                                "y",
+                                                "z"
+                                              ]
+                                            },
+                                            "speed": {
+                                              "default": 6,
+                                              "type": "number"
+                                            },
+                                            "to": {
+                                              "default": -0.5,
+                                              "type": "number"
+                                            },
+                                            "window": {
+                                              "default": [
+                                                0.2,
+                                                0.8
+                                              ],
+                                              "type": "array",
+                                              "prefixItems": [
+                                                {
+                                                  "type": "number"
+                                                },
+                                                {
+                                                  "type": "number"
+                                                }
+                                              ],
+                                              "items": false,
+                                              "minItems": 2,
+                                              "maxItems": 2
+                                            },
+                                            "when": {
+                                              "default": "running",
+                                              "type": "string",
+                                              "enum": [
+                                                "running",
+                                                "always"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "shape",
+                                        "size"
+                                      ]
+                                    }
+                                  }
+                                }
                               }
                             }
                           }

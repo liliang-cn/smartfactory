@@ -54,6 +54,7 @@ import (
 	"smartfactory/internal/history"
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/mcptools"
+	"smartfactory/internal/models"
 	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/ops"
 	"smartfactory/internal/plan"
@@ -569,9 +570,20 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 	if dining != nil {
 		mcptools.AddTables(ms, dining)
 	}
+	// ready-made 3D models looks place, kept here once used (the program's own ship in web/public/models)
+	var catalogue *models.Catalog
+	if cfg.Data != "" {
+		if catalogue, err = models.Open(filepath.Join(cfg.Data, "models"), log); err != nil {
+			return err
+		}
+		catalogue.UA = "SmartFactory/" + version + " (+https://github.com/liliang-cn/smartfactory)"
+		if assistants != nil {
+			assistants.Models = catalogue
+		}
+	}
 	ws := &sfweb.Server{
 		Hub: hub, Engine: eng, Keys: keys, Audit: trail, Knowledge: kb, Version: version, Saved: saved, Production: production, Calib: calibration, Series: readings, Guard: cmds, Devices: devs, MQTT: mq, Checks: manual, Hints: hints, Static: web.Dist(), Log: log, Advisors: advisors, AdvisorAPI: advisorAPI, Prefix: cfg.MQTT.Prefix, Agents: assistants,
-		History: plants, Tables: dining, Stores: store, Plans: plans,
+		History: plants, Tables: dining, Stores: store, Plans: plans, Models: catalogue,
 		// The server usually listens on loopback behind a reverse proxy, which the SDK's DNS
 		// rebinding check mistakes for a local-only server; /mcp requires the bearer token anyway.
 		MCP: mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{

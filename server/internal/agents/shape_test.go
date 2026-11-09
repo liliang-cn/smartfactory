@@ -2,6 +2,9 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -9,6 +12,7 @@ import (
 	"github.com/liliang-cn/agent-go/v3/pkg/domain"
 
 	"smartfactory/internal/auth"
+	"smartfactory/internal/models"
 	"smartfactory/internal/shapes"
 )
 
@@ -129,5 +133,125 @@ func TestDrawShapeFixesOnSecondAttempt(t *testing.T) {
 	}
 	if strings.Contains(d.Answer, "shape.") {
 		t.Fatalf("answer leaks code: %q", d.Answer)
+	}
+}
+
+// campLLM plays a drawer that searches the catalogue for a tent, places the one it found on a
+// deck, and stops.
+type campLLM struct {
+	shapeLLM
+	offered map[string]bool // the tools the model was given, every turn
+}
+
+func (l *campLLM) saw(defs []domain.ToolDefinition) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.offered == nil {
+		l.offered = map[string]bool{}
+	}
+	for _, d := range defs {
+		l.offered[d.Function.Name] = true
+	}
+}
+
+func (l *campLLM) answer(messages []domain.Message) *domain.GenerationResult {
+	var results []string
+	for _, m := range messages {
+		if m.Role == "tool" {
+			results = append(results, m.Content)
+		}
+	}
+	l.mu.Lock()
+	l.reports = results
+	l.mu.Unlock()
+	call := func(name string, args map[string]any) *domain.GenerationResult {
+		return &domain.GenerationResult{FinishReason: "tool_calls", ToolCalls: []domain.ToolCall{{
+			ID: "c" + string(rune('a'+len(results))), Type: "function", Function: domain.FunctionCall{Name: name, Arguments: args},
+		}}}
+	}
+	switch len(results) {
+	case 0:
+		return call("search_models", map[string]any{"query": "dome tent"})
+	case 1:
+		return call("build_shape", map[string]any{"code": `const t = shape.modelSize('dome-tent-9ee59d');
+shape.box({w: frame.L - 0.4, h: 0.1, d: 3.2}, {y: 0.05, z: -2.2}, {name: 'deck', color: 'wood'});
+shape.model('dome-tent-9ee59d', {y: 0.1 + t.h / 2, z: -2.2}, {name: 'tent'});`})
+	}
+	return &domain.GenerationResult{Content: "在木平台上搭了一顶圆顶帐篷。", FinishReason: "stop"}
+}
+
+func (l *campLLM) GenerateWithTools(_ context.Context, m []domain.Message, defs []domain.ToolDefinition, _ *domain.GenerationOptions) (*domain.GenerationResult, error) {
+	l.saw(defs)
+	return l.answer(m), nil
+}
+func (l *campLLM) StreamWithTools(_ context.Context, m []domain.Message, defs []domain.ToolDefinition, _ *domain.GenerationOptions, cb domain.ToolCallCallback) error {
+	l.saw(defs)
+	return cb(l.answer(m))
+}
+
+// The drawer finds a tent in the catalogue and places it; the drawing keeps the model's id, the
+// model is kept on this server for the preview and the twin, and the answer says where it came from.
+func TestDrawShapePlacesCatalogueModel(t *testing.T) {
+	t.Setenv("LLM_API_KEY", "")
+	t.Setenv("AGENTGO_HOME", t.TempDir())
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/assets":
+			w.Write([]byte(`{"coverage":"ok","assets":[{"id":"dome-tent-9ee59d","title":"Dome Tent","class":"prop","triangles":751,"free":true,"page":"https://polyfork.dev/asset/dome-tent-9ee59d","size_m":{"x":3,"y":1.31,"z":3}}]}`))
+		case r.URL.Path == "/cdn/dome-tent-9ee59d.glb":
+			w.Write(append([]byte("glTF"), make([]byte, 40)...))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	cat, err := models.Open(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat.Base = ts.URL
+	r, err := New(t.TempDir(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	llm := &campLLM{}
+	r.llm = llm
+	r.Models = cat
+
+	spec := shapes.Spec{Target: shapes.Machine, Envelope: [3]float64{5, 8, 2.4}, BeltY: 0.9, BeltW: 0.9, Clear: 0.6}
+	var events []Event
+	who := auth.Who{Key: "k", Name: "管理员", Role: auth.Admin}
+	d, err := r.DrawShape(context.Background(), who, spec, "露营营位", "木平台上一顶圆顶帐篷", func(e Event) { events = append(events, e) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.OK || len(d.Parts) != 2 || d.Parts[1].Model != "dome-tent-9ee59d" || d.Parts[1].Size[0] != 3 {
+		t.Fatalf("drawing %+v\n%s", d, d.Report)
+	}
+	if !llm.offered["search_models"] || !llm.offered["build_shape"] {
+		t.Fatalf("the model is not given both tools: %v", llm.offered)
+	}
+	if _, err := json.Marshal(d); err != nil {
+		t.Fatalf("the drawing cannot be sent to the console: %v", err)
+	}
+	if !strings.Contains(llm.reports[0], `"size":[3,1.31,3]`) {
+		t.Fatalf("the search tells the real size: %s", llm.reports[0])
+	}
+	if cat.Path("dome-tent-9ee59d") == "" {
+		t.Fatal("the placed model is not kept on the server")
+	}
+	if !strings.Contains(d.Answer, "Polyfork") || !strings.Contains(d.Answer, "Dome Tent") {
+		t.Fatalf("answer does not say where the model came from: %q", d.Answer)
+	}
+	var search *ModelSearch
+	for _, e := range events {
+		if e.Kind == "search" {
+			s := e.Result.(ModelSearch)
+			search = &s
+		}
+	}
+	if search == nil || search.Query != "dome tent" || len(search.Found) != 1 || search.Found[0] != "Dome Tent" {
+		t.Fatalf("progress shows no search: %+v", events)
 	}
 }

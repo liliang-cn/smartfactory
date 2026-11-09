@@ -32,6 +32,7 @@ import (
 	"smartfactory/internal/guard"
 	"smartfactory/internal/health"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/models"
 	"smartfactory/internal/mqttauth"
 	"smartfactory/internal/ops"
 	"smartfactory/internal/plan"
@@ -93,6 +94,10 @@ type Server struct {
 	History map[string]ops.PlantHistory
 	// Hints are readings unusual for their machine (nil without data).
 	Hints *anomaly.Detector
+	// Models are the ready-made 3D models looks use beside primitives, kept here (nil without data:
+	// only the program's own are served).
+	Models *models.Catalog
+	used   usedModels
 	// Tables are the restaurants' tables as reported and simulated (nil without data).
 	Tables *tables.Service
 	// Stores are the companies' stores, dies and new parts (nil without data).
@@ -111,6 +116,8 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/live", s.live)
+	mux.HandleFunc("GET /models/credits", s.modelCredits)
+	mux.HandleFunc("GET /models/{file}", s.modelFile)
 	// what this server is: the companies it runs, so a page opened without ?company shows its own
 	mux.HandleFunc("GET /api/site", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{"companies": append([]string{}, s.Engine.CompanyIDs()...), "mustLogin": s.MustLogin()})

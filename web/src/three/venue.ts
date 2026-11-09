@@ -15,7 +15,7 @@ import { productObject } from './products';
 /** The ring on the floor around a place shows its state at a glance. */
 const STATE_COLOR: Record<string, string> = { free: '#22b573', occupied: '#2f5bea', reserved: '#f5a524', cleaning: '#9aa3bd' };
 
-export function buildPlace(a: Asset): ModelHandle {
+export function buildPlace(a: Asset, look?: { parts: PartCfg[]; busy: PartCfg[] }, lineZ = 0): ModelHandle {
   const pl = a.place!;
   const root = new THREE.Group();
   root.position.set(pl.x, 0, pl.z);
@@ -23,6 +23,7 @@ export function buildPlace(a: Asset): ModelHandle {
   const ringMat = new THREE.MeshStandardMaterial({ color: STATE_COLOR.free, roughness: 0.6, transparent: true, opacity: 0.85 });
   const W = pitch ? 3.6 : Math.min(2.2, 0.9 + pl.seats * 0.2);
   const D = pitch ? 3.6 : 1.9;
+  if (look) return configuredPlace(root, ringMat, W, D, pl.z > lineZ, look, pitch);
   // a flat outline of the place's floor, coloured by its state
   const ring = new THREE.Mesh(new THREE.RingGeometry(0, 1, 4, 1), ringMat);
   ring.rotation.x = -Math.PI / 2;
@@ -97,6 +98,37 @@ function people(parts: PartCfg[]) {
     else props.push(p);
   }
   return { persons, props };
+}
+
+/**
+ * A place as its config draws it: the state ring, the parts always there and the ones shown while
+ * it is taken, from the place's centre with +z towards the path (turned round on the near side).
+ */
+function configuredPlace(root: THREE.Group, ringMat: THREE.MeshStandardMaterial, W: number, D: number, near: boolean, look: { parts: PartCfg[]; busy: PartCfg[] }, pitch: boolean): ModelHandle {
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0, 1, 4, 1), ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.rotation.z = Math.PI / 4;
+  ring.scale.set(W * 0.72, D * 0.72, 1);
+  ring.position.y = 0.05;
+  ring.receiveShadow = true;
+  root.add(ring);
+  const body = new THREE.Group();
+  if (near) body.rotation.y = Math.PI;
+  root.add(body);
+  buildParts(body, look.parts);
+  const busy = new THREE.Group();
+  buildParts(busy, look.busy);
+  body.add(busy);
+  busy.visible = false;
+  const top = Math.max(pitch ? 2.2 : 1.6, ...[...look.parts, ...look.busy].map((p) => p.at[1] + (p.shape === 'model' || p.shape === 'box' ? p.size[1] : p.size[0])));
+  return {
+    root, tint: [], top: Math.min(top, 4),
+    update(as) {
+      ringMat.color.set(STATE_COLOR[as.state] ?? STATE_COLOR.free);
+      ringMat.opacity = as.state === 'free' ? 0.5 : 0.85;
+      busy.visible = as.state === 'occupied';
+    },
+  };
 }
 
 /** where the n people of a group stand, round its centre */

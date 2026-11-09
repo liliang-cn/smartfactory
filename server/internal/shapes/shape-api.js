@@ -110,6 +110,13 @@ var __shape = (function () {
     node.material = m;
     return add(node);
   }
+  function known(what, id) {
+    if (typeof __model !== "function") fail(what, "there is no model catalogue here; build from boxes, cylinders and the rest");
+    if (typeof id !== "string" || id === "") fail(what, "the first argument is the id search_models gave, like 'dome-tent-9ee59d'");
+    var m = __model(id);
+    if (!m) fail(what, "unknown model '" + id + "'; call search_models and use an id it returned");
+    return m;
+  }
   function geom(what, size, allowed) {
     if (typeof size !== "object" || size === null || Array.isArray(size)) fail(what, "size must be an object like {" + allowed.join(", ") + "}");
     checkKeys(what, size, allowed);
@@ -140,6 +147,27 @@ var __shape = (function () {
     capsule: function (size, position, opts) {
       var s = geom("shape.capsule", size, ["r", "len"]);
       return mesh("capsule", "shape.capsule", { r: num("shape.capsule", "r", s.r, true), len: num("shape.capsule", "len", s.len, true) }, position, opts);
+    },
+    model: function (id, position, opts) {
+      var what = "shape.model";
+      var m = known(what, id);
+      if (opts === undefined || opts === null) opts = {};
+      if (typeof opts !== "object") fail(what, "options must be an object");
+      checkKeys(what, opts, ["name", "rotation", "scale"]);
+      var k = 1;
+      if (opts.scale !== undefined) {
+        k = num(what, "scale", opts.scale, true);
+        if (k < 0.2 || k > 5) fail(what, "scale must be between 0.2 and 5 (models come at their real size), got " + k);
+      }
+      var node = { type: "model", name: opts.name === undefined ? m.title : String(opts.name), geometry: { w: m.w * k, h: m.h * k, d: m.d * k }, position: vec(what, "position", position) };
+      var rot = vec(what, "rotation", opts.rotation);
+      if (rot[0] || rot[1] || rot[2]) node.rotation = rot;
+      node.material = { color: "white", model: id };
+      return add(node);
+    },
+    modelSize: function (id) {
+      var m = known("shape.modelSize", id);
+      return { w: m.w, h: m.h, d: m.d };
     },
     group: function (name, transform, fn) {
       if (typeof transform === "function" && fn === undefined) { fn = transform; transform = {}; }

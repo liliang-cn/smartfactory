@@ -34,8 +34,14 @@ export const Anim = z.object({
  * torus [radius, tube] · capsule [radius, length]
  */
 export const Part = z.object({
-  shape: z.enum(['box', 'cylinder', 'sphere', 'cone', 'torus', 'capsule']),
+  /** `model` is a ready-made model (a tent, a picnic table), fitted into `size` like a box */
+  shape: z.enum(['box', 'cylinder', 'sphere', 'cone', 'torus', 'capsule', 'model']),
   size: z.array(z.number().positive()).min(1).max(3),
+  /**
+   * model: its id in the catalogue of free low-poly models (Polyfork, CC BY 4.0), e.g. dome-tent-9ee59d.
+   * The server keeps it once a look uses it; its real size is the catalogue's size_m, x by y by z
+   */
+  model: z.string().regex(/^[a-z0-9][a-z0-9-]{1,95}$/).optional(),
   at: Vec3.default([0, 0, 0]),
   /** degrees about x, y, z */
   rotate: Vec3.default([0, 0, 0]),
@@ -48,7 +54,7 @@ export const Part = z.object({
   /** corner radius for boxes */
   round: z.number().min(0).optional(),
   anim: Anim.optional(),
-});
+}).refine((p) => p.shape !== 'model' || (!!p.model && p.size.length === 3), { message: 'a model part names its model and gives its size [w, h, d]' });
 export type PartCfg = z.infer<typeof Part>;
 
 /** Per-unit measurement with tolerance. One-sided limits: give only `lo` or only `hi`. */
@@ -181,7 +187,15 @@ const Slotted = {
   /** `take` amounts are per person of the group (and vary with appetite), not per unit */
   perPerson: z.boolean().optional(),
   /** each slot is a place of its own the twin shows and outside systems report on: what it is called (桌, 营位) and the floor it takes [x, z] */
-  place: z.object({ label: z.string().default('桌'), size: z.tuple([z.number().positive(), z.number().positive()]).default([2.4, 2.4]) }).optional(),
+  place: z.object({
+    label: z.string().default('桌'), size: z.tuple([z.number().positive(), z.number().positive()]).default([2.4, 2.4]),
+    /**
+     * how one place looks, from its centre on the floor (x along the line, +z towards the path): `parts` always
+     * there (a pitch's deck and fire ring), `busy` only while it is taken (the tent of a let pitch). Without it a
+     * pitch or a table is drawn as the twin's own
+     */
+    look: z.object({ parts: z.array(Part).default([]), busy: z.array(Part).default([]) }).optional(),
+  }).optional(),
 };
 
 /**

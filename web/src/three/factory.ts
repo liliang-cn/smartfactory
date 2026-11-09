@@ -77,7 +77,7 @@ export function buildModel(a: Asset, plant: PlantLayout): ModelHandle {
     case 'fgzone': return lg.outbound.vehicle === 'rider' ? buildCounter(plant.fg) : hasSR('loaded') ? buildFGSR(plant.fg) : buildFG(plant.fg);
     case 'agv': return hasSR(lg.internal === 'forklift' ? 'forklift' : 'amr') ? buildAGVSR(lg.internal === 'forklift') : buildAGV(lg.internal === 'forklift');
     case 'truck': return a.truck?.vehicle === 'rider' ? buildRider() : a.truck?.vehicle === 'van' ? buildVan() : buildTruck();
-    case 'table': return buildPlace(a);
+    case 'table': return buildPlace(a, ll?.places.find((p) => p.id === a.id)?.look, ll?.z);
     default: return buildStation(a, plant);
   }
 }

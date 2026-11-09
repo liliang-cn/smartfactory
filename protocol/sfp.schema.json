@@ -4366,6 +4366,50 @@
           "properties": {
             "kind": {
               "type": "string",
+              "const": "search"
+            },
+            "tool": {
+              "type": "string",
+              "const": "search_models"
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "coverage": {
+                  "type": "string"
+                },
+                "found": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "query",
+                "found"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "tool",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
               "const": "attempt"
             },
             "tool": {

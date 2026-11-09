@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -27,7 +28,11 @@ export default defineConfig({
     port: 4719,
     host: true,
     // `go run ./cmd/smartfactory -demo` in server/ serves the live feed and MCP on :4720
-    proxy: { '/api': { target: 'http://127.0.0.1:4720', ws: true }, '/mcp': 'http://127.0.0.1:4720' },
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:4720', ws: true }, '/mcp': 'http://127.0.0.1:4720',
+      // the program's own models are in public/models; the ones the server keeps, and the credits, come from it
+      '/models': { target: 'http://127.0.0.1:4720', bypass: (req) => (existsSync(path.join(import.meta.dirname, 'public', (req.url ?? '').split('?')[0])) ? req.url : undefined) },
+    },
   },
   build: {
     chunkSizeWarningLimit: 1600,

@@ -11,7 +11,8 @@ export const SR_NAMES = [
 ] as const;
 export type SRName = (typeof SR_NAMES)[number];
 
-export const SR_CREDIT = '3D 模型：NVIDIA SimReady（CC BY 4.0）';
+/** the credit line under the twin, a link to every model's attribution (/models/credits) */
+export const SR_CREDIT = '3D 模型：NVIDIA SimReady、Polyfork（CC BY 4.0）';
 
 const scenes = new Map<SRName, THREE.Group>();
 const boxes = new Map<SRName, THREE.Box3>();

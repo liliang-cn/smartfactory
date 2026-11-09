@@ -25,6 +25,7 @@ import (
 	"smartfactory/internal/engine"
 	"smartfactory/internal/erp"
 	"smartfactory/internal/knowledge"
+	"smartfactory/internal/models"
 	"smartfactory/internal/plan"
 	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
@@ -64,6 +65,8 @@ type Runner struct {
 	Stores *stores.Service
 	// Plans are the production plans.
 	Plans *plan.Service
+	// Models is the catalogue of ready-made 3D models the shape drawer may search and place.
+	Models *models.Catalog
 
 	dir string
 	llm domain.Generator

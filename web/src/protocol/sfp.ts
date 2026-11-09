@@ -759,9 +759,13 @@ export const ShapeDrawing = z.object({
   /** the frame it was drawn in: the envelope [L, D, H], and the belt through a machine */
   spec: z.object({ target: z.enum(['machine', 'product']), envelope: z.tuple([num, num, num]), beltY: num, beltW: num, clear: num, append: z.boolean().optional() }),
 });
+/** One search of the catalogue of ready-made models (Polyfork): what was asked, the catalogue's verdict (none · poor · ok), the titles found. */
+export const ModelSearch = z.object({ query: str, coverage: str.optional(), found: z.array(str), error: str.optional() });
 export const ShapeEvent = z.discriminatedUnion('kind', [
   /** a program is about to run */
   z.object({ kind: z.literal('tool_call'), tool: z.literal('build_shape') }),
+  /** the drawer searched the model catalogue */
+  z.object({ kind: z.literal('search'), tool: z.literal('search_models'), result: ModelSearch }),
   z.object({ kind: z.literal('attempt'), tool: z.literal('build_shape'), result: ShapeAttempt }),
   z.object({ kind: z.literal('shape'), result: ShapeDrawing }),
   z.object({ kind: z.literal('complete'), text: str.optional() }),

@@ -47,6 +47,20 @@ const PROBLEM: Record<string, (n: number) => string> = {
   empty: () => '什么也没画出来',
 };
 
+/** One search of the model catalogue by the shape drawer (see ModelSearch in the protocol). */
+export interface ModelSearchStep { query: string; coverage?: string; found: string[]; error?: string }
+
+/** 在模型库里搜「dome tent」：找到 3 个 · …只有沾边的 5 个 · …没有，用几何体画. */
+export function searchLine(s: ModelSearchStep): { text: string; state: 'done' | 'failed'; detail?: string } {
+  const head = `在模型库里搜「${s.query}」`;
+  if (s.error) return { text: `${head}没搜成`, state: 'failed', detail: s.error };
+  if (!s.found.length || s.coverage === 'none') return { text: `${head}：没有，用几何体画`, state: 'done' };
+  const detail = s.found.slice(0, 5).join('、');
+  // the catalogue matched only some of the words: what came back may still be the thing, or not
+  if (s.coverage === 'poor') return { text: `${head}：只有沾边的 ${s.found.length} 个`, state: 'done', detail };
+  return { text: `${head}：找到 ${s.found.length} 个`, state: 'done', detail };
+}
+
 /** The shape drawer's progress: 正在写程序 · 第 2 次：有 3 处重叠，正在改 · 外形检查通过. */
 export function shapeLines(attempts: ShapeStep[], running: boolean): { text: string; state: 'doing' | 'done' | 'failed'; detail?: string }[] {
   if (!attempts.length) return running ? [{ text: '正在写程序', state: 'doing' }] : [];

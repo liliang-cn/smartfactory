@@ -14,6 +14,7 @@ import (
 	agentpkg "github.com/liliang-cn/agent-go/v3/pkg/agent"
 
 	"smartfactory/internal/auth"
+	"smartfactory/internal/models"
 	"smartfactory/internal/shapes"
 )
 
@@ -38,6 +39,11 @@ const shapePrompt = `你是 SmartFactory 的外形设计员。别人用中文说
 - 产品按真实世界的大小画，不要为了好看放大；程序文档里写了它大约多大，检查会拒绝差得太远的。
 - 任务里会写明是“重画整个外形”还是“在原有外形上添加”：添加时只画新增的零件，原来的保持不动。
 - 最后的话写纯文字，称呼用“你”，不用“您”，一两句就够。`
+
+// shapeModelsPrompt is added when the drawer can search the model catalogue.
+const shapeModelsPrompt = `
+- 有现成模型库（search_models）。动手写程序之前，先把描述里说到的每样东西各搜一次，用英文词（cooler、registration post、picnic table、dome tent），可以一次发几个搜索。结果里有像样、大小合适的，就用 shape.model 放进去，比用几何体拼得像；模型按真实大小，一般不缩放。
+- 工厂里的专用设备（压力机、辊锻机、输送线、机床）模型库里基本没有：照样搜一次，coverage 是 none 或 poor 就用几何体搭，不要拿不相干的东西凑。`
 
 // ShapeAttempt is one checked program, for the console's progress lines.
 type ShapeAttempt struct {
@@ -137,10 +143,18 @@ func (r *Runner) DrawShape(ctx context.Context, who auth.Who, spec shapes.Spec, 
 	}
 	prog := &shapeProgress{emit: emit}
 	spec.OnCheck = prog.checked
-	svc, err := agentpkg.New("sf-shape").WithLLM(r.llm).WithSystemPrompt(shapePrompt).
+	prompt := shapePrompt
+	var tools []*agentpkg.Tool
+	if r.Models != nil {
+		spec.Models = r.Models.Known
+		prompt += shapeModelsPrompt
+		tools = append(tools, searchModels(r.Models, emit))
+	}
+	svc, err := agentpkg.New("sf-shape").WithLLM(r.llm).WithSystemPrompt(prompt).
 		WithDBPath(filepath.Join(r.dir, "agentgo.db")).WithTimezone(shanghai).
 		WithConstraintExtraction(false).
 		WithCodeMode(shapes.Mode(spec), agentpkg.CodeModeAttempts(ShapeAttempts)).
+		WithTools(tools...).
 		WithExtensions(prog).Build()
 	if err != nil {
 		return nil, err
@@ -170,7 +184,77 @@ func (r *Runner) DrawShape(ctx context.Context, who auth.Who, spec shapes.Spec, 
 		}
 		return nil, fmt.Errorf("%s", cmp.Or(d.Answer, "没有画出来，换个说法再试一次"))
 	}
+	if used := r.keepModels(ctx, d.Parts); len(used) > 0 {
+		// where they come from, as their licence asks
+		d.Answer = strings.TrimSpace(d.Answer + "\n用到的现成模型来自 Polyfork（CC BY 4.0）：" + strings.Join(used, "、"))
+	}
 	return d, nil
+}
+
+// keepModels keeps on this server the ready-made models a drawing places, so the preview and the
+// twin draw them from here, and names them.
+func (r *Runner) keepModels(ctx context.Context, parts []shapes.Part) []string {
+	var names []string
+	seen := map[string]bool{}
+	for _, p := range parts {
+		if p.Model == "" || seen[p.Model] || r.Models == nil {
+			continue
+		}
+		seen[p.Model] = true
+		if _, err := r.Models.Fetch(ctx, p.Model); err != nil && r.Log != nil {
+			r.Log.Warn("model not kept", "id", p.Model, "err", err)
+		}
+		name := p.Model
+		if in, ok := r.Models.Known(p.Model); ok {
+			name = in.Title
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// ModelSearch is what the console's progress line shows of one search of the model catalogue.
+type ModelSearch struct {
+	Query    string   `json:"query"`
+	Coverage string   `json:"coverage,omitempty"`
+	Found    []string `json:"found"`
+	Error    string   `json:"error,omitempty"`
+}
+
+// searchModels is the drawer's search of the model catalogue: what it finds, it may place.
+func searchModels(cat *models.Catalog, emit func(Event)) *agentpkg.Tool {
+	return agentpkg.BuildTool("search_models").
+		Description("Search the catalogue of free low-poly 3D models (Polyfork) for ready-made things to place with shape.model: tents, tables, chairs, stoves, vehicles, small buildings, props. Words in English. Returns ids with their real size in metres [w, h, d] (x, y, z) and the catalogue's coverage verdict: none means nothing fitting exists, so build from primitives; poor means only some of the words matched, so take a model only when its title is the very thing.").
+		Param("query", agentpkg.TypeString, "what to look for, in English: 'dome tent', 'picnic table', 'camp stove'", agentpkg.Required()).
+		ReadOnly(true).
+		Handler(func(ctx context.Context, a map[string]any) (any, error) {
+			q, _ := a["query"].(string)
+			f, err := cat.Search(ctx, q, 8)
+			line := ModelSearch{Query: q, Found: []string{}}
+			if err != nil {
+				line.Error = err.Error()
+				emit(Event{Kind: "search", Tool: "search_models", Result: line})
+				return nil, err
+			}
+			line.Coverage = f.Coverage
+			out := []map[string]any{}
+			for _, m := range f.Models {
+				line.Found = append(line.Found, m.Title)
+				out = append(out, map[string]any{"id": m.ID, "title": m.Title, "class": m.Class, "size": m.Size, "triangles": m.Triangles})
+			}
+			emit(Event{Kind: "search", Tool: "search_models", Result: line})
+			res := map[string]any{"coverage": f.Coverage, "models": out}
+			if len(f.Unmatched) > 0 {
+				res["unmatched_words"] = f.Unmatched
+			}
+			switch {
+			case f.Coverage == "none" || len(out) == 0:
+				res["note"] = "nothing fitting in the catalogue: build it from primitives"
+			case f.Coverage == "poor":
+				res["note"] = "only some of the words matched: use a model only if its title is the very thing asked for, otherwise build it from primitives"
+			}
+			return res, nil
+		}).Build()
 }
 
 // drawForPack is the pack authors' draw_shape: a machine in the envelope it gives (the belt at

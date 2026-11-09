@@ -102,7 +102,11 @@ export function plantTitle(L: { name: string; hall: string; areas: unknown[] }):
 /** An area of the plant: the band of the hall its lines stand in. */
 export interface AreaLayout { code: string; name: string; note: string; lines: string[]; x0: number; x1: number; z0: number; z1: number }
 
-export interface PlaceLayout { id: string; area: string; seats: number; label: string; overnight: boolean; station: string; slot: number; x: number; z: number; w: number; d: number }
+export interface PlaceLayout {
+  id: string; area: string; seats: number; label: string; overnight: boolean; station: string; slot: number; x: number; z: number; w: number; d: number;
+  /** how it looks, when the config says (place.look): parts always there, busy ones while it is taken */
+  look?: { parts: PartCfg[]; busy: PartCfg[] };
+}
 
 export interface PlantLayout {
   company: { id: string; name: string; short: string };
@@ -161,7 +165,7 @@ const BACK: Record<string, number> = { robot: 2.9, tank: 3.1, filler: 1.6, manua
 
 function partDims(p: PartCfg): Dims {
   const s = p.size;
-  let [x, y, z] = p.shape === 'box' ? [s[0], s[1], s[2] ?? s[0]]
+  let [x, y, z] = p.shape === 'box' || p.shape === 'model' ? [s[0], s[1], s[2] ?? s[0]]
     : p.shape === 'cylinder' || p.shape === 'cone' ? [s[0] * 2, s[1] ?? s[0], s[0] * 2]
       : p.shape === 'torus' ? [(s[0] + (s[1] ?? 0.05)) * 2, (s[0] + (s[1] ?? 0.05)) * 2, (s[1] ?? 0.05) * 2]
         : p.shape === 'capsule' ? [s[0] * 2, (s[1] ?? s[0]) + s[0] * 2, s[0] * 2]
@@ -333,7 +337,7 @@ export function layoutPlant(company: CompanyCfg, plant: PlantCfgT, industry: Ind
         const seat = ('seats' in st ? st.seats : undefined) ?? machine.seats ?? 4;
         const until = ('until' in st ? st.until : undefined) ?? machine.until;
         const list = t?.list ?? (t?.seats ?? Array.from({ length: slots }, () => seat)).map((k, i) => ({ id: `${prefix}${pad2(i + 1)}`, seats: k, area: undefined as string | undefined }));
-        mine = list.map((x, i) => ({ id: x.id, area: x.area ?? t?.area ?? name, seats: x.seats, label: placeCfg.label, overnight: until !== undefined, slot: i, w: placeCfg.size[0], d: placeCfg.size[1] }));
+        mine = list.map((x, i) => ({ id: x.id, area: x.area ?? t?.area ?? name, seats: x.seats, label: placeCfg.label, overnight: until !== undefined, slot: i, w: placeCfg.size[0], d: placeCfg.size[1], look: placeCfg.look }));
         const cols = Math.ceil(mine.length / 2);
         len = r1(Math.max(len, cols * placeCfg.size[0] + 0.6));
         depth = Math.max(depth, beltW + 2 * placeCfg.size[1] + 0.4);

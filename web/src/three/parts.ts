@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import type { PartCfg } from '@/config/schema';
 import { colorOf, cylGeo, rbox } from './kit';
+import { ModelSlot } from './models';
 
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
 const D2R = Math.PI / 180;
@@ -37,6 +38,7 @@ function geometry(p: PartCfg): THREE.BufferGeometry {
       case 'sphere': return new THREE.SphereGeometry(a, 20, 14);
       case 'torus': return new THREE.TorusGeometry(a, p.size.length > 1 ? b : 0.05, 12, 40);
       case 'capsule': return new THREE.CapsuleGeometry(a, p.size.length > 1 ? b : a, 4, 12);
+      case 'model': return new THREE.BoxGeometry(a, b, c); // drawn by a ModelSlot, not as a mesh
     }
   })();
   geoCache.set(key, geo);
@@ -56,6 +58,18 @@ const rot = new THREE.Matrix4();
 export function buildParts(parent: THREE.Object3D, parts: PartCfg[]): AnimatedPart[] {
   const animated: AnimatedPart[] = [];
   for (const p of parts) {
+    if (p.shape === 'model') {
+      // a ready-made model, filling the box a box part of this size would: placed the same way
+      const [w, h, d] = p.size;
+      const pivot = new THREE.Group();
+      pivot.rotation.set(p.rotate[0] * D2R, p.rotate[1] * D2R, p.rotate[2] * D2R);
+      box.set(new THREE.Vector3(-w / 2, -h / 2, -d / 2), new THREE.Vector3(w / 2, h / 2, d / 2)).applyMatrix4(rot.makeRotationFromEuler(pivot.rotation));
+      const c = box.getCenter(new THREE.Vector3());
+      pivot.position.set(p.at[0] - c.x, p.at[1] - box.min.y, p.at[2] - c.z);
+      pivot.add(new ModelSlot(p.model!, [w, h ?? w, d ?? w]));
+      parent.add(pivot);
+      continue;
+    }
     const animatedGlow = p.anim?.type === 'blink' || p.anim?.type === 'heat';
     const mat = material(p, !animatedGlow);
     const geo = geometry(p);

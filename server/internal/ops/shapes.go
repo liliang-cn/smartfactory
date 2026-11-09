@@ -1,14 +1,17 @@
 package ops
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"unicode/utf8"
 
 	"smartfactory/internal/agents"
 	"smartfactory/internal/auth"
 	"smartfactory/internal/engine"
+	"smartfactory/internal/models"
 	"smartfactory/internal/shapes"
 )
 
@@ -291,4 +294,27 @@ func dig(v any, path ...string) any {
 		v = m[k]
 	}
 	return v
+}
+
+// SearchModels looks in the catalogue of ready-made 3D models for things a look can place
+// (shape part "model"), for the console and the pack authors.
+func (o *Ops) SearchModels(ctx context.Context, who auth.Who, q string, n int) (*models.Found, error) {
+	if err := Admin(who); err != nil {
+		return nil, err
+	}
+	if o.Models == nil {
+		return nil, fail(503, "这台服务器没有数据目录，用不了模型库")
+	}
+	q = strings.TrimSpace(q)
+	if q == "" || utf8.RuneCountInString(q) > 100 {
+		return nil, fail(400, "q 写要找什么（英文），100 字以内")
+	}
+	f, err := o.Models.Search(ctx, q, cmp.Or(n, 12))
+	if errors.Is(err, models.ErrBusy) {
+		return nil, fail(429, "%s", err)
+	}
+	if err != nil {
+		return nil, fail(502, "%s", err)
+	}
+	return f, nil
 }

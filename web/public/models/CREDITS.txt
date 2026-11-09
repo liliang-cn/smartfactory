@@ -1,0 +1,10 @@
+3D models by Polyfork (https://polyfork.dev), licensed CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/), unchanged.
+
+backyard-barbecue-grill-84d4ef.glb: Backyard Barbecue Grill by Polyfork (https://polyfork.dev/asset/backyard-barbecue-grill-84d4ef), CC BY 4.0
+camp-cooler-8ba941.glb: Camp Cooler by Polyfork (https://polyfork.dev/asset/camp-cooler-8ba941), CC BY 4.0
+dome-tent-9ee59d.glb: Dome Tent by Polyfork (https://polyfork.dev/asset/dome-tent-9ee59d), CC BY 4.0
+folding-camp-chair-2fc7d1.glb: Folding Camp Chair by Polyfork (https://polyfork.dev/asset/folding-camp-chair-2fc7d1), CC BY 4.0
+heavy-timber-picnic-table-1ac060.glb: Heavy Timber Picnic Table by Polyfork (https://polyfork.dev/asset/heavy-timber-picnic-table-1ac060), CC BY 4.0
+pitch-marker-post-a87f8f.glb: Pitch Marker Post by Polyfork (https://polyfork.dev/asset/pitch-marker-post-a87f8f), CC BY 4.0
+stone-ring-campfire-8a0c6f.glb: Stone-Ring Campfire by Polyfork (https://polyfork.dev/asset/stone-ring-campfire-8a0c6f), CC BY 4.0

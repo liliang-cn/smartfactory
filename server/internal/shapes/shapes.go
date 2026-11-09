@@ -24,6 +24,8 @@ import (
 
 	"github.com/liliang-cn/agent-go/v3/pkg/codemode"
 	"github.com/liliang-cn/agent-go/v3/pkg/codemode/scene"
+
+	"smartfactory/internal/models"
 )
 
 //go:embed shape-api.js
@@ -42,6 +44,9 @@ type Part struct {
 	Opacity *float64       `json:"opacity,omitempty"`
 	Round   *float64       `json:"round,omitempty"`
 	Anim    map[string]any `json:"anim,omitempty"`
+	// Model is the ready-made model a "model" part draws (package models), fitted into its size
+	// [w, h, d] like a box.
+	Model string `json:"model,omitempty"`
 }
 
 // Target is what a shape is for.
@@ -84,6 +89,9 @@ type Spec struct {
 	// OnCheck, when set, is told the error categories of every checked attempt
 	// (overlap, envelope, belt, floor, count, size, empty), for progress lines.
 	OnCheck func(errors map[string]int)
+	// Models, when set, are the ready-made models a program may place with shape.model: the
+	// ones the drawer found with its search tool (models.Catalog.Known).
+	Models func(id string) (models.Info, bool)
 }
 
 func (s Spec) maxParts() int {
@@ -152,7 +160,7 @@ func Mode(spec Spec) *codemode.Mode {
 		Example: example(spec.Target),
 		Prelude: prelude,
 		Export:  "__shape.export()",
-		Globals: map[string]any{"__shapeMaxNodes": spec.maxParts()*4 + 20, "__frame": fr},
+		Globals: globals(spec, fr),
 		Validators: []codemode.Validator{func(_ context.Context, raw json.RawMessage) codemode.Check {
 			return Validate(raw, spec)
 		}},
@@ -167,7 +175,39 @@ func Mode(spec Spec) *codemode.Mode {
 	return m
 }
 
-func docs(s Spec) string { return baseDocs(s) + sizeDocs(s) + appendDocs(s) + joinDocs(s) }
+func globals(spec Spec, fr map[string]any) map[string]any {
+	g := map[string]any{"__shapeMaxNodes": spec.maxParts()*4 + 20, "__frame": fr}
+	if spec.Models != nil {
+		// a model's real size, read when the program places it; nil for one the drawer has not found
+		g["__model"] = func(id string) map[string]any {
+			in, ok := spec.Models(id)
+			if !ok || !(in.Size[0] > 0 && in.Size[1] > 0 && in.Size[2] > 0) {
+				return nil
+			}
+			return map[string]any{"w": in.Size[0], "h": in.Size[1], "d": in.Size[2], "title": in.Title}
+		}
+	}
+	return g
+}
+
+func docs(s Spec) string {
+	return baseDocs(s) + modelDocs(s) + sizeDocs(s) + appendDocs(s) + joinDocs(s)
+}
+
+// modelDocs tells how ready-made models are placed, when the drawer has a catalogue to search.
+func modelDocs(s Spec) string {
+	if s.Models == nil {
+		return ""
+	}
+	return `
+
+READY-MADE MODELS. search_models finds free low-poly models (tents, tables, chairs, vehicles, buildings, props) by English words.
+shape.model(id, position, opts)   places one at its real size, a box of {w, h, d} for every check
+shape.modelSize(id) -> {w, h, d}  its real size, to position it (it is centred like every part: a model of height h on the floor has y = h/2)
+  opts: {name, rotation, scale}   scale (0.2..5, default 1) grows it evenly; keep 1 unless it truly has to fit
+Only ids search_models returned work. A model's front faces +z. Each model counts as one part.
+Factory machines are rarely there: when a search says coverage none or poor, build from primitives, never from something unrelated.`
+}
 
 // sizeDocs tells a product's real size.
 func sizeDocs(s Spec) string {
@@ -390,7 +430,7 @@ func halfExtents(shape string, size []float64) [3]float64 {
 	}
 	a := at(0, 0)
 	switch shape {
-	case "box":
+	case "box", "model":
 		b := at(1, a)
 		return [3]float64{a / 2, b / 2, at(2, a) / 2}
 	case "cylinder", "cone":
@@ -510,6 +550,8 @@ func meshPart(n *scene.Node) (Part, error) {
 		p.Size = []float64{g["r"], g["tube"]}
 	case "capsule":
 		p.Size = []float64{g["r"], g["len"]}
+	case "model":
+		p.Size = []float64{g["w"], g["h"], g["d"]}
 	default:
 		return p, fmt.Errorf("unknown shape %q", n.Type)
 	}
@@ -526,6 +568,7 @@ func meshPart(n *scene.Node) (Part, error) {
 		Opacity *float64       `json:"opacity"`
 		Round   *float64       `json:"round"`
 		Anim    map[string]any `json:"anim"`
+		Model   string         `json:"model"`
 	}
 	if len(n.Material) > 0 {
 		if err := json.Unmarshal(n.Material, &m); err != nil {
@@ -537,6 +580,12 @@ func meshPart(n *scene.Node) (Part, error) {
 		p.Color = "white"
 	}
 	p.Metal, p.Rough, p.Glow, p.Opacity, p.Round, p.Anim = m.Metal, m.Rough, m.Glow, m.Opacity, m.Round, m.Anim
+	if n.Type == "model" {
+		if !models.ValidID(m.Model) {
+			return p, fmt.Errorf("model needs the id search_models gave")
+		}
+		p.Model, p.Round, p.Anim = m.Model, nil, nil
+	}
 	return p, nil
 }
 
@@ -764,8 +813,11 @@ func Validate(raw json.RawMessage, spec Spec) codemode.Check {
 	return c
 }
 
-// see reports whether a part can be seen through.
-func see(p Part) bool { return p.Color == "glass" || (p.Opacity != nil && *p.Opacity < 0.95) }
+// see reports whether a part can be seen through (or into: a model's box is mostly air, a
+// tent's or a table's).
+func see(p Part) bool {
+	return p.Shape == "model" || p.Color == "glass" || (p.Opacity != nil && *p.Opacity < 0.95)
+}
 
 // intersect is how deep two boxes interpenetrate along each axis, when they do by more than eps
 // on every axis (touching faces are fine).

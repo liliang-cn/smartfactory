@@ -109,7 +109,7 @@ export default function App() {
         {!ready ? <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">正在载入 3D 模型…</div>
           : campus ? <CampusScene /> : <Scene key={plant.layout.id} plant={plant} />}
         {ready && !campus && <Labels key={`labels-${plant.layout.id}`} />}
-        <div className="pointer-events-none absolute bottom-1 left-2 z-10 text-[10px] text-muted-foreground/70">{SR_CREDIT}</div>
+        <a href="/models/credits" target="_blank" rel="noreferrer" className="absolute bottom-1 left-2 z-10 text-[10px] text-muted-foreground/70 hover:underline">{SR_CREDIT}</a>
         <TopBar />
         <PerfOverlay />
         {campus ? <GroupKpis /> : <Kpis />}

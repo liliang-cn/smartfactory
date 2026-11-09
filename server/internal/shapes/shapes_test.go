@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/liliang-cn/agent-go/v3/pkg/codemode"
+
+	"smartfactory/internal/models"
 )
 
 var press = Spec{Target: Machine, Envelope: [3]float64{2.4, 1.8, 4.4}, BeltY: 0.9, BeltW: 0.9, Clear: 0.6}
@@ -169,5 +171,67 @@ func TestProgramMistakesReportLines(t *testing.T) {
 	res = codemode.Run(context.Background(), Mode(press), "shape.box({w: 1, h: 1, d: 1}, {y: 0.5}, {color: 'purple'});")
 	if res.Error == nil || !strings.Contains(res.Error.Message, "palette name") && !strings.Contains(res.Error.Message, "one of white") {
 		t.Fatalf("%+v", res.Error)
+	}
+}
+
+// A ready-made model goes in at its real size as a box for every check, keeps its id, and can be
+// grown evenly; a model the drawer has not found, or a server without a catalogue, is refused.
+func TestModelParts(t *testing.T) {
+	tents := func(id string) (models.Info, bool) {
+		if id == "dome-tent-9ee59d" {
+			return models.Info{ID: id, Title: "Dome Tent", Size: [3]float64{3, 1.31, 3}}, true
+		}
+		return models.Info{}, false
+	}
+	pitch := Spec{Target: Machine, Envelope: [3]float64{5, 5, 2.4}, BeltY: 0.9, BeltW: 0.9, Clear: 0.6, Models: tents}
+	res, d := run(t, pitch, `
+const s = shape.modelSize('dome-tent-9ee59d');
+shape.box({w: 4.6, h: 0.1, d: 1.6}, {y: 0.05, z: -1.6}, {name: 'deck', color: 'wood'});
+shape.model('dome-tent-9ee59d', {y: 0.1 + s.h * 0.5 / 2, z: -1.6}, {name: 'tent', rotation: {y: 90}, scale: 0.5});
+`)
+	if !res.OK() {
+		t.Fatalf("a tent on its deck fails:\n%s", res.Report())
+	}
+	tent := d.Parts[1]
+	if tent.Shape != "model" || tent.Model != "dome-tent-9ee59d" || !near([3]float64(tent.Size), [3]float64{1.5, 0.655, 1.5}) {
+		t.Fatalf("tent part: %+v", tent)
+	}
+	min, max := PartBox(tent)
+	// half the size, standing on the deck
+	if !near([3]float64{min[1], max[1], max[0] - min[0]}, [3]float64{0.1, 0.755, 1.5}) {
+		t.Fatalf("tent box %v %v", min, max)
+	}
+	b, _ := json.Marshal(tent)
+	if !strings.Contains(string(b), `"model":"dome-tent-9ee59d"`) || strings.Contains(string(b), "round") {
+		t.Fatalf("as the twin reads it: %s", b)
+	}
+
+	// a chair inside the tent's box is not buried: the box is mostly air
+	res, _ = run(t, pitch, `
+shape.model('dome-tent-9ee59d', {y: 0.655}, {name: 'tent'});
+shape.box({w: 0.4, h: 0.4, d: 0.4}, {y: 0.2}, {name: 'stool'});
+`)
+	for _, is := range res.Issues {
+		if strings.Contains(is.Message, "buried") {
+			t.Fatalf("a part inside a model is called buried: %s", is.Message)
+		}
+	}
+
+	for _, c := range []struct {
+		spec       Spec
+		code, want string
+	}{
+		{pitch, `shape.model('camp-chair-1', {y: 0.4});`, "call search_models"},
+		{pitch, `shape.model('dome-tent-9ee59d', {y: 0.7}, {scale: 9});`, "scale must be between"},
+		{pitch, `shape.model('dome-tent-9ee59d', {y: 0.7}, {color: 'red'});`, "unknown option 'color'"},
+		{press, `shape.model('dome-tent-9ee59d', {y: 0.7});`, "no model catalogue"},
+	} {
+		res := codemode.Run(context.Background(), Mode(c.spec), c.code)
+		if res.Error == nil || !strings.Contains(res.Error.Message, c.want) {
+			t.Errorf("%s: want %q, got %+v", c.code, c.want, res.Error)
+		}
+	}
+	if strings.Contains(Mode(press).Docs, "search_models") || !strings.Contains(Mode(pitch).Docs, "shape.model(id") {
+		t.Error("the docs tell of models only when there is a catalogue")
 	}
 }

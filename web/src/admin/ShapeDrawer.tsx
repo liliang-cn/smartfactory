@@ -14,7 +14,7 @@ import type { IndustryCfg } from '@/config/schema';
 import { stageOrder } from '@/core/layout';
 import * as api from './api';
 import { useConsole } from './Console';
-import { shapeLines, type ShapeStep } from './steps';
+import { searchLine, shapeLines, type ModelSearchStep, type ShapeStep } from './steps';
 
 const ShapePreview = lazy(() => import('./ShapePreview'));
 
@@ -26,6 +26,7 @@ export default function ShapeDrawer({ cfg, what, onClose }: { cfg: IndustryCfg; 
   const [brief, setBrief] = useState('');
   const [stage, setStage] = useState('');
   const [attempts, setAttempts] = useState<ShapeStep[]>([]);
+  const [searches, setSearches] = useState<ModelSearchStep[]>([]);
   const [drawing, setDrawing] = useState<api.ShapeDrawing | null>(null);
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState<string>();
@@ -34,7 +35,7 @@ export default function ShapeDrawer({ cfg, what, onClose }: { cfg: IndustryCfg; 
   const stages = what?.target === 'product' ? stageOrder(cfg, what.key) : [];
   useEffect(() => {
     if (what) {
-      setAdd(false); setBrief(''); setAttempts([]); setDrawing(null); setAnswer(''); setError(undefined);
+      setAdd(false); setBrief(''); setAttempts([]); setSearches([]); setDrawing(null); setAnswer(''); setError(undefined);
       setStage(what.target === 'product' ? stageOrder(cfg, what.key).at(-1) ?? '' : '');
     } else ctrl?.abort();
   }, [what]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -44,22 +45,26 @@ export default function ShapeDrawer({ cfg, what, onClose }: { cfg: IndustryCfg; 
   const builtin = !!ov.industries.find((i) => i.id === cfg.id)?.builtin;
   const oldLook = machine ? cfg.machines[what.key]?.look : undefined;
   const oldParts = machine ? oldLook?.parts ?? [] : cfg.products[what.key]?.stages[stage]?.parts ?? [];
-  const pick = (v: boolean) => { if (v !== add) { setAdd(v); setDrawing(null); setAnswer(''); setAttempts([]); setError(undefined); } };
+  const pick = (v: boolean) => { if (v !== add) { setAdd(v); setDrawing(null); setAnswer(''); setAttempts([]); setSearches([]); setError(undefined); } };
 
   const run = async () => {
     if (!brief.trim() || ctrl) return;
     const c = new AbortController();
     setCtrl(c);
-    setAttempts([]); setDrawing(null); setAnswer(''); setError(undefined);
+    setAttempts([]); setSearches([]); setDrawing(null); setAnswer(''); setError(undefined);
+    let ended = false;
     try {
       await api.drawShape({ industry: cfg.id, target: what.target, key: what.key, ...(machine ? {} : { stage }), brief: brief.trim(), ...(add ? { append: true } : {}) }, c.signal, (ev) => {
         switch (ev.kind) {
           case 'attempt': setAttempts((x) => [...x, ev.result]); break;
+          case 'search': setSearches((x) => [...x, ev.result]); break;
           case 'shape': setDrawing(ev.result); break;
-          case 'complete': if (ev.text) setAnswer(ev.text); break;
-          case 'error': setError(ev.text); break;
+          case 'complete': ended = true; if (ev.text) setAnswer(ev.text); break;
+          case 'error': ended = true; setError(ev.text); break;
         }
       });
+      // the connection closed before the drawing came back
+      if (!ended && !c.signal.aborted) setError('没收到画好的结果，连接断了，再画一次');
     } catch (e) {
       if (!c.signal.aborted) setError((e as Error).message);
     } finally {
@@ -120,10 +125,10 @@ export default function ShapeDrawer({ cfg, what, onClose }: { cfg: IndustryCfg; 
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run(); } }}
           placeholder={add ? (machine ? '在机身右侧加一个红色的急停按钮箱和一根烟囱' : '在一端加一个法兰盘') : machine ? '带顶冠的开式冲床，C 形机身，左边有飞轮' : '一根四拐曲轴，平放，两头有法兰'}
           className="min-h-[76px] resize-none rounded-xl text-[14px] leading-relaxed" aria-label="外形描述" />
-        {(attempts.length > 0 || ctrl || answer || error) && (
+        {(attempts.length > 0 || searches.length > 0 || ctrl || answer || error) && (
           <div className="grid gap-2 rounded-xl bg-surface/60 px-4 py-3">
             <ol className="grid gap-1">
-              {shapeLines(attempts, !!ctrl).map((st, i) => (
+              {[...searches.map(searchLine), ...shapeLines(attempts, !!ctrl)].map((st, i) => (
                 <li key={i} className="flex items-start gap-2 text-[12.5px]">
                   {st.state === 'doing' ? <LoaderCircleIcon className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
                     : st.state === 'failed' ? <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" /> : <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-success" />}
