@@ -27,6 +27,7 @@ import (
 	"smartfactory/internal/knowledge"
 	"smartfactory/internal/models"
 	"smartfactory/internal/plan"
+	"smartfactory/internal/series"
 	"smartfactory/internal/stores"
 	"smartfactory/internal/tables"
 )
@@ -59,6 +60,8 @@ type Runner struct {
 	Checks *checks.Service
 	// Hints are the measured machines' readings unusual for them.
 	Hints Hints
+	// Series are the readings the equipment sent, for what the machines did over a span.
+	Series *series.Store
 	// Tables are the restaurants' tables, as reported and simulated.
 	Tables *tables.Service
 	// Stores are the stores, dies and new parts in development.
@@ -197,6 +200,10 @@ func (r *Runner) service(a Agent) (*agentpkg.Service, error) {
 	}
 	if r.Hints != nil {
 		t := anomalyTool(r.Hints, a.Company)
+		all[t.name] = t
+	}
+	if r.Series != nil {
+		t := trendTool(r.Series, r.Eng, a.Company)
 		all[t.name] = t
 	}
 	if r.Tables != nil {

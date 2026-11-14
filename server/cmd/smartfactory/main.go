@@ -311,6 +311,7 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("assistants: %w", err)
 		}
+		assistants.Series = readings
 		defer assistants.Close()
 		if !assistants.Ready() {
 			log.Warn("assistants cannot answer: set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL")
@@ -594,6 +595,9 @@ func serve(ctx context.Context, args []string, log *slog.Logger) error {
 		ws.FirstToken = filepath.Join(cfg.Data, "initial-admin-token")
 	}
 	mcptools.AddValueTool(ms, ws.Operations().ValueTool)
+	if readings != nil {
+		mcptools.AddTrend(ms, readings)
+	}
 	if plans != nil {
 		o := ws.Operations()
 		mcptools.AddPlan(ms, mcptools.PlanTools{

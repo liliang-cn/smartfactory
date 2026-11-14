@@ -45,7 +45,7 @@ A smart factory a company runs on its own server: an admin console, a live 3D tw
 ### AI
 Works with any OpenAI-compatible model. Without one, the assistants are off and everything else works, the knowledge base included.
 - Console assistant beside every page. It proposes changes as cards and carries them out only when confirmed.
-- Company assistants to talk to from the twin.
+- Company assistants to talk to from the twin. They read the machines as they are now and, from the equipment's own data, what they did over hours or weeks: readings, stops and why, which machine stood still longest. The same is open to other AIs over MCP.
 - Knowledge base (CortexDB): the process as a graph, orders, machine events and your documents (PDF, Word, Excel, text), searchable in plain language with sources. Administrators can open it as a live 3D graph that lights up what the assistant reads.
 - Ontology: classes, relations, rules and constraints for each industry, with inference.
 
